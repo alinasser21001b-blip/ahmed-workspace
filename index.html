@@ -3,99 +3,295 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Calyptus Furniture — أثاث فاخر. تابعنا واطلب مباشرة عبر واتساب." />
-    <meta name="theme-color" content="#ffffff" />
-    <title>Calyptus Furniture</title>
-    <link rel="canonical" href="https://calyptusfurn.one" />
+    <title>Calyptus — أثاث كلاسيكي فاخر في بغداد</title>
+    <meta
+      name="description"
+      content="كاليبتوس — أثاث كلاسيكي يُصنع يداً في بغداد. أرائك، غرف نوم، سفرة وكونسولات بتفصيل حسب الطلب. تواصل مباشرة عبر واتساب."
+    />
+    <meta name="theme-color" content="#0f0a05" />
+    <link rel="canonical" href="https://calyptusfurn.one/" />
+
+    <!-- ── معاينة الرابط في واتساب وفيسبوك ── -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Calyptus Furniture" />
+    <meta property="og:locale" content="ar_IQ" />
+    <meta property="og:url" content="https://calyptusfurn.one/" />
+    <meta property="og:title" content="Calyptus — أثاث كلاسيكي فاخر في بغداد" />
+    <meta
+      property="og:description"
+      content="أثاث كلاسيكي يُصنع يداً في بغداد — تفصيل حسب الطلب، توصيل وتركيب."
+    />
+    <meta property="og:image" content="https://calyptusfurn.one/assets/products/hero.jpg" />
+    <meta property="og:image:width" content="1920" />
+    <meta property="og:image:height" content="1080" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Calyptus — أثاث كلاسيكي فاخر في بغداد" />
+    <meta
+      name="twitter:description"
+      content="أثاث كلاسيكي يُصنع يداً في بغداد — تفصيل حسب الطلب، توصيل وتركيب."
+    />
+    <meta name="twitter:image" content="https://calyptusfurn.one/assets/products/hero.jpg" />
+
+    <link rel="icon" type="image/png" href="assets/logo-mark.png" />
+    <link rel="apple-touch-icon" href="assets/logo-mark.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=El+Messiri:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&display=swap" rel="stylesheet" />
-    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&family=Tajawal:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="css/style.css" />
+
+    <script>
+      /* content is visible by default; JS only adds the reveal animation */
+      document.documentElement.className += " js";
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FurnitureStore",
+        "name": "Calyptus Furniture",
+        "alternateName": "كاليبتوس",
+        "description": "أثاث كلاسيكي فاخر يُصنع يداً في بغداد — تفصيل حسب الطلب.",
+        "url": "https://calyptusfurn.one/",
+        "image": "https://calyptusfurn.one/assets/products/hero.jpg",
+        "logo": "https://calyptusfurn.one/assets/logo.png",
+        "telephone": "+9647824316008",
+        "priceRange": "$$$",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "حي المعرب، قرب شارع الأعظمية",
+          "addressLocality": "بغداد",
+          "addressCountry": "IQ"
+        },
+        "geo": { "@type": "GeoCoordinates", "latitude": 33.36304, "longitude": 44.374528 },
+        "openingHoursSpecification": [
+          {
+            "@type": "OpeningHoursSpecification",
+            "dayOfWeek": ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"],
+            "opens": "10:00",
+            "closes": "21:00"
+          }
+        ],
+        "sameAs": [
+          "https://www.instagram.com/calyptus.iq",
+          "https://www.facebook.com/share/1YUkRg2wjb/?mibextid=wwXIfr",
+          "https://www.tiktok.com/@calyptus.iq"
+        ]
+      }
+    </script>
   </head>
+
   <body>
-    <div class="page">
+    <a class="skip" href="#collection">تخطَّ إلى المجموعة</a>
+
+    <!-- ═══ HEADER ═══ -->
+    <header class="header" id="header">
+      <a class="header__brand" href="#top">
+        <img src="assets/logo-mark.png" alt="" width="40" height="30" />
+        <span>
+          <span class="header__name">CALYPTUS</span>
+          <span class="header__sub">CLASSIC FURNITURE · BAGHDAD</span>
+        </span>
+      </a>
+      <button class="header__cta" type="button" data-enquire aria-label="تواصل عبر واتساب">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wa" /></svg>
+        <span>تواصل</span>
+      </button>
+    </header>
+
+    <main id="top">
       <!-- ═══ HERO ═══ -->
       <section class="hero">
-        <div class="hero__inner">
-          <img id="brand-logo" class="hero__logo" src="assets/logo.png" alt="Calyptus Furniture" />
-
-          <h1 id="hero-tagline" class="hero__title">أثاث يعكس ذوقك</h1>
-          <p id="hero-description" class="hero__sub"></p>
-
-          <!-- Social — الهدف الرئيسي -->
-          <div class="social-hub">
-            <p class="social-hub__label">تابعنا وتواصل معنا</p>
-            <div id="social-hub-grid" class="social-hub__grid"></div>
-          </div>
-
-          <div class="promo">
-            <div class="promo__item">
-              <span class="promo__key">كود الخصم</span>
-              <strong id="promo-code" class="promo__val">CALYPTUS10</strong>
-            </div>
-            <div class="promo__divider"></div>
-            <div class="promo__item">
-              <span class="promo__key">المندوب</span>
-              <strong id="promo-agent" class="promo__val">فريق Calyptus</strong>
-            </div>
-          </div>
+        <div class="hero__bg">
+          <img id="hero-image" src="assets/products/hero.jpg" alt="" fetchpriority="high" />
         </div>
-
-        <div class="hero__visual">
-          <img id="hero-image" src="" alt="Calyptus Furniture" />
+        <div class="hero__in">
+          <p class="eyebrow" id="hero-est">EST. 2019</p>
+          <h1 class="hero__title" id="hero-tagline">أثاث كلاسيكي فاخر</h1>
+          <p class="hero__title-en" id="hero-tagline-en">Timeless Elegance</p>
+          <p class="hero__desc" id="hero-desc">
+            قطع أثاث كلاسيكية تُصنع يداً في بغداد — خشب مُنتقى، تنجيد دقيق، وتفاصيل نحاسية أصيلة.
+          </p>
+          <div class="hero__actions">
+            <a class="btn btn--gold" href="#collection">
+              <span>تصفّح المجموعة</span>
+            </a>
+            <button class="btn" type="button" data-enquire>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wa" /></svg>
+              <span>ابدأ محادثة</span>
+            </button>
+          </div>
+          <p class="promo-bar" id="promo-bar" hidden>
+            <span id="promo-label">خصم ١٠٪ عند ذكر الكود</span>
+            <b id="promo-code">CALYPTUS10</b>
+          </p>
         </div>
       </section>
 
-      <!-- ═══ PRODUCTS ═══ -->
-      <section class="products" id="products">
+      <!-- ═══ MARQUEE ═══ -->
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee__track">
+          <span>Handcrafted in Baghdad</span><span>·</span><span>Made to Order</span><span>·</span>
+          <span>Solid Walnut &amp; Beech</span><span>·</span><span>Velvet &amp; Leather</span><span>·</span>
+          <span>Hand-Carved Detail</span><span>·</span>
+          <span>Handcrafted in Baghdad</span><span>·</span><span>Made to Order</span><span>·</span>
+          <span>Solid Walnut &amp; Beech</span><span>·</span><span>Velvet &amp; Leather</span><span>·</span>
+          <span>Hand-Carved Detail</span><span>·</span>
+        </div>
+      </div>
+
+      <!-- ═══ COLLECTION ═══ -->
+      <section class="sec" id="collection">
         <div class="wrap">
-          <div class="sec-head">
-            <span class="sec-head__tag">مجموعتنا</span>
-            <h2>منتجاتنا المميزة</h2>
-            <p>اضغط على أي قطعة للطلب عبر واتساب</p>
+          <div class="sec-head reveal">
+            <p class="eyebrow">The Collection</p>
+            <h2>مجموعتنا المختارة</h2>
+            <p class="en">A Curated Selection</p>
+            <p>كل قطعة تُنفَّذ حسب الطلب — اختر الخشب والقماش والمقاس، واطلبها مباشرة عبر واتساب.</p>
           </div>
-          <div id="category-filters" class="filters"></div>
-          <div id="products-grid" class="products__grid"></div>
+          <div class="filters" id="filters"></div>
+          <div class="grid" id="products-grid"></div>
+          <noscript>
+            <p style="text-align: center; color: var(--muted)">
+              لعرض المجموعة يرجى تفعيل الجافاسكربت، أو تواصل معنا مباشرة على
+              <bdi dir="ltr">+964 782 431 6008</bdi>
+            </p>
+          </noscript>
         </div>
       </section>
 
       <!-- ═══ WHY US ═══ -->
-      <section class="why" id="about">
+      <section class="sec sec--alt">
         <div class="wrap">
-          <div id="features-grid" class="why__grid"></div>
-        </div>
-      </section>
-
-      <!-- ═══ CTA ═══ -->
-      <section class="bottom-cta">
-        <div class="wrap bottom-cta__box">
-          <h2>جاهز تختار أثاثك؟</h2>
-          <p>راسلنا على واتساب واحصل على استشارة مجانية</p>
-          <a id="cta-whatsapp" class="btn-wa btn-wa--lg" href="#" target="_blank" rel="noopener noreferrer">
-            <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>
-            تواصل عبر واتساب
-          </a>
-        </div>
-      </section>
-
-      <!-- ═══ FOOTER ═══ -->
-      <footer class="foot">
-        <div class="wrap foot__inner">
-          <img src="assets/logo.png" alt="Calyptus" class="foot__logo" />
-          <div class="foot__info">
-            <span id="contact-phone"></span>
-            <span class="foot__dot">·</span>
-            <span id="contact-city"></span>
+          <div class="sec-head reveal">
+            <p class="eyebrow">The Atelier</p>
+            <h2>لماذا كاليبتوس</h2>
+            <p class="en">The Art of Heritage</p>
           </div>
-          <p class="foot__copy">© <span id="year"></span> Calyptus Furniture · calyptusfurn.one</p>
+          <div class="features reveal" id="features"></div>
         </div>
-      </footer>
+      </section>
+
+      <!-- ═══ GALLERY ═══ -->
+      <section class="sec">
+        <div class="wrap">
+          <div class="sec-head reveal">
+            <p class="eyebrow">From The Workshop</p>
+            <h2>من داخل الورشة</h2>
+          </div>
+          <div class="gallery reveal" id="gallery"></div>
+        </div>
+      </section>
+
+      <!-- ═══ VISIT ═══ -->
+      <section class="sec sec--alt" id="visit">
+        <div class="wrap visit">
+          <div class="reveal">
+            <div class="sec-head" style="justify-items: start; text-align: start">
+              <p class="eyebrow">Visit The Atelier</p>
+              <h2>زورونا في بغداد</h2>
+              <p class="en">Visit Us in Baghdad</p>
+            </div>
+            <div class="contact-list">
+              <div class="contact-row">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z" /><circle cx="12" cy="10" r="3" />
+                </svg>
+                <div>
+                  <div class="lbl">العنوان</div>
+                  <div class="val" id="c-address">بغداد · حي المعرب · قرب شارع الأعظمية</div>
+                </div>
+              </div>
+              <a class="contact-row" id="c-phone-row" href="https://wa.me/9647824316008">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><use href="#i-wa" /></svg>
+                <div>
+                  <div class="lbl">واتساب</div>
+                  <!-- bdi keeps the Latin number from being reordered inside the RTL line -->
+                  <div class="val"><bdi dir="ltr" id="c-phone">+964 782 431 6008</bdi></div>
+                </div>
+              </a>
+              <div class="contact-row">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                </svg>
+                <div>
+                  <div class="lbl">الدوام</div>
+                  <div class="val" id="c-hours">السبت — الخميس · ١٠:٠٠ ص — ٩:٠٠ م</div>
+                </div>
+              </div>
+            </div>
+            <button class="btn btn--gold" type="button" data-enquire>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wa" /></svg>
+              <span>ابدأ محادثة</span>
+            </button>
+          </div>
+
+          <div class="map reveal">
+            <iframe
+              src="https://www.google.com/maps?q=33.363040,44.374528&amp;hl=ar&amp;z=16&amp;output=embed"
+              loading="lazy"
+              referrerpolicy="no-referrer-when-downgrade"
+              title="موقع معرض كاليبتوس على الخريطة"
+            ></iframe>
+            <a class="map__pill" id="maps-link" href="https://maps.app.goo.gl/2oVfRbmL42x87Wzm6" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M7 17l10-10M7 7h10v10" />
+              </svg>
+              <span>افتح في الخرائط</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ═══ FOOTER ═══ -->
+    <footer class="foot">
+      <img class="foot__logo" src="assets/logo-full.png" alt="Calyptus Furniture" width="180" height="176" />
+      <div class="foot__tag">Classic Furniture · Baghdad</div>
+      <div class="socials" id="socials"></div>
+      <div class="foot__copy">
+        © <bdi dir="ltr"><span id="year">2026</span></bdi> CALYPTUS · <span id="c-city">بغداد، العراق</span>
+      </div>
+    </footer>
+
+    <button class="fab" type="button" data-enquire aria-label="تواصل عبر واتساب">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wa" /></svg>
+    </button>
+
+    <!-- ═══ ENQUIRY MODAL ═══ -->
+    <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+      <div class="modal__box">
+        <button class="modal__close" type="button" id="modal-close" aria-label="إغلاق">×</button>
+        <p class="modal__eyebrow" id="modal-code">CALYPTUS · تواصل</p>
+        <h3 id="modal-title">تواصل معنا</h3>
+        <p>أدخل اسمك، وسننقلك مباشرة إلى واتساب برسالة جاهزة.</p>
+        <label for="customer-name">الاسم الكريم</label>
+        <input type="text" id="customer-name" placeholder="مثال: أحمد الحسيني" autocomplete="name" />
+        <button class="modal__btn" type="button" id="modal-send">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wa" /></svg>
+          <span>فتح واتساب</span>
+        </button>
+      </div>
     </div>
 
-    <a id="floating-whatsapp" class="fab" href="#" target="_blank" rel="noopener noreferrer" aria-label="واتساب">
-      <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>
-    </a>
+    <!-- shared icon sprite -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <symbol id="i-wa" viewBox="0 0 24 24">
+        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+      </symbol>
+      <symbol id="i-ig" viewBox="0 0 24 24">
+        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" />
+      </symbol>
+      <symbol id="i-fb" viewBox="0 0 24 24">
+        <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+      </symbol>
+      <symbol id="i-tt" viewBox="0 0 24 24">
+        <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005.8 20.1a6.34 6.34 0 0010.86-4.43V8.85a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1.84-.28z" />
+      </symbol>
+    </svg>
 
     <script src="js/config.js"></script>
     <script src="js/main.js"></script>

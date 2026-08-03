@@ -1,124 +1,164 @@
 /**
- * إعدادات موقع Calyptus — calyptusfurn.one
+ * ═══════════════════════════════════════════════════════════════
+ *  Calyptus Furniture — ملف الإعدادات الوحيد
+ *  calyptusfurn.one
+ * ═══════════════════════════════════════════════════════════════
+ *
+ *  كل محتوى الموقع من هنا. لا تحتاج لتعديل أي ملف آخر.
+ *  This is the only file you need to edit to change the site.
+ *
+ *  ▸ لإضافة منتج:  انسخ أي كتلة من products وغيّر القيم
+ *  ▸ لتغيير صورة:  ضع الصورة في assets/products/ بنفس الاسم
+ *  ▸ لتغيير السعر: اكتبه في priceFrom (اتركه فارغاً = "تواصل للسعر")
  */
+
 const CALYPTUS_CONFIG = {
   brand: {
     name: "Calyptus",
-    tagline: "أثاث يعكس ذوقك",
+    nameAr: "كاليبتوس",
+    tagline: "أثاث كلاسيكي فاخر",
+    taglineEn: "Timeless Elegance",
     description:
-      "نصنع مساحات تعيش فيها — تصاميم أثاث عصرية وكلاسيكية بجودة استثنائية، من غرف المعيشة إلى غرف النوم والمكاتب.",
+      "قطع أثاث كلاسيكية تُصنع يداً في بغداد — خشب مُنتقى، تنجيد دقيق، وتفاصيل نحاسية أصيلة.",
+    established: "EST. 2019",
     logo: "assets/logo.png",
     domain: "https://calyptusfurn.one",
-    heroImage:
-      "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1200&q=85",
+    heroImage: "assets/products/hero.jpg",
   },
 
   whatsapp: {
+    // بدون + وبدون مسافات — without + or spaces
     phone: "9647824316008",
-    defaultMessage: "مرحباً Calyptus، أود الاستفسار عن منتجاتكم.",
+    greeting: "السلام عليكم",
   },
 
   promo: {
+    // اتركه فارغاً "" لإخفاء شريط الخصم — leave "" to hide the promo bar
     code: "CALYPTUS10",
-    agentName: "فريق Calyptus",
+    label: "خصم ١٠٪ عند ذكر الكود",
+  },
+
+  contact: {
+    phoneDisplay: "+964 782 431 6008",
+    address: "بغداد · حي المعرب · قرب شارع الأعظمية",
+    addressShort: "بغداد، العراق",
+    hours: "السبت — الخميس · ١٠:٠٠ ص — ٩:٠٠ م",
+    mapsUrl: "https://maps.app.goo.gl/2oVfRbmL42x87Wzm6",
+    lat: 33.36304,
+    lng: 44.374528,
   },
 
   social: {
-    instagram:
-      "https://www.instagram.com/calyptus.iq?igsh=Mnk3cGFuN2RiYzJm&utm_source=qr",
-    facebook:
-      "https://www.facebook.com/share/1YUkRg2wjb/?mibextid=wwXIfr",
+    // اترك أي رابط فارغاً "" ليختفي من الموقع
+    instagram: "https://www.instagram.com/calyptus.iq",
+    facebook: "https://www.facebook.com/share/1YUkRg2wjb/?mibextid=wwXIfr",
     whatsapp: "https://wa.me/9647824316008",
-    tiktok: "",
+    tiktok: "https://www.tiktok.com/@calyptus.iq",
   },
 
-  features: [
-    {
-      icon: "✦",
-      title: "جودة فاخرة",
-      text: "مواد مختارة وتشطيبات دقيقة في كل قطعة",
-    },
-    {
-      icon: "◈",
-      title: "تصاميم حصرية",
-      text: "مجموعات عصرية وكلاسيكية تناسب كل ذوق",
-    },
-    {
-      icon: "◎",
-      title: "توصيل وتركيب",
-      text: "خدمة متكاملة من الطلب حتى باب منزلك",
-    },
+  categories: [
+    { id: "all", label: "الكل", labelEn: "All" },
+    { id: "sofas", label: "أرائك", labelEn: "Sofas" },
+    { id: "dining", label: "سفرة", labelEn: "Dining" },
+    { id: "bedroom", label: "غرف نوم", labelEn: "Bedroom" },
+    { id: "accent", label: "كراسي", labelEn: "Accent" },
+    { id: "storage", label: "خزائن", labelEn: "Storage" },
   ],
 
+  /**
+   *  المنتجات — Products
+   *
+   *  code       رمز القطعة، يُرسل مع رسالة واتساب
+   *  image      ضع الصورة في assets/products/ بنفس الاسم تماماً
+   *  priceFrom  "من ٧٥٠ ألف" أو اتركه "" لعرض "تواصل للسعر"
+   *  material   الخشب والقماش — يظهر تحت الاسم
+   */
   products: [
     {
-      id: "sofa-lux",
-      name: "كنبة فاخرة",
-      category: "living",
-      categoryLabel: "غرف المعيشة",
-      image:
-        "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=900&q=85",
-      price: "تواصل للسعر",
+      code: "CL-001",
+      category: "sofas",
+      name: "أريكة تشسترفيلد الكلاسيكية",
+      nameEn: "Chesterfield Classic",
+      desc: "أريكة جلدية بلون الكراميل الدافئ، بأزرار مطرزة يدوياً ومسامير نحاسية.",
+      material: "جلد طبيعي · خشب زان",
+      priceFrom: "",
+      image: "assets/products/cl-001.jpg",
       featured: true,
     },
     {
-      id: "bed-modern",
-      name: "سرير عصري",
-      category: "bedroom",
-      categoryLabel: "غرف النوم",
-      image:
-        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=900&q=85",
-      price: "تواصل للسعر",
-    },
-    {
-      id: "dining-set",
-      name: "طقم طعام خشبي",
+      code: "CL-002",
       category: "dining",
-      categoryLabel: "غرف الطعام",
-      image:
-        "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=900&q=85",
-      price: "تواصل للسعر",
+      name: "طقم سفرة ملكي",
+      nameEn: "Royal Dining Suite",
+      desc: "طاولة من خشب الجوز الفاخر مع ٦ كراسي مبطنة بقماش مخملي كريمي.",
+      material: "خشب جوز · مخمل",
+      priceFrom: "",
+      image: "assets/products/cl-002.jpg",
     },
     {
-      id: "office-desk",
-      name: "مكتب تنفيذي",
-      category: "office",
-      categoryLabel: "المكاتب",
-      image:
-        "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=900&q=85",
-      price: "تواصل للسعر",
-    },
-    {
-      id: "wardrobe",
-      name: "خزانة ملابس",
+      code: "CL-003",
       category: "bedroom",
-      categoryLabel: "غرف النوم",
-      image:
-        "https://images.unsplash.com/photo-1595428774223-ef52624120b2?w=900&q=85",
-      price: "تواصل للسعر",
+      name: "سرير فرنسي فخم",
+      nameEn: "Louis French Bed",
+      desc: "سرير كينج بتاج منحوت يدوياً وظهر مبطن بأزرار كابتونيه، مع كومودينوين.",
+      material: "خشب مُنحوت · تنجيد كابتونيه",
+      priceFrom: "",
+      image: "assets/products/cl-003.jpg",
+      featured: true,
     },
     {
-      id: "coffee-table",
-      name: "طاولة قهوة",
-      category: "living",
-      categoryLabel: "غرف المعيشة",
-      image:
-        "https://images.unsplash.com/photo-1532372320572-cda25653a26d?w=900&q=85",
-      price: "تواصل للسعر",
+      code: "CL-004",
+      category: "accent",
+      name: "كرسي وينج مخملي",
+      nameEn: "Emerald Wingback",
+      desc: "كرسي مخملي زمردي بأرجل خشبية داكنة ونهايات نحاسية، مثالي لركن القراءة.",
+      material: "مخمل · نحاس",
+      priceFrom: "",
+      image: "assets/products/cl-004.jpg",
+    },
+    {
+      code: "CL-005",
+      category: "storage",
+      name: "كونسول فرنسي منحوت",
+      nameEn: "Carved French Console",
+      desc: "طاولة كونسول بنقوش يدوية دقيقة وأرجل مقوّسة، تُبرز فخامة المدخل.",
+      material: "خشب مُنحوت يدوياً",
+      priceFrom: "",
+      image: "assets/products/cl-005.jpg",
+    },
+    {
+      code: "CL-006",
+      category: "storage",
+      name: "دولاب كلاسيكي بمرايا",
+      nameEn: "Mirrored Wardrobe",
+      desc: "دولاب واسع بثلاث أبواب من المرايا وتاج منحوت، بلمسات نحاسية أصيلة.",
+      material: "خشب · مرايا · نحاس",
+      priceFrom: "",
+      image: "assets/products/cl-006.jpg",
     },
   ],
 
-  categories: [
-    { id: "all", label: "الكل" },
-    { id: "living", label: "غرف المعيشة" },
-    { id: "bedroom", label: "غرف النوم" },
-    { id: "dining", label: "غرف الطعام" },
-    { id: "office", label: "المكاتب" },
+  features: [
+    {
+      title: "صناعة يدوية",
+      titleEn: "Handcrafted",
+      text: "كل قطعة تُصنع في ورشتنا — لا خطوط إنتاج ولا استيراد جاهز.",
+    },
+    {
+      title: "تفصيل حسب الطلب",
+      titleEn: "Made to Order",
+      text: "اختر الخشب والقماش والمقاس. نُنفّذ القطعة كما تريدها تماماً.",
+    },
+    {
+      title: "توصيل وتركيب",
+      titleEn: "Delivery & Setup",
+      text: "نوصل ونركّب داخل بغداد، ونشحن إلى باقي المحافظات.",
+    },
   ],
 
-  contact: {
-    phone: "+964 782 431 6008",
-    email: "hello@calyptusfurn.one",
-    city: "العراق",
-  },
+  gallery: [
+    { image: "assets/products/atelier-1.jpg", alt: "من داخل الورشة" },
+    { image: "assets/products/atelier-2.jpg", alt: "تفاصيل التنجيد" },
+    { image: "assets/products/atelier-3.jpg", alt: "المعرض في بغداد" },
+  ],
 };

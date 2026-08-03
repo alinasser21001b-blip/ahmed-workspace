@@ -1,198 +1,343 @@
-const WA_ICON = `<svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/></svg>`;
+/**
+ * Calyptus Furniture — واجهة الموقع
+ * كل البيانات تأتي من js/config.js — لا تحتاج تعديل هذا الملف.
+ */
+(function () {
+  "use strict";
 
-const SOCIAL_PLATFORMS = [
-  {
-    key: "instagram",
-    label: "إنستغرام",
-    cls: "social-btn--ig",
-    icon: `<svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>`,
-  },
-  {
-    key: "facebook",
-    label: "فيسبوك",
-    cls: "social-btn--fb",
-    icon: `<svg viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>`,
-  },
-  {
-    key: "whatsapp",
-    label: "واتساب",
-    cls: "social-btn--wa",
-    icon: WA_ICON,
-  },
-  {
-    key: "tiktok",
-    label: "تيك توك",
-    cls: "social-btn--tt",
-    icon: `<svg viewBox="0 0 24 24"><path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>`,
-  },
-];
+  var CFG = window.CALYPTUS_CONFIG || CALYPTUS_CONFIG;
+  var activeCategory = "all";
+  var lastFocused = null;
 
-let activeCategory = "all";
+  /* ── صورة بديلة إذا لم تُرفع صورة المنتج بعد ── */
+  var FALLBACK_IMG =
+    "data:image/svg+xml," +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500">' +
+        '<rect width="400" height="500" fill="#1a120a"/>' +
+        '<rect x="14" y="14" width="372" height="472" fill="none" stroke="#8a6d3a" stroke-width="1" stroke-dasharray="7 7"/>' +
+        '<text x="200" y="245" font-family="Georgia,serif" font-size="46" font-style="italic" fill="#c9a961" text-anchor="middle">C</text>' +
+        '<text x="200" y="285" font-family="system-ui,sans-serif" font-size="13" letter-spacing="3" fill="#8a6d3a" text-anchor="middle">CALYPTUS</text>' +
+        "</svg>"
+    );
 
-function buildWhatsAppUrl(productName) {
-  const { phone, defaultMessage } = CALYPTUS_CONFIG.whatsapp;
-  const { code, agentName } = CALYPTUS_CONFIG.promo;
+  /* ── helpers ── */
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+  function byId(id) {
+    return document.getElementById(id);
+  }
+  function setText(id, value) {
+    var el = byId(id);
+    if (el && value != null && value !== "") el.textContent = value;
+  }
 
-  const lines = [
-    defaultMessage,
-    "",
-    productName ? `📦 المنتج: ${productName}` : null,
-    `🏷️ كود الخصم: ${code}`,
-    `👤 ${agentName}`,
-  ].filter(Boolean);
+  /* ── رابط واتساب ── */
+  function waUrl(message) {
+    return "https://wa.me/" + CFG.whatsapp.phone + "?text=" + encodeURIComponent(message);
+  }
 
-  return `https://wa.me/${phone}?text=${encodeURIComponent(lines.join("\n"))}`;
-}
+  function buildMessage(name, product) {
+    var lines = [(CFG.whatsapp.greeting || "السلام عليكم") + "، أنا " + (name || "زبون كريم")];
+    if (product) {
+      lines.push("");
+      lines.push("أرغب بالاستفسار عن:");
+      lines.push("• " + product.name);
+      lines.push("• رمز القطعة: " + product.code);
+    } else {
+      lines.push("");
+      lines.push("أرغب بالتواصل معكم بخصوص أثاث Calyptus.");
+    }
+    if (CFG.promo && CFG.promo.code) {
+      lines.push("");
+      lines.push("كود الخصم: " + CFG.promo.code);
+    }
+    return lines.join("\n");
+  }
 
-function openWhatsApp(productName) {
-  window.open(buildWhatsAppUrl(productName), "_blank", "noopener,noreferrer");
-}
+  /* ── المنتجات ── */
+  function cardHtml(p) {
+    var cat = (CFG.categories.filter(function (c) {
+      return c.id === p.category;
+    })[0] || {});
+    var price = p.priceFrom
+      ? esc(p.priceFrom)
+      : '<small>تواصل للسعر</small>';
 
-function productCard(product) {
-  return `
-    <article class="product-card" tabindex="0" role="button"
-      aria-label="اطلب ${product.name} عبر واتساب"
-      data-product="${product.name}">
-      <div class="product-card__img">
-        <img src="${product.image}" alt="${product.name}" loading="lazy" />
-        <span class="product-card__cat">${product.categoryLabel}</span>
-      </div>
-      <div class="product-card__body">
-        <h3>${product.name}</h3>
-        <p>${product.price}</p>
-        <span class="btn-wa">${WA_ICON} اطلب عبر واتساب</span>
-      </div>
-    </article>
-  `;
-}
+    return (
+      '<article class="card reveal">' +
+      '<div class="card__media">' +
+      '<span class="card__code">' + esc(p.code) + "</span>" +
+      '<img src="' + esc(p.image) + '" alt="' + esc(p.name) + '" loading="lazy" width="400" height="500" data-fallback />' +
+      "</div>" +
+      '<div class="card__body">' +
+      '<p class="card__cat">' + esc(cat.labelEn || "") + " · " + esc(cat.label || "") + "</p>" +
+      '<h3 class="card__name">' + esc(p.name) + "</h3>" +
+      (p.nameEn ? '<p class="card__name-en">' + esc(p.nameEn) + "</p>" : "") +
+      (p.desc ? '<p class="card__desc">' + esc(p.desc) + "</p>" : "") +
+      (p.material ? '<p class="card__material">' + esc(p.material) + "</p>" : "") +
+      '<p class="card__price">' + price + "</p>" +
+      '<button class="card__cta" type="button" data-code="' + esc(p.code) + '">' +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wa" /></svg>' +
+      "<span>اطلب عبر واتساب</span>" +
+      "</button>" +
+      "</div>" +
+      "</article>"
+    );
+  }
 
-function getFilteredProducts() {
-  if (activeCategory === "all") return CALYPTUS_CONFIG.products;
-  return CALYPTUS_CONFIG.products.filter((p) => p.category === activeCategory);
-}
-
-function renderProducts() {
-  const grid = document.getElementById("products-grid");
-  if (!grid) return;
-
-  grid.innerHTML = getFilteredProducts().map(productCard).join("");
-  bindProductCards(grid);
-}
-
-function renderFilters() {
-  const container = document.getElementById("category-filters");
-  if (!container) return;
-
-  container.innerHTML = CALYPTUS_CONFIG.categories
-    .map(
-      (cat) => `
-      <button type="button" class="filter-btn${cat.id === activeCategory ? " is-active" : ""}"
-        data-category="${cat.id}">${cat.label}</button>
-    `
-    )
-    .join("");
-
-  container.querySelectorAll(".filter-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      activeCategory = btn.dataset.category;
-      container.querySelectorAll(".filter-btn").forEach((b) => {
-        b.classList.toggle("is-active", b.dataset.category === activeCategory);
-      });
-      renderProducts();
+  function renderProducts() {
+    var grid = byId("products-grid");
+    if (!grid) return;
+    var list = CFG.products.filter(function (p) {
+      return activeCategory === "all" || p.category === activeCategory;
     });
-  });
-}
+    grid.innerHTML = list.map(cardHtml).join("");
+    applyFallbacks(grid);
+    observe(grid.querySelectorAll(".reveal"));
+  }
 
-function bindProductCards(container) {
-  container.querySelectorAll(".product-card").forEach((card) => {
-    const handler = () => openWhatsApp(card.dataset.product);
-    card.addEventListener("click", handler);
-    card.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
+  function renderFilters() {
+    var box = byId("filters");
+    if (!box) return;
+    box.innerHTML = CFG.categories
+      .map(function (c) {
+        return (
+          '<button class="filter' + (c.id === activeCategory ? " is-active" : "") +
+          '" type="button" data-cat="' + esc(c.id) + '">' + esc(c.label) + "</button>"
+        );
+      })
+      .join("");
+  }
+
+  function renderFeatures() {
+    var box = byId("features");
+    if (!box) return;
+    box.innerHTML = CFG.features
+      .map(function (f) {
+        return (
+          '<div class="feature">' +
+          "<h3>" + esc(f.title) + "</h3>" +
+          (f.titleEn ? '<p class="en">' + esc(f.titleEn) + "</p>" : "") +
+          "<p>" + esc(f.text) + "</p>" +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  function renderGallery() {
+    var box = byId("gallery");
+    if (!box || !CFG.gallery) return;
+    box.innerHTML = CFG.gallery
+      .map(function (g) {
+        return '<a href="#collection"><img src="' + esc(g.image) + '" alt="' + esc(g.alt) + '" loading="lazy" data-fallback /></a>';
+      })
+      .join("");
+    applyFallbacks(box);
+  }
+
+  function renderSocials() {
+    var box = byId("socials");
+    if (!box) return;
+    var defs = [
+      { key: "instagram", icon: "i-ig", label: "إنستغرام" },
+      { key: "facebook", icon: "i-fb", label: "فيسبوك" },
+      { key: "whatsapp", icon: "i-wa", label: "واتساب" },
+      { key: "tiktok", icon: "i-tt", label: "تيك توك" }
+    ];
+    box.innerHTML = defs
+      .filter(function (d) {
+        return CFG.social[d.key];
+      })
+      .map(function (d) {
+        return (
+          '<a class="social" href="' + esc(CFG.social[d.key]) + '" target="_blank" rel="noopener noreferrer" aria-label="' + esc(d.label) + '">' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#' + d.icon + '" /></svg>' +
+          "</a>"
+        );
+      })
+      .join("");
+  }
+
+  /* صور غير موجودة → شعار بديل بدل أيقونة مكسورة */
+  function applyFallbacks(scope) {
+    var imgs = scope.querySelectorAll("img[data-fallback]");
+    for (var i = 0; i < imgs.length; i++) {
+      imgs[i].addEventListener("error", function () {
+        if (this.src !== FALLBACK_IMG) this.src = FALLBACK_IMG;
+      });
+    }
+  }
+
+  /* ── تطبيق الإعدادات على العناصر الثابتة ── */
+  function applyConfig() {
+    var b = CFG.brand, c = CFG.contact;
+
+    setText("hero-est", b.established);
+    setText("hero-tagline", b.tagline);
+    setText("hero-tagline-en", b.taglineEn);
+    setText("hero-desc", b.description);
+    setText("c-address", c.address);
+    setText("c-phone", c.phoneDisplay);
+    setText("c-hours", c.hours);
+    setText("c-city", c.addressShort);
+    setText("year", new Date().getFullYear());
+
+    var hero = byId("hero-image");
+    if (hero && b.heroImage) {
+      hero.src = b.heroImage;
+      hero.setAttribute("data-fallback", "");
+      applyFallbacks(hero.parentNode);
+    }
+
+    var phoneRow = byId("c-phone-row");
+    if (phoneRow) phoneRow.href = waUrl(buildMessage("", null));
+
+    var maps = byId("maps-link");
+    if (maps && c.mapsUrl) maps.href = c.mapsUrl;
+
+    if (CFG.promo && CFG.promo.code) {
+      setText("promo-code", CFG.promo.code);
+      setText("promo-label", CFG.promo.label);
+      byId("promo-bar").hidden = false;
+    }
+  }
+
+  /* ── النافذة المنبثقة ── */
+  var modal, nameInput, currentProduct = null;
+
+  function openModal(code) {
+    currentProduct =
+      CFG.products.filter(function (p) {
+        return p.code === code;
+      })[0] || null;
+
+    byId("modal-code").textContent = currentProduct
+      ? "Ref. " + currentProduct.code
+      : "CALYPTUS · تواصل";
+    byId("modal-title").textContent = currentProduct ? currentProduct.name : "تواصل معنا";
+
+    lastFocused = document.activeElement;
+    modal.hidden = false;
+    modal.classList.add("active");
+    setTimeout(function () {
+      nameInput.focus();
+    }, 60);
+  }
+
+  function closeModal() {
+    modal.classList.remove("active");
+    modal.hidden = true;
+    if (lastFocused && lastFocused.focus) lastFocused.focus();
+  }
+
+  function send() {
+    var name = (nameInput.value || "").trim();
+    window.open(waUrl(buildMessage(name, currentProduct)), "_blank", "noopener,noreferrer");
+    closeModal();
+  }
+
+  /* ── ظهور تدريجي عند التمرير ──
+     شبكة أمان: لا يجوز أن يبقى أي محتوى مخفياً إذا تأخر المراقب أو فشل. */
+  var io = null;
+  if ("IntersectionObserver" in window) {
+    io = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0, rootMargin: "200px 0px 200px 0px" }
+    );
+  }
+
+  function revealAll() {
+    var hidden = document.querySelectorAll(".reveal:not(.in)");
+    for (var i = 0; i < hidden.length; i++) hidden[i].classList.add("in");
+  }
+
+  function observe(nodes) {
+    if (!io) {
+      for (var i = 0; i < nodes.length; i++) nodes[i].classList.add("in");
+      return;
+    }
+    for (var j = 0; j < nodes.length; j++) io.observe(nodes[j]);
+  }
+
+  /* أي عنصر لم يظهر خلال ٣ ثوانٍ يُعرض على أي حال */
+  setTimeout(revealAll, 3000);
+  window.addEventListener("load", function () {
+    setTimeout(revealAll, 1200);
+  });
+
+  /* ── init ── */
+  function init() {
+    modal = byId("modal");
+    nameInput = byId("customer-name");
+
+    applyConfig();
+    renderFilters();
+    renderProducts();
+    renderFeatures();
+    renderGallery();
+    renderSocials();
+    observe(document.querySelectorAll(".reveal"));
+
+    /* أي زر عليه data-enquire يفتح النافذة */
+    document.addEventListener("click", function (e) {
+      var enquire = e.target.closest("[data-enquire]");
+      if (enquire) {
         e.preventDefault();
-        handler();
+        openModal(null);
+        return;
+      }
+      var cta = e.target.closest(".card__cta");
+      if (cta) {
+        e.preventDefault();
+        openModal(cta.getAttribute("data-code"));
+        return;
+      }
+      var filter = e.target.closest(".filter");
+      if (filter) {
+        activeCategory = filter.getAttribute("data-cat");
+        renderFilters();
+        renderProducts();
       }
     });
-  });
-}
 
-function renderFeatures() {
-  const grid = document.getElementById("features-grid");
-  if (!grid) return;
+    byId("modal-close").addEventListener("click", closeModal);
+    byId("modal-send").addEventListener("click", send);
+    modal.addEventListener("click", function (e) {
+      if (e.target === modal) closeModal();
+    });
+    nameInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") send();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && modal.classList.contains("active")) closeModal();
+    });
 
-  grid.innerHTML = CALYPTUS_CONFIG.features
-    .map(
-      (f) => `
-      <div class="feature-card">
-        <span class="feature-card__icon">${f.icon}</span>
-        <h3>${f.title}</h3>
-        <p>${f.text}</p>
-      </div>
-    `
-    )
-    .join("");
-}
-
-function renderSocialHub() {
-  const grid = document.getElementById("social-hub-grid");
-  if (!grid) return;
-
-  grid.innerHTML = SOCIAL_PLATFORMS.filter((p) => CALYPTUS_CONFIG.social[p.key])
-    .map(
-      (p) => `
-      <a class="social-btn ${p.cls}" data-social="${p.key}"
-        href="${CALYPTUS_CONFIG.social[p.key]}"
-        target="_blank" rel="noopener noreferrer">
-        ${p.icon}
-        ${p.label}
-      </a>
-    `
-    )
-    .join("");
-}
-
-function applyConfig() {
-  const { brand, contact, promo } = CALYPTUS_CONFIG;
-
-  document.title = `${brand.name} Furniture`;
-
-  setText("hero-tagline", brand.tagline);
-  setText("hero-description", brand.description);
-  setText("contact-phone", contact.phone);
-  setText("contact-city", contact.city);
-  setText("promo-code", promo.code);
-  setText("promo-agent", promo.agentName);
-  setText("year", new Date().getFullYear());
-
-  const heroImg = document.getElementById("hero-image");
-  if (heroImg && brand.heroImage) heroImg.src = brand.heroImage;
-
-  const logo = document.getElementById("brand-logo");
-  if (logo && brand.logo) logo.src = brand.logo;
-
-  const waUrl = buildWhatsAppUrl();
-  ["cta-whatsapp", "floating-whatsapp"].forEach((id) => setHref(id, waUrl));
-
-  if (brand.domain) {
-    let canonical = document.querySelector('link[rel="canonical"]');
-    if (canonical) canonical.href = brand.domain;
+    var header = byId("header");
+    var onScroll = function () {
+      header.classList.toggle("scrolled", window.scrollY > 40);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
   }
-}
 
-function setText(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
-}
-
-function setHref(id, href) {
-  const el = document.getElementById(id);
-  if (el && href) el.href = href;
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  applyConfig();
-  renderSocialHub();
-  renderFeatures();
-  renderFilters();
-  renderProducts();
-});
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
