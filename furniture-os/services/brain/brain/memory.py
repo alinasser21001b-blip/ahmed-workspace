@@ -14,6 +14,23 @@ class MemoryService:
     def __init__(self, session: AsyncSession, tenant_id: uuid.UUID):
         self.graph = GraphPort(session, tenant_id)
         self.tenant_id = tenant_id
+        self._owner_id: uuid.UUID | None = None
+
+    async def owner_node(self):
+        """Canonical owner node for preference edges."""
+        if self._owner_id:
+            node = await self.graph.get_node(self._owner_id)
+            if node:
+                return node
+        node = await self.graph.upsert_node(
+            "CustomerReference",
+            name="Owner",
+            external_key="owner:self",
+            properties={"role": "owner"},
+            provenance={"source": "ai_memory"},
+        )
+        self._owner_id = node.id
+        return node
 
     async def remember_preference(
         self,
@@ -23,6 +40,7 @@ class MemoryService:
         dna_traits: dict[str, Any] | None = None,
         evidence: dict[str, Any] | None = None,
         confidence: float = 0.8,
+        related_node_id: uuid.UUID | None = None,
     ) -> dict[str, Any]:
         """polarity: likes | dislikes | never | prefers"""
         key = f"pref:{polarity}:{target_summary.lower().strip()[:120]}"
@@ -40,6 +58,18 @@ class MemoryService:
             confidence=confidence,
             provenance={"source": "owner_memory"},
         )
+        owner = await self.owner_node()
+        await self.graph.upsert_edge(owner.id, pref.id, "HAS_PREFERENCE")
+        edge_type = "OWNER_REJECTS" if polarity in {"dislikes", "never"} else "OWNER_PREFERS"
+        await self.graph.upsert_edge(
+            owner.id,
+            pref.id,
+            edge_type,
+            properties={"polarity": polarity, "target_summary": target_summary},
+            confidence=confidence,
+        )
+        if related_node_id:
+            await self.graph.upsert_edge(pref.id, related_node_id, "EVIDENCED_BY")
         return {
             "id": str(pref.id),
             "polarity": polarity,
@@ -48,7 +78,7 @@ class MemoryService:
         }
 
     async def recall_for_traits(self, dna_traits: dict[str, Any], limit: int = 10) -> list[dict[str, Any]]:
-        prefs = await self.graph.find_nodes(node_type="Preference", status="active", limit=100)
+        prefs = await self.graph.find_nodes(node_type="Preference", status="active", limit=200)
         hits: list[dict[str, Any]] = []
         for p in prefs:
             traits = (p.properties or {}).get("dna_traits") or {}
@@ -58,10 +88,15 @@ class MemoryService:
             for k, v in traits.items():
                 if dna_traits.get(k) == v and v not in (None, "", "unknown"):
                     overlap += 1
-            # Also match target_summary keywords loosely against trait values
-            summary = ((p.properties or {}).get("target_summary") or "").lower()
-            for v in dna_traits.values():
+            # Nested DNA (from DesignDNA dumps)
+            for k, v in list(dna_traits.items()):
+                if isinstance(v, dict):
+                    continue
+                summary = ((p.properties or {}).get("target_summary") or "").lower()
                 if isinstance(v, str) and v and v.lower() in summary:
+                    overlap += 1
+                # style_family may be enum-like string in DNA dumps
+                if k in traits and str(traits.get(k)) == str(v) and v not in (None, "", "unknown"):
                     overlap += 1
             if overlap > 0:
                 hits.append(

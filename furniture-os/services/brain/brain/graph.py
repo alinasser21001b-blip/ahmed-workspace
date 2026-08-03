@@ -121,6 +121,30 @@ class GraphPort:
         await self.session.flush()
         return node
 
+    async def close_edges(
+        self,
+        *,
+        src_id: uuid.UUID | None = None,
+        dst_id: uuid.UUID | None = None,
+        edge_type: str,
+    ) -> int:
+        """Soft-close matching open edges by setting valid_to."""
+        stmt = select(GraphEdge).where(
+            GraphEdge.tenant_id == self.tenant_id,
+            GraphEdge.edge_type == edge_type,
+            GraphEdge.valid_to.is_(None),
+        )
+        if src_id:
+            stmt = stmt.where(GraphEdge.src_id == src_id)
+        if dst_id:
+            stmt = stmt.where(GraphEdge.dst_id == dst_id)
+        rows = list((await self.session.execute(stmt)).scalars().all())
+        now = datetime.now(timezone.utc)
+        for e in rows:
+            e.valid_to = now
+        await self.session.flush()
+        return len(rows)
+
     async def upsert_edge(
         self,
         src_id: uuid.UUID,
@@ -187,16 +211,20 @@ class GraphPort:
             stmt = stmt.where(GraphNode.status == status)
         if name_ilike:
             stmt = stmt.where(GraphNode.name.ilike(f"%{name_ilike}%"))
-        stmt = stmt.order_by(GraphNode.updated_at.desc()).limit(limit)
-        rows = (await self.session.execute(stmt)).scalars().all()
+        # Fetch a wider window when property-filtering in Python (JSON filters aren't portable across SQLite/PG)
+        fetch_limit = limit * 10 if property_filters else limit
+        stmt = stmt.order_by(GraphNode.updated_at.desc()).limit(fetch_limit)
+        rows = list((await self.session.execute(stmt)).scalars().all())
         if property_filters:
             filtered = []
             for n in rows:
                 props = n.properties or {}
                 if all(props.get(k) == v for k, v in property_filters.items()):
                     filtered.append(n)
+                if len(filtered) >= limit:
+                    break
             return filtered
-        return list(rows)
+        return rows[:limit]
 
     async def get_neighborhood(
         self, node_id: uuid.UUID, *, edge_types: list[str] | None = None, depth: int = 1

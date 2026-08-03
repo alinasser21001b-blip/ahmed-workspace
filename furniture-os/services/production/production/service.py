@@ -6,14 +6,14 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.graph import GraphPort
 from brain.memory import MemoryService
 from model_gateway import ModelGateway
 
-from app.db.models import GraphNode, StateDelta, TimelineEvent
+from app.db.models import StateDelta, TimelineEvent
 
 
 class ProductionService:
@@ -47,7 +47,6 @@ class ProductionService:
                     "created_at": d.created_at.isoformat() if d.created_at else None,
                 }
             )
-        # Sort urgent first
         urgency_rank = {"high": 0, "critical": 0, "normal": 1, "low": 2}
         out.sort(key=lambda x: (urgency_rank.get(x.get("urgency") or "normal", 9), x.get("created_at") or ""))
         return out
@@ -59,16 +58,76 @@ class ProductionService:
         props = dict(node.properties or {})
         props["resolution"] = resolution
         props["resolution_note"] = note
+        props["resolved_at"] = datetime.now(timezone.utc).isoformat()
         node.properties = props
         node.status = "resolved"
-        # If reject, capture preference
+
+        owner = await self.memory.owner_node()
+        edge_type = "APPROVED_BY_OWNER" if resolution == "approve" else "REJECTED_BY_OWNER"
+        if resolution in {"approve", "reject"}:
+            await self.graph.upsert_edge(
+                node.id,
+                owner.id,
+                edge_type,
+                properties={"note": note},
+                confidence=1.0,
+                provenance={"source": "owner_resolve"},
+            )
+
+        # Clear blockers pointing at this decision
+        await self.graph.close_edges(dst_id=decision_id, edge_type="BLOCKED_BY")
+
+        piece_id = props.get("piece_id")
+        if piece_id:
+            try:
+                pid = uuid.UUID(str(piece_id))
+            except ValueError:
+                pid = None
+            if pid:
+                stage = "approved" if resolution == "approve" else "rejected"
+                self.session.add(
+                    TimelineEvent(
+                        tenant_id=self.tenant_id,
+                        subject_type="FurniturePiece",
+                        subject_id=pid,
+                        kind="production",
+                        label=f"Decision {resolution}: {props.get('subject') or node.name}",
+                        stage=stage,
+                        occurred_at=datetime.now(timezone.utc),
+                        properties={"decision_id": str(decision_id), "note": note},
+                    )
+                )
+
         if resolution == "reject":
+            dna_traits = props.get("dna") or {}
+            if isinstance(dna_traits, dict) and "dna" in dna_traits:
+                dna_traits = dna_traits["dna"]
+            # Flatten enum-like values
+            flat = {}
+            if isinstance(dna_traits, dict):
+                for k, v in dna_traits.items():
+                    if isinstance(v, dict) and "value" in v:
+                        flat[k] = v["value"]
+                    else:
+                        flat[k] = v
             await self.memory.remember_preference(
                 polarity="dislikes",
                 target_summary=props.get("subject") or node.name,
-                dna_traits=(props.get("dna") or {}),
+                dna_traits=flat,
                 evidence={"decision_id": str(decision_id)},
+                related_node_id=decision_id,
             )
+
+        self.session.add(
+            StateDelta(
+                tenant_id=self.tenant_id,
+                category="decision_resolved",
+                summary=f"Decision {resolution}: {props.get('subject') or node.name}",
+                severity="info",
+                entity_type="Decision",
+                entity_id=decision_id,
+            )
+        )
         await self.session.flush()
         return {"ok": True, "id": str(decision_id), "status": "resolved", "resolution": resolution}
 
@@ -146,7 +205,6 @@ class ProductionService:
         state = await self.graph.state_of(supplier_id)
         if not state.get("exists"):
             return {"ok": False}
-        # Count related pieces / decisions via neighborhood
         nb = state.get("neighbors") or []
         pieces = [n for n in nb if n.get("node_type") == "FurniturePiece"]
         return {

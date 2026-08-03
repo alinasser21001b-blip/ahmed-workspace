@@ -29,7 +29,9 @@ async def process_pending_events(ctx):
             mq = await session.execute(select(MediaAsset).where(MediaAsset.event_id == event.id))
             for media in mq.scalars().all():
                 await processor.process_media(media, event)
-            await processor.process_event(event)
+            # Audio process_media already runs process_event; skip if marked done
+            if not event.processed:
+                await processor.process_event(event)
         await session.commit()
     return {"ok": True}
 
@@ -41,7 +43,6 @@ async def hourly_summary_job(ctx):
     async with SessionLocal() as session:
         svc = ProductionService(session, tenant_id, get_gateway())
         summary = await svc.hourly_summary(hours=1)
-        # Persist as state delta narrative for UI
         from app.db.models import StateDelta
 
         session.add(
@@ -58,8 +59,11 @@ async def hourly_summary_job(ctx):
 
 
 class WorkerSettings:
-    functions = [process_pending_events]
-    cron_jobs = [cron(hourly_summary_job, hour=None, minute=5)]
+    functions = [process_pending_events, hourly_summary_job]
+    cron_jobs = [
+        cron(process_pending_events, second={0, 30}),  # every 30s
+        cron(hourly_summary_job, hour=None, minute=5),
+    ]
     redis_settings = None  # set below
 
 
@@ -68,7 +72,11 @@ def _redis_settings():
     from urllib.parse import urlparse
 
     u = urlparse(settings.redis_url)
-    return RedisSettings(host=u.hostname or "localhost", port=u.port or 6379, database=int((u.path or "/0").strip("/") or 0))
+    return RedisSettings(
+        host=u.hostname or "localhost",
+        port=u.port or 6379,
+        database=int((u.path or "/0").strip("/") or 0),
+    )
 
 
 WorkerSettings.redis_settings = _redis_settings()

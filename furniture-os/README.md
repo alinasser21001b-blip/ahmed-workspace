@@ -62,6 +62,14 @@ Graph / DNA / memory / similarity / agents power both behind the scenes and are 
 ## Under the hood (not user-facing)
 
 - Entity-native graph, Design DNA, Furniture Language, owner memory
-- WhatsApp export + Cloud API sensors
-- Decisions, timelines, summaries derived from entity state
-- Market module contracts (collectors later)
+- WhatsApp export (+ zip/media) and Cloud API sensors with media download
+- ARQ worker: pending-event cortex every 30s + hourly state summary
+- Decisions, Piece/Order timelines, Design-life timeline, similarity edges
+- Agents: Decision, Memory, Search, Similarity, Summary
+- Market module contracts only (collectors in Phase 3)
+
+## Tests
+
+```bash
+pytest tests/ -q
+```

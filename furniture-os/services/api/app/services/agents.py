@@ -82,28 +82,50 @@ class AgentRuntime:
             name_ilike=query[:80] if not filters else None,
             limit=30,
         )
-        # Also search DesignDNA by property overlap
+        # Also search DesignDNA by property overlap + embedding
         dna_nodes = await self.graph.find_nodes(node_type="DesignDNA", limit=100)
         dna_hits = []
+        query_vec = None
+        if query.strip():
+            emb = await self.gateway.embed_texts([query])
+            query_vec = emb.vectors[0]
         for n in dna_nodes:
             dna = (n.properties or {}).get("dna") or {}
-            score = 0
+            score = 0.0
             for k, v in filters.items():
                 if k == "colors":
                     continue
-                if str(dna.get(k) or dna.get("furniture_type") or "").lower() == str(v).lower():
-                    score += 1
-                if k == "furniture_type" and str(dna.get("furniture_type", "")).lower() == str(v).lower():
-                    score += 2
-                if k == "style_family" and str(dna.get("style_family", "")).lower() == str(v).lower():
-                    score += 2
-                if k == "crown_shape" and dna.get("crown_shape"):
-                    score += 2
+                dna_val = dna.get(k)
+                if dna_val is None and k == "furniture_type":
+                    dna_val = dna.get("furniture_type")
+                if str(dna_val or "").lower() == str(v).lower():
+                    score += 2.0
+                if k in {"crown_shape", "carving_type", "style_family"} and dna.get(k):
+                    if str(dna.get(k)).lower() == str(v).lower():
+                        score += 2.0
+            if query_vec:
+                emb_row = await self.similarity._get_embedding("node", n.id)
+                if emb_row:
+                    from model_gateway import cosine_similarity
+
+                    score += 3.0 * cosine_similarity(query_vec, emb_row)
             if score:
-                dna_hits.append({"id": str(n.id), "name": n.name, "score": score, "dna": dna})
+                dna_hits.append({"id": str(n.id), "name": n.name, "score": round(score, 4), "dna": dna})
         dna_hits.sort(key=lambda x: x["score"], reverse=True)
 
         memory_boost = await self.memory.recall_for_traits(filters)
+
+        # Expand: pieces that HAVE_DNA matching hits
+        piece_hits = []
+        for hit in dna_hits[:10]:
+            try:
+                dna_id = uuid.UUID(hit["id"])
+            except ValueError:
+                continue
+            nb = await self.graph.get_neighborhood(dna_id, edge_types=["HAS_DNA"], depth=1)
+            for neighbor in nb.get("neighbors") or []:
+                if neighbor.get("node_type") == "FurniturePiece":
+                    piece_hits.append(neighbor)
 
         return {
             "ok": True,
@@ -116,6 +138,7 @@ class AgentRuntime:
                 for n in nodes
             ],
             "design_dna_hits": dna_hits[:20],
+            "related_pieces": piece_hits[:20],
             "memory_boost": memory_boost,
         }
 

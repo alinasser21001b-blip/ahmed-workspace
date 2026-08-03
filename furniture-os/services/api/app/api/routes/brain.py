@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,7 @@ from app.db.models import DomainEvent, MediaAsset
 from app.db.session import get_db
 from app.services.agents import AgentRuntime
 from app.services.gateway import get_gateway
+from app.services.jobs import enqueue_process_pending
 from app.services.storage import storage
 
 router = APIRouter()
@@ -247,10 +248,20 @@ async def ingest_export(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
-    text = (await file.read()).decode("utf-8", errors="replace")
+    raw = await file.read()
     adapter = WhatsAppExportAdapter(db, tenant_uuid())
-    result = await adapter.import_export(text, conversation_key=conversation_key, source_name=file.filename or "export")
+    name = (file.filename or "export").lower()
+    if name.endswith(".zip"):
+        result = await adapter.import_zip(
+            raw, conversation_key=conversation_key, source_name=file.filename or "export.zip"
+        )
+    else:
+        text = raw.decode("utf-8", errors="replace")
+        result = await adapter.import_export(
+            text, conversation_key=conversation_key, source_name=file.filename or "export"
+        )
     await db.commit()
+    result["queued"] = await enqueue_process_pending()
     return result
 
 
@@ -268,11 +279,11 @@ async def process_pending(limit: int = 100, db: AsyncSession = Depends(get_db)):
     events = list(q.scalars().all())
     results = []
     for event in events:
-        # media first if linked
         mq = await db.execute(select(MediaAsset).where(MediaAsset.event_id == event.id))
         for media in mq.scalars().all():
             results.append(await processor.process_media(media, event))
-        results.append(await processor.process_event(event))
+        if not event.processed:
+            results.append(await processor.process_event(event))
     await db.commit()
     return {"processed": len(events), "results": results}
 
@@ -289,10 +300,21 @@ async def wa_verify(
 
 
 @router.post("/ingest/whatsapp/webhook")
-async def wa_webhook(payload: dict[str, Any], db: AsyncSession = Depends(get_db)):
+async def wa_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    x_hub_signature_256: str | None = Header(None, alias="X-Hub-Signature-256"),
+):
+    raw_body = await request.body()
+    if not WhatsAppCloudAPIAdapter.verify_signature(raw_body, x_hub_signature_256):
+        raise HTTPException(403, "Invalid signature")
+    import json as _json
+
+    payload = _json.loads(raw_body.decode("utf-8"))
     adapter = WhatsAppCloudAPIAdapter(db, tenant_uuid())
     result = await adapter.receive_webhook(payload)
     await db.commit()
+    result["queued"] = await enqueue_process_pending()
     return result
 
 

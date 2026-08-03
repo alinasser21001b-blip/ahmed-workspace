@@ -266,6 +266,76 @@ class OpenAIEmbedding(EmbeddingProvider):
         )
 
 
+class OpenAIVision(VisionProvider):
+    """OpenAI vision via chat completions with image_url data URI."""
+
+    def __init__(self, api_key: str, default_model: str = "gpt-4o-mini"):
+        self.api_key = api_key
+        self.default_model = default_model
+
+    async def analyze(self, req: VisionRequest) -> VisionResponse:
+        import base64
+        import httpx
+
+        model = req.model or self.default_model
+        b64 = base64.b64encode(req.image_bytes).decode("ascii")
+        mime = "image/jpeg"
+        body = {
+            "model": model,
+            "temperature": 0.1,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": req.prompt + "\nRespond with JSON only."},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                    ],
+                }
+            ],
+        }
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json=body,
+            )
+            r.raise_for_status()
+            data = r.json()
+        content = data["choices"][0]["message"]["content"]
+        try:
+            structured = json.loads(content)
+        except json.JSONDecodeError:
+            structured = {}
+        return VisionResponse(content=content, structured=structured, model=model, provider="openai")
+
+
+class OpenAIASR(ASRProvider):
+    def __init__(self, api_key: str, default_model: str = "whisper-1"):
+        self.api_key = api_key
+        self.default_model = default_model
+
+    async def transcribe(self, req: ASRRequest) -> ASRResponse:
+        import httpx
+
+        model = req.model or self.default_model
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                data={"model": model, "language": req.language},
+                files={"file": ("audio.ogg", req.audio_bytes, "application/octet-stream")},
+            )
+            r.raise_for_status()
+            data = r.json()
+        return ASRResponse(
+            transcript=data.get("text") or "",
+            confidence=0.85,
+            model=model,
+            provider="openai",
+        )
+
+
 class ModelGateway:
     """Single entry for all model calls used by brain/production pipelines."""
 
@@ -343,9 +413,15 @@ def build_gateway(
     else:
         emb = StubEmbedding()
 
-    # Vision/ASR: stub until keys + models configured (gateway still swappable)
-    vision: VisionProvider = StubVision()
-    asr: ASRProvider = StubASR()
+    if vision_provider == "openai" and openai_api_key:
+        vision: VisionProvider = OpenAIVision(openai_api_key, vision_model or "gpt-4o-mini")
+    else:
+        vision = StubVision()
+
+    if asr_provider == "openai" and openai_api_key:
+        asr: ASRProvider = OpenAIASR(openai_api_key, asr_model or "whisper-1")
+    else:
+        asr = StubASR()
 
     return ModelGateway(
         llm=llm,
@@ -353,8 +429,8 @@ def build_gateway(
         asr=asr,
         embedding=emb,
         llm_model=llm_model if llm_provider != "stub" else "stub-reasoner",
-        vision_model=vision_model,
-        asr_model=asr_model,
+        vision_model=vision_model if vision_provider != "stub" else "stub-vision",
+        asr_model=asr_model if asr_provider != "stub" else "stub-asr",
         embedding_model=embedding_model if embedding_provider != "stub" else "stub-embed",
     )
 
