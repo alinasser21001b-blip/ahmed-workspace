@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import io
 import re
+import zipfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.models import DomainEvent, MediaAsset, RawPayload
 from app.services.storage import storage
 
 
 class WhatsAppExportAdapter:
-    """Parse WhatsApp chat export (.txt + optional media folder) into DomainEvents."""
+    """Parse WhatsApp chat export (.txt + optional media folder/zip) into DomainEvents."""
 
     LINE_RE = re.compile(
         r"^\[?(\d{1,4}[/-]\d{1,2}[/-]\d{1,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|ص|م)?)\]?\s*[-–]?\s*([^:]+):\s*(.*)$",
@@ -52,7 +58,6 @@ class WhatsAppExportAdapter:
                 continue
             m = self.LINE_RE.match(line)
             if not m:
-                # Continuation line — attach to previous if any (skip for MVP simplicity)
                 continue
             date_s, time_s, sender, body = m.groups()
             occurred = _parse_dt(date_s, time_s) or current_date
@@ -89,7 +94,6 @@ class WhatsAppExportAdapter:
                 for name in media_refs:
                     path = media_dir / name
                     if not path.exists():
-                        # try fuzzy: any file containing stem
                         matches = list(media_dir.glob(f"*{Path(name).stem}*"))
                         path = matches[0] if matches else path
                     if path.exists() and path.is_file():
@@ -113,13 +117,57 @@ class WhatsAppExportAdapter:
         await self.session.flush()
         return {"events": events_created, "media": media_created, "raw_id": str(raw.id)}
 
+    async def import_zip(
+        self,
+        zip_bytes: bytes,
+        *,
+        conversation_key: str,
+        source_name: str = "export.zip",
+    ) -> dict[str, Any]:
+        """Import a WhatsApp export zip (chat.txt + media files)."""
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            names = zf.namelist()
+            chat_name = next(
+                (n for n in names if n.lower().endswith(".txt") and not n.startswith("__")),
+                None,
+            )
+            if not chat_name:
+                return {"events": 0, "media": 0, "error": "no_chat_txt"}
+            text = zf.read(chat_name).decode("utf-8", errors="replace")
+
+            # Extract media into a temp-like local dir under data/exports
+            out_dir = Path(settings.export_upload_dir) / conversation_key / "media"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            for n in names:
+                if n == chat_name or n.endswith("/"):
+                    continue
+                target = out_dir / Path(n).name
+                target.write_bytes(zf.read(n))
+
+            return await self.import_export(
+                text,
+                conversation_key=conversation_key,
+                media_dir=out_dir,
+                source_name=source_name,
+            )
+
 
 class WhatsAppCloudAPIAdapter:
-    """Official Cloud API webhook → DomainEvents."""
+    """Official Cloud API webhook → DomainEvents (+ media download)."""
 
     def __init__(self, session: AsyncSession, tenant_id: uuid.UUID):
         self.session = session
         self.tenant_id = tenant_id
+
+    @staticmethod
+    def verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
+        secret = settings.whatsapp_app_secret
+        if not secret:
+            return True  # allow in local/dev when secret unset
+        if not signature_header or not signature_header.startswith("sha256="):
+            return False
+        expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature_header.removeprefix("sha256="), expected)
 
     async def receive_webhook(self, payload: dict[str, Any]) -> dict[str, Any]:
         raw = RawPayload(tenant_id=self.tenant_id, source="cloud_api", payload=payload)
@@ -127,23 +175,36 @@ class WhatsAppCloudAPIAdapter:
         await self.session.flush()
 
         created = 0
+        media_created = 0
         entries = payload.get("entry") or []
         for entry in entries:
             for change in entry.get("changes") or []:
                 value = change.get("value") or {}
-                contacts = {c.get("wa_id"): c.get("profile", {}).get("name") for c in value.get("contacts") or []}
+                contacts = {
+                    c.get("wa_id"): c.get("profile", {}).get("name") for c in value.get("contacts") or []
+                }
                 for msg in value.get("messages") or []:
+                    wa_id = msg.get("id")
+                    if wa_id and await self._already_ingested(wa_id):
+                        continue
+
                     wa_from = msg.get("from")
                     msg_type = msg.get("type")
                     text = ""
+                    media_info: dict[str, Any] | None = None
                     if msg_type == "text":
                         text = (msg.get("text") or {}).get("body") or ""
                     elif msg_type == "image":
-                        text = (msg.get("image") or {}).get("caption") or ""
+                        media_info = msg.get("image") or {}
+                        text = media_info.get("caption") or ""
                     elif msg_type == "audio":
-                        text = ""
+                        media_info = msg.get("audio") or {}
                     elif msg_type == "video":
-                        text = (msg.get("video") or {}).get("caption") or ""
+                        media_info = msg.get("video") or {}
+                        text = media_info.get("caption") or ""
+                    elif msg_type == "document":
+                        media_info = msg.get("document") or {}
+                        text = media_info.get("caption") or media_info.get("filename") or ""
 
                     ts = msg.get("timestamp")
                     occurred = (
@@ -161,22 +222,106 @@ class WhatsAppCloudAPIAdapter:
                         payload={
                             "text": text,
                             "sender_name": contacts.get(wa_from) or wa_from,
-                            "wa_message_id": msg.get("id"),
+                            "wa_message_id": wa_id,
                             "raw_message": msg,
                         },
                         raw_ref=str(raw.id),
                         processed=False,
                     )
                     self.session.add(event)
+                    await self.session.flush()
                     created += 1
+
+                    if media_info and media_info.get("id"):
+                        asset = await self._download_media(
+                            media_id=media_info["id"],
+                            mime=media_info.get("mime_type"),
+                            event=event,
+                            msg_type=msg_type or "document",
+                        )
+                        if asset:
+                            media_created += 1
+
         await self.session.flush()
-        return {"events": created, "raw_id": str(raw.id)}
+        return {"events": created, "media": media_created, "raw_id": str(raw.id)}
+
+    async def _already_ingested(self, wa_message_id: str) -> bool:
+        # SQLite-friendly: scan recent cloud events for matching wa_message_id
+        q = await self.session.execute(
+            select(DomainEvent)
+            .where(DomainEvent.tenant_id == self.tenant_id, DomainEvent.source == "cloud_api")
+            .order_by(DomainEvent.created_at.desc())
+            .limit(200)
+        )
+        for ev in q.scalars().all():
+            if (ev.payload or {}).get("wa_message_id") == wa_message_id:
+                return True
+        return False
+
+    async def _download_media(
+        self,
+        *,
+        media_id: str,
+        mime: str | None,
+        event: DomainEvent,
+        msg_type: str,
+    ) -> MediaAsset | None:
+        token = settings.whatsapp_access_token
+        if not token:
+            return None
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=60) as client:
+                meta = await client.get(
+                    f"https://graph.facebook.com/v21.0/{media_id}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                meta.raise_for_status()
+                url = meta.json().get("url")
+                if not url:
+                    return None
+                blob = await client.get(url, headers={"Authorization": f"Bearer {token}"})
+                blob.raise_for_status()
+                data = blob.content
+        except Exception:
+            return None
+
+        mime = mime or "application/octet-stream"
+        kind = {
+            "image": "image",
+            "audio": "audio",
+            "video": "video",
+            "document": "document",
+        }.get(msg_type, _media_kind_from_mime(mime))
+        ext = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+            "audio/ogg": "ogg",
+            "audio/mpeg": "mp3",
+            "video/mp4": "mp4",
+        }.get(mime, "bin")
+        key = f"cloud/{event.conversation_key}/{media_id}.{ext}"
+        storage.put_bytes(key, data, content_type=mime)
+        asset = MediaAsset(
+            tenant_id=self.tenant_id,
+            kind=kind,
+            storage_key=key,
+            content_type=mime,
+            sha256=storage.sha256(data),
+            byte_size=len(data),
+            event_id=event.id,
+            provenance={"source": "cloud_api", "media_id": media_id},
+        )
+        self.session.add(asset)
+        await self.session.flush()
+        return asset
 
 
 def _parse_dt(date_s: str, time_s: str) -> datetime | None:
     date_s = date_s.strip().replace("-", "/")
     time_s = time_s.strip()
-    # Try common WhatsApp export formats
     candidates = [
         "%d/%m/%Y %H:%M",
         "%d/%m/%Y %H:%M:%S",
@@ -186,7 +331,6 @@ def _parse_dt(date_s: str, time_s: str) -> datetime | None:
         "%Y/%m/%d %H:%M",
     ]
     combined = f"{date_s} {time_s}"
-    # Normalize Arabic am/pm
     combined = combined.replace("ص", "AM").replace("م", "PM")
     for fmt in candidates:
         try:
@@ -201,7 +345,6 @@ def _extract_media_names(body: str) -> list[str]:
     names = re.findall(r"<attached:\s*([^>]+)>", body, flags=re.I)
     if names:
         return [n.strip() for n in names]
-    # "IMG-2024.jpg (file attached)"
     m = re.search(r"([\w.\-]+\.(?:jpg|jpeg|png|webp|mp4|opus|ogg|mp3|pdf))", body, re.I)
     return [m.group(1)] if m else []
 
@@ -214,6 +357,16 @@ def _media_kind(suffix: str) -> str:
         return "video"
     if s in {".opus", ".ogg", ".mp3", ".wav", ".m4a"}:
         return "audio"
+    return "document"
+
+
+def _media_kind_from_mime(mime: str) -> str:
+    if mime.startswith("image/"):
+        return "image"
+    if mime.startswith("audio/"):
+        return "audio"
+    if mime.startswith("video/"):
+        return "video"
     return "document"
 
 

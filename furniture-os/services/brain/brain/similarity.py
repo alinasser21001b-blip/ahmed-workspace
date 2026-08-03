@@ -143,6 +143,41 @@ class SimilarityEngine:
                 break
         return unique
 
+    async def link_similar(
+        self,
+        src_node_id: uuid.UUID,
+        matches: list[dict[str, Any]],
+        *,
+        min_score: float = 0.5,
+    ) -> int:
+        """Persist top similarity hits as SIMILAR_TO edges with score + explanation."""
+        linked = 0
+        for m in matches:
+            if (m.get("score") or 0) < min_score:
+                continue
+            if m.get("subject_type") != "DesignDNA":
+                continue
+            try:
+                dst = uuid.UUID(str(m["subject_id"]))
+            except (ValueError, KeyError):
+                continue
+            if dst == src_node_id:
+                continue
+            await self.graph.upsert_edge(
+                src_node_id,
+                dst,
+                "SIMILAR_TO",
+                properties={
+                    "score": m.get("score"),
+                    "explanation": m.get("explanation") or [],
+                    "suppliers": m.get("suppliers") or [],
+                },
+                confidence=float(m.get("score") or 0.5),
+                provenance={"source": "similarity_engine"},
+            )
+            linked += 1
+        return linked
+
     async def _get_embedding(self, owner_type: str, owner_id: uuid.UUID) -> list[float] | None:
         q = await self.session.execute(
             select(EmbeddingRow).where(
