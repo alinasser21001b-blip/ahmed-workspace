@@ -1,0 +1,118 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: fios
+      POSTGRES_PASSWORD: fios
+      POSTGRES_DB: fios
+    ports:
+      - "5433:5432"
+    volumes:
+      - fios_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fios"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    volumes:
+      - fios_minio:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb -p local/fios-media || true;
+      exit 0;
+      "
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fios:fios@postgres:5432/fios
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      EXPORT_UPLOAD_DIR: /data/exports
+      STORAGE_LOCAL: "false"
+      PYTHONPATH: /app/services/api:/app/services/brain:/app/services/production:/app/services/ingest:/app/services/market:/app/packages/model_gateway:/app/packages/furniture_language:/app/packages/design_dna
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+      - ./data:/data
+    working_dir: /app/services/api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: arq app.workers.settings.WorkerSettings
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fios:fios@postgres:5432/fios
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: http://minio:9000
+      EXPORT_UPLOAD_DIR: /data/exports
+      STORAGE_LOCAL: "false"
+      PYTHONPATH: /app/services/api:/app/services/brain:/app/services/production:/app/services/ingest:/app/services/market:/app/packages/model_gateway:/app/packages/furniture_language:/app/packages/design_dna
+    volumes:
+      - ./:/app
+      - ./data:/data
+    working_dir: /app/services/api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  web:
+    profiles: ["web"]
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on:
+      - api
+
+volumes:
+  fios_pgdata:
+  fios_minio:

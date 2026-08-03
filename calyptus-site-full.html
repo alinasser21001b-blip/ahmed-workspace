@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Calyptus — أثاث كلاسيكي فاخر</title>
+<meta name="description" content="كاليبتوس — أثاث كلاسيكي فاخر بلمسة راقية. تصفح مجموعتنا وتواصل معنا مباشرة عبر واتساب." />
+<meta property="og:title" content="Calyptus — أثاث كلاسيكي فاخر" />
+<meta property="og:description" content="أثاث كلاسيكي فاخر — تواصل معنا مباشرة عبر واتساب." />
+<meta property="og:image" content="images/hero-cinematic.png" />
+<meta name="theme-color" content="#0f0a05" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230f0a05'/%3E%3Ctext x='16' y='22' font-family='Cormorant Garamond, Georgia, serif' font-size='20' fill='%23c9a961' text-anchor='middle' font-style='italic'%3EC%3C/text%3E%3C/svg%3E" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Tajawal:wght@200;300;400;500;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    /* Deep, cinematic palette */
+    --bg: #0f0a05;
+    --bg-2: #1a120a;
+    --bg-3: #241811;
+    --ivory: #f4ead7;
+    --cream: #e8dcc0;
+    --cream-2: #d9c9a5;
+    --paper: #faf5eb;
+    --walnut: #3d2914;
+    --caramel: #a06b3a;
+    --gold: #c9a961;
+    --gold-2: #d4b876;
+    --gold-3: #8a6d3a;
+    --ink: #1c1208;
+    --muted: #9a8968;
+    --muted-2: #6b5a3f;
+    --line: rgba(201, 169, 97, 0.15);
+    --line-strong: rgba(201, 169, 97, 0.35);
+
+    --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --font-ar: "Amiri", "Traditional Arabic", Georgia, serif;
+    --font-body: "Tajawal", system-ui, -apple-system, sans-serif;
+
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-2: cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; background: var(--bg); }
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--ivory);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: clip;
+  }
+  html { overflow-x: clip; }
+  img { max-width: 100%; display: block; }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--gold); color: var(--bg); }
+
+  .container { max-width: 1360px; margin: 0 auto; padding: 0 40px; }
+
+  /* ========== NOISE / GRAIN OVERLAY ========== */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 200;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: overlay;
+  }
+
+  /* ========== LOADER ========== */
+  .loader {
+    position: fixed; inset: 0; z-index: 500;
+    background: var(--bg);
+    display: grid; place-items: center;
+    transition: opacity .7s var(--ease), visibility .7s;
+  }
+  .loader.hide { opacity: 0; visibility: hidden; }
+  .loader-mark {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 64px;
+    color: var(--gold);
+    letter-spacing: 4px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+  /* ========== HEADER ========== */
+  .header {
+    position: fixed; top: 0; right: 0; left: 0;
+    z-index: 100;
+    padding: 22px 40px;
+    display: flex; justify-content: space-between; align-items: center;
+    transition: padding .4s var(--ease), background .4s var(--ease), backdrop-filter .4s var(--ease), border-color .4s var(--ease);
+    border-bottom: 1px solid transparent;
+  }
+  .header.scrolled {
+    padding: 14px 40px;
+    background: rgba(15, 10, 5, 0.75);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border-bottom-color: var(--line);
+  }
+  .logo {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .logo-mark {
+    width: 46px; height: 46px;
+    border: 1px solid var(--gold);
+    display: grid; place-items: center;
+    color: var(--gold);
+    font-family: var(--font-serif);
+    font-size: 26px; font-style: italic;
+    font-weight: 400;
+    background: transparent;
+    transition: all .4s var(--ease);
+  }
+  .logo:hover .logo-mark { background: var(--gold); color: var(--bg); }
+  .logo-text { display: flex; flex-direction: column; line-height: 1.1; }
+  .logo-name {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    letter-spacing: 6px;
+    color: var(--ivory);
+    font-weight: 400;
+  }
+  .logo-tag {
+    font-family: var(--font-body);
+    font-size: 9px; letter-spacing: 4px;
+    color: var(--gold);
+    margin-top: 3px;
+    text-transform: uppercase;
+    font-weight: 300;
+  }
+
+  .nav {
+    display: flex; align-items: center; gap: 36px;
+  }
+  .nav-link {
+    font-size: 12px; letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--cream);
+    font-weight: 400;
+    position: relative;
+    padding: 4px 0;
+    transition: color .3s ease;
+  }
+  .nav-link::after {
+    content: ""; position: absolute; bottom: 0; right: 0;
+    width: 0; height: 1px; background: var(--gold);
+    transition: width .3s var(--ease);
+  }
+  .nav-link:hover { color: var(--gold); }
+  .nav-link:hover::after { width: 100%; }
+
+  .header-cta {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 11px 22px;
+    background: transparent;
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    font-size: 12px; letter-spacing: 2px;
+    font-weight: 500;
+    text-transform: uppercase;
+    transition: all .3s var(--ease);
+    position: relative; overflow: hidden;
+  }
+  .header-cta::before {
+    content: ""; position: absolute; inset: 0;
+    background: var(--gold);
+    transform: translateX(-100%);
+    transition: transform .4s var(--ease);
+    z-index: -1;
+  }
+  .header-cta:hover { color: var(--bg); }
+  .header-cta:hover::before { transform: translateX(0); }
+  .header-cta svg { width: 14px; height: 14px; }
+
+  .menu-toggle { display: none; }
+
+  /* ========== HERO ========== */
+  .hero {
+    position: relative;
+    min-height: 100vh;
+    display: grid; place-items: center;
+    overflow: hidden;
+    padding: 140px 40px 100px;
+  }
+  .hero-bg { position: absolute; inset: 0; z-index: 0; }
+  .hero-bg img {
+    width: 100%; height: 100%; object-fit: cover;
+    filter: brightness(0.5) contrast(1.05) saturate(1.1);
+    animation: kenburns 30s ease-in-out infinite alternate;
+  }
+  @keyframes kenburns {
+    from { transform: scale(1) translate(0, 0); }
+    to { transform: scale(1.12) translate(-2%, -1%); }
+  }
+  .hero-bg::after {
+    content: ""; position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 50% 70%, transparent 0%, rgba(15,10,5,0.55) 60%, rgba(15,10,5,0.9) 100%),
+      linear-gradient(180deg, rgba(15,10,5,0.45) 0%, transparent 30%, rgba(15,10,5,0.7) 100%);
+  }
+
+  .hero-inner {
+    position: relative; z-index: 2;
+    text-align: center;
+    max-width: 900px;
+  }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 18px;
+    font-size: 11px; letter-spacing: 8px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 36px;
+    font-weight: 400;
+    opacity: 0; animation: fadeUp 1s var(--ease) 0.3s forwards;
+  }
+  .hero-eyebrow::before, .hero-eyebrow::after {
+    content: ""; width: 60px; height: 1px; background: var(--gold);
+  }
+  .hero-title {
+    font-family: var(--font-ar);
+    font-size: clamp(52px, 9vw, 128px);
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--ivory);
+    margin-bottom: 12px;
+    opacity: 0; animation: fadeUp 1.2s var(--ease) 0.5s forwards;
+    text-shadow: 0 4px 40px rgba(0,0,0,0.4);
+  }
+  .hero-title-en {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 300;
+    color: var(--gold);
+    font-size: clamp(24px, 3.6vw, 48px);
+    letter-spacing: 6px;
+    margin-bottom: 40px;
+    opacity: 0; animation: fadeUp 1.2s var(--ease) 0.7s forwards;
+    display: flex; align-items: center; justify-content: center; gap: 24px;
+  }
+  .hero-title-en::before, .hero-title-en::after {
+    content: ""; width: 40px; height: 1px; background: var(--gold-3);
+  }
+  .hero-sub {
+    font-size: clamp(15px, 1.5vw, 18px);
+    color: rgba(232, 220, 192, 0.75);
+    max-width: 600px;
+    margin: 0 auto 52px;
+    line-height: 2;
+    font-weight: 300;
+    opacity: 0; animation: fadeUp 1.2s var(--ease) 0.9s forwards;
+  }
+  .hero-actions {
+    display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;
+    opacity: 0; animation: fadeUp 1.2s var(--ease) 1.1s forwards;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 17px 38px;
+    font-family: var(--font-body);
+    font-size: 13px; font-weight: 500;
+    letter-spacing: 3px; text-transform: uppercase;
+    transition: all .35s var(--ease);
+    cursor: pointer; border: none;
+    position: relative; overflow: hidden;
+  }
+  .btn svg { width: 16px; height: 16px; }
+
+  .btn-gold {
+    background: var(--gold); color: var(--bg);
+    box-shadow: 0 15px 40px rgba(201, 169, 97, 0.25);
+  }
+  .btn-gold::before {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.4) 50%, transparent 70%);
+    transform: translateX(-100%);
+    transition: transform .8s var(--ease);
+  }
+  .btn-gold:hover::before { transform: translateX(100%); }
+  .btn-gold:hover { transform: translateY(-3px); box-shadow: 0 20px 50px rgba(201, 169, 97, 0.4); }
+
+  .btn-outline {
+    background: transparent; color: var(--ivory);
+    border: 1px solid var(--line-strong);
+  }
+  .btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+
+  .hero-scroll {
+    position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+    z-index: 2;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+    color: var(--gold);
+    font-size: 10px; letter-spacing: 5px;
+    text-transform: uppercase;
+    opacity: 0; animation: fadeUp 1.5s var(--ease) 1.5s forwards;
+  }
+  .hero-scroll-line {
+    width: 1px; height: 48px;
+    background: linear-gradient(to bottom, var(--gold), transparent);
+    position: relative; overflow: hidden;
+  }
+  .hero-scroll-line::after {
+    content: ""; position: absolute; top: -100%; left: 0; right: 0; height: 100%;
+    background: linear-gradient(to bottom, transparent, var(--ivory), transparent);
+    animation: scrollLine 2.4s ease-in-out infinite;
+  }
+  @keyframes scrollLine {
+    0% { top: -100%; }
+    100% { top: 100%; }
+  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
+
+  /* Corner ornaments on hero */
+  .hero-corner {
+    position: absolute;
+    width: 80px; height: 80px;
+    border-color: var(--gold);
+    opacity: 0.5;
+    z-index: 2;
+  }
+  .hero-corner.tl { top: 40px; left: 40px; border-top: 1px solid; border-left: 1px solid; }
+  .hero-corner.tr { top: 40px; right: 40px; border-top: 1px solid; border-right: 1px solid; }
+  .hero-corner.bl { bottom: 40px; left: 40px; border-bottom: 1px solid; border-left: 1px solid; }
+  .hero-corner.br { bottom: 40px; right: 40px; border-bottom: 1px solid; border-right: 1px solid; }
+
+  /* ========== MARQUEE ========== */
+  .marquee {
+    background: var(--bg-2);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+    padding: 20px 0;
+  }
+  .marquee-track {
+    display: flex; gap: 60px;
+    animation: scroll 40s linear infinite;
+    width: max-content;
+  }
+  .marquee-item {
+    display: flex; align-items: center; gap: 60px;
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--gold-3);
+    white-space: nowrap;
+  }
+  .marquee-item::after {
+    content: "◆"; color: var(--gold); font-size: 8px;
+  }
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(50%); }
+  }
+
+  /* ========== SECTION BASE ========== */
+  section { padding: 140px 40px; position: relative; }
+
+  .section-header {
+    text-align: center;
+    max-width: 780px;
+    margin: 0 auto 100px;
+  }
+  .section-num {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 14px;
+    color: var(--gold);
+    letter-spacing: 6px;
+    margin-bottom: 12px;
+  }
+  .section-eyebrow {
+    display: inline-flex; align-items: center; gap: 16px;
+    font-size: 10px; letter-spacing: 6px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    font-weight: 500;
+  }
+  .section-eyebrow::before, .section-eyebrow::after {
+    content: ""; width: 44px; height: 1px; background: var(--gold);
+  }
+  .section-title {
+    font-family: var(--font-ar);
+    font-size: clamp(38px, 5.5vw, 68px);
+    font-weight: 700;
+    color: var(--ivory);
+    line-height: 1.2;
+    margin-bottom: 20px;
+  }
+  .section-title-en {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 300;
+    color: var(--gold);
+    font-size: clamp(20px, 2.5vw, 30px);
+    letter-spacing: 4px;
+    margin-top: 8px;
+  }
+  .section-sub {
+    font-size: 16px;
+    color: var(--muted);
+    line-height: 2;
+    max-width: 600px;
+    margin: 24px auto 0;
+    font-weight: 300;
+  }
+
+  /* ========== HERITAGE / STORY ========== */
+  .heritage {
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+  .heritage::before {
+    content: "CALYPTUS";
+    position: absolute;
+    top: 60px; left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-serif);
+    font-size: clamp(120px, 22vw, 320px);
+    color: rgba(201, 169, 97, 0.04);
+    letter-spacing: 20px;
+    font-weight: 300;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .heritage-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 80px;
+    align-items: center;
+    position: relative; z-index: 1;
+    max-width: 1200px; margin: 0 auto;
+  }
+  .heritage-image {
+    position: relative;
+    aspect-ratio: 3/4;
+    overflow: hidden;
+  }
+  .heritage-image img {
+    width: 100%; height: 100%; object-fit: cover;
+    transition: transform 1.2s var(--ease);
+  }
+  .heritage-image::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 60%, rgba(15,10,5,0.6));
+  }
+  .heritage-image-frame {
+    position: absolute; inset: -12px;
+    border: 1px solid var(--gold);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .heritage-image-caption {
+    position: absolute; bottom: 20px; left: 20px; right: 20px;
+    z-index: 3;
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--gold);
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-align: center;
+  }
+
+  .heritage-content .section-eyebrow { margin-left: 0; margin-right: 0; }
+  .heritage h2 {
+    font-family: var(--font-ar);
+    font-size: clamp(36px, 4.5vw, 58px);
+    color: var(--ivory);
+    line-height: 1.3; font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .heritage h2 span {
+    display: block;
+    font-family: var(--font-serif);
+    font-style: italic; font-weight: 300;
+    color: var(--gold);
+    font-size: 0.5em;
+    letter-spacing: 5px;
+    margin-top: 12px;
+  }
+  .heritage-quote {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--cream);
+    line-height: 1.7;
+    padding: 28px 0;
+    margin: 32px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    text-align: center;
+    position: relative;
+  }
+  .heritage-quote::before {
+    content: "«"; position: absolute; top: 8px; right: 24px;
+    font-size: 40px; color: var(--gold);
+    line-height: 1;
+  }
+  .heritage-quote::after {
+    content: "»"; position: absolute; bottom: 12px; left: 24px;
+    font-size: 40px; color: var(--gold);
+    line-height: 1;
+  }
+  .heritage p {
+    font-size: 16px; color: var(--muted);
+    line-height: 2; font-weight: 300;
+    margin-bottom: 18px;
+  }
+  .heritage-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+    margin-top: 40px;
+    padding-top: 32px;
+    border-top: 1px solid var(--line);
+  }
+  .stat-num {
+    font-family: var(--font-serif);
+    font-size: 42px;
+    color: var(--gold);
+    font-weight: 400;
+    line-height: 1;
+  }
+  .stat-label {
+    font-size: 11px; letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+
+  /* ========== COLLECTION / PRODUCTS ========== */
+  .collection {
+    background:
+      radial-gradient(ellipse at top, var(--bg-2) 0%, var(--bg) 60%);
+    padding: 160px 40px;
+  }
+  .collection-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 60px 40px;
+    max-width: 1360px;
+    margin: 0 auto;
+  }
+  .product {
+    position: relative;
+    display: flex; flex-direction: column;
+    cursor: pointer;
+    transition: transform .5s var(--ease);
+  }
+  .product-media {
+    position: relative;
+    aspect-ratio: 4/5;
+    overflow: hidden;
+    background: var(--bg-3);
+    margin-bottom: 24px;
+  }
+  .product-media::before {
+    content: ""; position: absolute; inset: 12px;
+    border: 1px solid transparent;
+    z-index: 3;
+    transition: border-color .5s var(--ease);
+    pointer-events: none;
+  }
+  .product:hover .product-media::before { border-color: rgba(201, 169, 97, 0.4); }
+  .product-media img {
+    width: 100%; height: 100%; object-fit: cover;
+    transition: transform 1.4s var(--ease), filter .5s var(--ease);
+    filter: brightness(0.92);
+  }
+  .product:hover .product-media img { transform: scale(1.06); filter: brightness(1); }
+  .product-code {
+    position: absolute; top: 20px; right: 20px;
+    z-index: 4;
+    padding: 6px 14px;
+    background: rgba(15, 10, 5, 0.75);
+    color: var(--gold);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 12px;
+    letter-spacing: 3px;
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(201, 169, 97, 0.3);
+  }
+  .product-hover-cta {
+    position: absolute;
+    bottom: 24px; left: 24px; right: 24px;
+    z-index: 4;
+    padding: 14px 20px;
+    background: rgba(15, 10, 5, 0.85);
+    backdrop-filter: blur(8px);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    font-size: 11px; letter-spacing: 3px;
+    text-transform: uppercase;
+    text-align: center;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all .5s var(--ease);
+    cursor: pointer;
+  }
+  .product:hover .product-hover-cta { opacity: 1; transform: none; }
+  .product-hover-cta:hover { background: var(--gold); color: var(--bg); }
+  .product-hover-cta svg { width: 14px; height: 14px; }
+
+  .product-info { padding: 0 4px; text-align: right; }
+  .product-cat {
+    font-size: 10px; letter-spacing: 4px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+  .product-title {
+    font-family: var(--font-ar);
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--ivory);
+    margin-bottom: 8px;
+    line-height: 1.3;
+  }
+  .product-title-en {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 15px;
+    color: var(--gold-3);
+    letter-spacing: 2px;
+    margin-bottom: 14px;
+  }
+  .product-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.9;
+    font-weight: 300;
+  }
+  .product-inquire {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; letter-spacing: 3px;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  .product-inquire span::after {
+    content: " ←";
+    display: inline-block;
+    transition: transform .3s ease;
+  }
+  .product:hover .product-inquire span::after { transform: translateX(-6px); }
+
+  /* ========== CRAFT / VALUES ========== */
+  .craft {
+    background: var(--bg-2);
+    position: relative;
+    overflow: hidden;
+  }
+  .craft-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 100px;
+    max-width: 1300px; margin: 0 auto;
+    align-items: center;
+  }
+  .craft-image {
+    position: relative;
+    aspect-ratio: 3/4;
+    overflow: hidden;
+  }
+  .craft-image img {
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  .craft-image::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(45deg, rgba(15,10,5,0.5), transparent 60%);
+  }
+  .craft-badge {
+    position: absolute;
+    bottom: 30px; right: 30px;
+    z-index: 2;
+    width: 140px; height: 140px;
+    border: 1px solid var(--gold);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(15, 10, 5, 0.75);
+    backdrop-filter: blur(8px);
+    text-align: center;
+    font-family: var(--font-serif);
+    color: var(--gold);
+    animation: spin 20s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .craft-badge-inner {
+    animation: spin 20s linear infinite reverse;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .craft-badge-num {
+    font-size: 38px; font-weight: 400; line-height: 1;
+  }
+  .craft-badge-label {
+    font-family: var(--font-body);
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--cream);
+  }
+
+  .craft-content .section-eyebrow { margin-left: 0; margin-right: 0; }
+  .craft h2 {
+    font-family: var(--font-ar);
+    font-size: clamp(36px, 4.5vw, 58px);
+    color: var(--ivory);
+    line-height: 1.3; font-weight: 700;
+    margin-bottom: 20px;
+  }
+  .craft h2 em {
+    font-family: var(--font-serif);
+    font-style: italic; font-weight: 300;
+    color: var(--gold);
+    display: block;
+    font-size: 0.55em;
+    letter-spacing: 4px;
+    margin-top: 12px;
+  }
+  .craft-intro {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 20px;
+    color: var(--cream);
+    line-height: 1.8;
+    margin: 24px 0 40px;
+  }
+  .values-list {
+    display: grid; gap: 28px;
+  }
+  .value {
+    display: flex; gap: 24px;
+    padding: 24px 0;
+    border-bottom: 1px solid var(--line);
+    transition: padding .3s var(--ease);
+  }
+  .value:hover { padding-right: 8px; }
+  .value:last-child { border-bottom: none; }
+  .value-num {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 24px;
+    color: var(--gold);
+    line-height: 1;
+    flex-shrink: 0;
+    width: 40px;
+  }
+  .value-body h3 {
+    font-family: var(--font-ar);
+    font-size: 22px;
+    color: var(--ivory);
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+  .value-body p {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.9;
+    font-weight: 300;
+  }
+
+  /* ========== GALLERY STRIP ========== */
+  .gallery {
+    padding: 0;
+    background: var(--bg);
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 2px;
+  }
+  .gallery-item {
+    aspect-ratio: 4/5;
+    overflow: hidden;
+    position: relative;
+  }
+  .gallery-item img {
+    width: 100%; height: 100%; object-fit: cover;
+    transition: transform 1.4s var(--ease), filter .4s var(--ease);
+    filter: brightness(0.85) saturate(1.05);
+  }
+  .gallery-item:hover img { transform: scale(1.06); filter: brightness(1) saturate(1.15); }
+  .gallery-item::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, transparent 60%, rgba(15,10,5,0.5));
+  }
+
+  /* ========== SOCIAL ========== */
+  .social-section {
+    background: var(--bg-3);
+    text-align: center;
+    padding: 100px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .social-section::before {
+    content: "◆ ◆ ◆";
+    position: absolute; top: 40px; left: 50%;
+    transform: translateX(-50%);
+    color: var(--gold);
+    font-size: 10px; letter-spacing: 12px;
+  }
+  .social-title {
+    font-family: var(--font-ar);
+    font-size: clamp(28px, 4vw, 40px);
+    color: var(--ivory);
+    margin-bottom: 8px;
+    font-weight: 700;
+  }
+  .social-sub {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 20px;
+    color: var(--gold);
+    letter-spacing: 3px;
+    margin-bottom: 44px;
+  }
+  .socials {
+    display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
+    max-width: 720px; margin: 0 auto;
+  }
+  .social {
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 14px 26px;
+    border: 1px solid var(--line-strong);
+    color: var(--cream);
+    font-size: 12px; letter-spacing: 3px;
+    text-transform: uppercase;
+    transition: all .35s var(--ease);
+    position: relative; overflow: hidden;
+  }
+  .social::before {
+    content: ""; position: absolute; inset: 0;
+    background: var(--gold);
+    transform: translateY(100%);
+    transition: transform .4s var(--ease);
+    z-index: -1;
+  }
+  .social:hover { color: var(--bg); border-color: var(--gold); }
+  .social:hover::before { transform: translateY(0); }
+  .social svg { width: 16px; height: 16px; }
+
+  /* ========== CTA / VISIT ========== */
+  .visit {
+    padding: 0;
+    background: var(--bg);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 620px;
+  }
+  .visit-content {
+    padding: 100px 60px;
+    display: flex; flex-direction: column; justify-content: center;
+    background: var(--bg-2);
+  }
+  .visit-content .section-eyebrow { margin-left: 0; margin-right: 0; }
+  .visit h2 {
+    font-family: var(--font-ar);
+    font-size: clamp(36px, 4.5vw, 56px);
+    color: var(--ivory);
+    line-height: 1.3;
+    margin-bottom: 12px;
+    font-weight: 700;
+  }
+  .visit h2 span {
+    display: block;
+    font-family: var(--font-serif);
+    font-style: italic; font-weight: 300;
+    color: var(--gold);
+    font-size: 0.5em; letter-spacing: 5px;
+    margin-top: 12px;
+  }
+  .visit-desc {
+    font-size: 15px;
+    color: var(--muted);
+    line-height: 1.9;
+    margin: 28px 0 36px;
+    font-weight: 300;
+  }
+  .contact-block {
+    display: grid; gap: 22px;
+    margin-bottom: 36px;
+    padding: 28px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .contact-row {
+    display: flex; align-items: flex-start; gap: 18px;
+  }
+  .contact-icon {
+    width: 40px; height: 40px;
+    border: 1px solid var(--gold);
+    display: grid; place-items: center;
+    color: var(--gold);
+    flex-shrink: 0;
+  }
+  .contact-icon svg { width: 16px; height: 16px; }
+  .contact-body { flex: 1; }
+  .contact-label {
+    font-size: 10px; letter-spacing: 3px;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .contact-value {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    color: var(--ivory);
+    line-height: 1.5;
+  }
+  .contact-value.small { font-size: 15px; }
+
+  .visit-map {
+    position: relative;
+    background: var(--bg-3);
+    overflow: hidden;
+  }
+  .visit-map iframe {
+    width: 100%; height: 100%; border: none;
+    filter: grayscale(0.4) contrast(1.05) brightness(0.85);
+  }
+  .visit-map-frame {
+    position: absolute; inset: 20px;
+    border: 1px solid var(--gold);
+    pointer-events: none;
+    z-index: 2;
+  }
+  .map-pill {
+    position: absolute; top: 40px; right: 40px;
+    z-index: 3;
+    padding: 10px 18px;
+    background: rgba(15, 10, 5, 0.9);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    backdrop-filter: blur(8px);
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 13px;
+    letter-spacing: 2px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .map-pill svg { width: 12px; height: 12px; }
+
+  /* ========== FOOTER ========== */
+  footer {
+    background: var(--bg);
+    padding: 100px 40px 40px;
+    border-top: 1px solid var(--line);
+    text-align: center;
+    position: relative;
+  }
+  .footer-mark {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 72px;
+    color: var(--gold);
+    letter-spacing: 4px;
+    line-height: 1;
+    margin-bottom: 16px;
+  }
+  .footer-name {
+    font-family: var(--font-serif);
+    font-size: 28px;
+    color: var(--ivory);
+    letter-spacing: 10px;
+    margin-bottom: 8px;
+  }
+  .footer-tag {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--gold);
+    font-size: 15px;
+    letter-spacing: 4px;
+    margin-bottom: 40px;
+  }
+  .footer-divider {
+    width: 60px; height: 1px;
+    background: var(--gold);
+    margin: 0 auto 40px;
+  }
+  .footer-socials {
+    display: flex; gap: 16px; justify-content: center; margin-bottom: 40px;
+  }
+  .footer-social {
+    width: 46px; height: 46px;
+    border: 1px solid var(--line-strong);
+    display: grid; place-items: center;
+    color: var(--gold);
+    transition: all .3s ease;
+  }
+  .footer-social:hover {
+    background: var(--gold);
+    color: var(--bg);
+    border-color: var(--gold);
+    transform: translateY(-4px);
+  }
+  .footer-social svg { width: 16px; height: 16px; }
+  .footer-copy {
+    margin-top: 30px;
+    padding-top: 30px;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--muted-2);
+    text-transform: uppercase;
+  }
+
+  /* ========== FLOATING WHATSAPP ========== */
+  .fab {
+    position: fixed;
+    bottom: 30px; left: 30px;
+    width: 62px; height: 62px;
+    background: #25D366;
+    color: #fff;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    box-shadow: 0 12px 32px rgba(37, 211, 102, 0.4);
+    z-index: 90;
+    transition: transform .3s ease;
+  }
+  .fab::before {
+    content: ""; position: absolute; inset: -6px;
+    border-radius: 50%;
+    border: 1px solid rgba(37, 211, 102, 0.4);
+    animation: fab-ring 2.4s ease-out infinite;
+  }
+  @keyframes fab-ring {
+    0% { transform: scale(0.9); opacity: 1; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+  .fab:hover { transform: scale(1.1); }
+  .fab svg { width: 30px; height: 30px; }
+
+  /* ========== MODAL ========== */
+  .modal {
+    position: fixed; inset: 0;
+    background: rgba(15, 10, 5, 0.85);
+    backdrop-filter: blur(12px);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 300;
+    padding: 20px;
+  }
+  .modal.active { display: flex; animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal-box {
+    background: var(--bg-2);
+    padding: 56px 44px;
+    max-width: 480px; width: 100%;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.6);
+    position: relative;
+    text-align: right;
+    border: 1px solid var(--line-strong);
+    animation: slideUp .4s var(--ease);
+  }
+  .modal-box::before {
+    content: ""; position: absolute; inset: 8px;
+    border: 1px solid var(--line);
+    pointer-events: none;
+  }
+  @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .modal-close {
+    position: absolute; top: 16px; left: 16px;
+    background: none; border: none;
+    font-size: 28px; color: var(--gold);
+    cursor: pointer; line-height: 1;
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    transition: all .2s ease;
+    z-index: 2;
+  }
+  .modal-close:hover { transform: rotate(90deg); }
+  .modal-eyebrow {
+    font-size: 10px; letter-spacing: 5px;
+    color: var(--gold); text-transform: uppercase;
+    margin-bottom: 14px;
+    font-weight: 500;
+  }
+  .modal h3 {
+    font-family: var(--font-ar);
+    font-size: 32px; color: var(--ivory);
+    margin-bottom: 8px; font-weight: 700;
+    line-height: 1.3;
+  }
+  .modal-subtitle {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--gold);
+    font-size: 16px;
+    margin-bottom: 24px;
+    letter-spacing: 2px;
+  }
+  .modal p {
+    color: var(--muted); font-size: 14px;
+    margin-bottom: 28px; line-height: 1.9;
+    font-weight: 300;
+  }
+  .modal label {
+    display: block; font-size: 11px;
+    color: var(--gold); margin-bottom: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .modal input {
+    width: 100%; padding: 15px 18px;
+    background: var(--bg);
+    border: 1px solid var(--line-strong);
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--ivory);
+    text-align: right;
+    transition: border-color .2s ease;
+    margin-bottom: 28px;
+  }
+  .modal input:focus {
+    outline: none; border-color: var(--gold);
+  }
+  .modal input::placeholder { color: var(--muted-2); }
+  .modal-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--gold); color: var(--bg);
+    border: none;
+    font-family: var(--font-body);
+    font-size: 12px; font-weight: 500;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+    transition: all .3s var(--ease);
+  }
+  .modal-btn:hover { background: var(--gold-2); transform: translateY(-2px); }
+  .modal-btn svg { width: 16px; height: 16px; }
+
+  /* ========== REVEAL ANIMATION ========== */
+  .reveal { opacity: 0; transform: translateY(40px); transition: all 1s var(--ease); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ========== RESPONSIVE ========== */
+  @media (max-width: 900px) {
+    .header, .header.scrolled { padding: 16px 24px; }
+    .logo-mark { width: 40px; height: 40px; font-size: 22px; }
+    .logo-name { font-size: 18px; letter-spacing: 4px; }
+    .logo-tag { display: none; }
+    .nav { display: none; }
+    .hero-corner { display: none; }
+    section { padding: 90px 24px; }
+    .hero { padding: 120px 24px 80px; }
+    .heritage::before { display: none; }
+    .heritage-grid, .craft-grid, .visit {
+      grid-template-columns: 1fr;
+      gap: 60px;
+    }
+    .visit-content { padding: 70px 30px; }
+    .visit-map { min-height: 400px; }
+    .gallery { grid-template-columns: 1fr 1fr; }
+    .heritage-stats { grid-template-columns: 1fr; gap: 20px; }
+    .fab { width: 56px; height: 56px; bottom: 20px; left: 20px; }
+    .fab svg { width: 26px; height: 26px; }
+    .modal-box { padding: 44px 28px; }
+    .marquee-item { font-size: 16px; gap: 40px; }
+    .footer-mark { font-size: 56px; }
+  }
+  @media (max-width: 540px) {
+    .header-cta span { display: none; }
+    .header-cta { padding: 10px 14px; }
+    .gallery { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div class="loader" id="loader">
+  <div class="loader-mark">C</div>
+</div>
+
+<!-- HEADER -->
+<header class="header" id="header">
+  <a href="#" class="logo">
+    <span class="logo-mark">C</span>
+    <span class="logo-text">
+      <span class="logo-name">CALYPTUS</span>
+      <span class="logo-tag">Classic Furniture · Baghdad</span>
+    </span>
+  </a>
+  <nav class="nav">
+    <a href="#heritage" class="nav-link">القصة</a>
+    <a href="#collection" class="nav-link">المجموعة</a>
+    <a href="#craft" class="nav-link">الحرفية</a>
+    <a href="#visit" class="nav-link">زورونا</a>
+  </nav>
+  <a class="header-cta" href="#" onclick="openModal(event, '', 'استفسار عام')">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+    <span>احجز استشارة</span>
+  </a>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-corner tl"></div>
+  <div class="hero-corner tr"></div>
+  <div class="hero-corner bl"></div>
+  <div class="hero-corner br"></div>
+
+  <div class="hero-bg">
+    <img src="images/hero-cinematic.png" alt="صالة كلاسيكية أوروبية فاخرة" />
+  </div>
+  <div class="hero-inner">
+    <div class="hero-eyebrow">Est. 2024 · بغداد · العراق</div>
+    <h1 class="hero-title">أثاث كلاسيكي</h1>
+    <div class="hero-title-en">Timeless Elegance</div>
+    <p class="hero-sub">
+      قطع أثاث فاخرة تجمع بين الحرفية العريقة والذوق الرفيع،
+      لتمنح منزلك طابعاً كلاسيكياً خالداً.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-gold" href="#collection">
+        <span>تصفح المجموعة</span>
+      </a>
+      <a class="btn btn-outline" href="#" onclick="openModal(event, '', 'استفسار عام')">
+        <span>تواصل معنا</span>
+      </a>
+    </div>
+  </div>
+  <div class="hero-scroll">
+    <span>Scroll</span>
+    <div class="hero-scroll-line"></div>
+  </div>
+</section>
+
+<!-- MARQUEE -->
+<div class="marquee">
+  <div class="marquee-track">
+    <div class="marquee-item">Chesterfield Sofas</div>
+    <div class="marquee-item">Hand-Carved Wood</div>
+    <div class="marquee-item">Italian Craftsmanship</div>
+    <div class="marquee-item">Velvet & Brass</div>
+    <div class="marquee-item">Timeless Elegance</div>
+    <div class="marquee-item">Baghdad Atelier</div>
+    <div class="marquee-item">Chesterfield Sofas</div>
+    <div class="marquee-item">Hand-Carved Wood</div>
+    <div class="marquee-item">Italian Craftsmanship</div>
+    <div class="marquee-item">Velvet & Brass</div>
+    <div class="marquee-item">Timeless Elegance</div>
+    <div class="marquee-item">Baghdad Atelier</div>
+  </div>
+</div>
+
+<!-- HERITAGE / STORY -->
+<section class="heritage" id="heritage">
+  <div class="heritage-grid">
+    <div class="heritage-image reveal">
+      <img src="images/detail-brass.png" alt="تفاصيل نحاسية أصيلة" />
+      <div class="heritage-image-frame"></div>
+      <div class="heritage-image-caption">— A study in detail —</div>
+    </div>
+    <div class="heritage-content reveal">
+      <div class="section-num">— 01 —</div>
+      <div class="section-eyebrow">Our Story</div>
+      <h2>حرفية تُخلَّد <span>The Art of Heritage</span></h2>
+      <div class="heritage-quote">
+        كل قطعة عندنا ليست أثاثاً — بل قصة تُروى في الخشب، والقماش، والنحاس.
+      </div>
+      <p>
+        نؤمن أن الأثاث الكلاسيكي ليس مجرد قطعة، بل قصة تُروى في كل تفصيل —
+        من نحت الخشب حتى آخر غرزة قماش.
+      </p>
+      <p>
+        قطع كلاسيكية مختارة بعناية — كل قطعة تحمل توقيع الحرفية وروح الأصالة.
+      </p>
+      <div class="heritage-stats">
+        <div>
+          <div class="stat-num">100%</div>
+          <div class="stat-label">صناعة يدوية</div>
+        </div>
+        <div>
+          <div class="stat-num">24H</div>
+          <div class="stat-label">استجابة سريعة</div>
+        </div>
+        <div>
+          <div class="stat-num">∞</div>
+          <div class="stat-label">ضمان الجودة</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COLLECTION -->
+<section class="collection" id="collection">
+  <div class="section-header reveal">
+    <div class="section-num">— 02 —</div>
+    <div class="section-eyebrow">The Collection</div>
+    <h2 class="section-title">مجموعتنا المختارة</h2>
+    <div class="section-title-en">A Curated Selection</div>
+    <p class="section-sub">
+      قطع كلاسيكية مختارة بعناية — كل قطعة تحمل توقيع الحرفية وروح الأصالة.
+      اضغط على المنتج لبدء المحادثة مباشرة معنا عبر واتساب.
+    </p>
+  </div>
+
+  <div class="collection-grid" id="products-grid"></div>
+</section>
+
+<!-- CRAFT / VALUES -->
+<section class="craft" id="craft">
+  <div class="craft-grid">
+    <div class="craft-image reveal">
+      <img src="images/craft-workshop.png" alt="حرفي يمارس النحت اليدوي" />
+      <div class="craft-badge">
+        <div class="craft-badge-inner">
+          <span class="craft-badge-num">C</span>
+          <span class="craft-badge-label">Since 2024</span>
+        </div>
+      </div>
+    </div>
+    <div class="craft-content reveal">
+      <div class="section-num">— 03 —</div>
+      <div class="section-eyebrow">Our Craft</div>
+      <h2>حرفية لا تُقلَّد <em>Uncompromised Craft</em></h2>
+      <p class="craft-intro">
+        نؤمن أن الأثاث الكلاسيكي ليس مجرد قطعة، بل قصة تُروى في كل تفصيل —
+        من نحت الخشب حتى آخر غرزة قماش.
+      </p>
+      <div class="values-list">
+        <div class="value">
+          <div class="value-num">I.</div>
+          <div class="value-body">
+            <h3>خامات فاخرة</h3>
+            <p>خشب طبيعي، أقمشة مستوردة، وتفاصيل نحاسية أصيلة.</p>
+          </div>
+        </div>
+        <div class="value">
+          <div class="value-num">II.</div>
+          <div class="value-body">
+            <h3>تصميم كلاسيكي</h3>
+            <p>لمسات نحت ونقش تُعيد رونق العصور الذهبية إلى بيتك.</p>
+          </div>
+        </div>
+        <div class="value">
+          <div class="value-num">III.</div>
+          <div class="value-body">
+            <h3>خدمة سريعة</h3>
+            <p>ردّ فوري عبر واتساب، وتوصيل داخل بغداد بأمان.</p>
+          </div>
+        </div>
+        <div class="value">
+          <div class="value-num">IV.</div>
+          <div class="value-body">
+            <h3>ضمان الجودة</h3>
+            <p>كل قطعة تخضع لفحص دقيق قبل تسليمها إليك.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GALLERY STRIP -->
+<section class="gallery">
+  <div class="gallery-item"><img src="images/detail-velvet.png" alt="مخمل كريمي" /></div>
+  <div class="gallery-item"><img src="images/showroom.png" alt="صالة عرض" /></div>
+  <div class="gallery-item"><img src="images/hero.png" alt="أجواء كلاسيكية" /></div>
+</section>
+
+<!-- SOCIAL -->
+<section class="social-section" id="social">
+  <h2 class="social-title">تابعنا على منصاتنا</h2>
+  <div class="social-sub">Follow The Journey</div>
+  <div class="socials">
+    <a class="social" href="https://www.instagram.com/calyptus.iq" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+      <span>Instagram</span>
+    </a>
+    <a class="social" href="https://www.facebook.com/share/1YUkRg2wjb/?mibextid=wwXIfr" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+      <span>Facebook</span>
+    </a>
+    <a class="social" href="https://wa.me/9647824316008" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+      <span>WhatsApp</span>
+    </a>
+    <a class="social" href="https://www.tiktok.com/@calyptus.iq" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005.8 20.1a6.34 6.34 0 0010.86-4.43V8.85a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1.84-.28z"/></svg>
+      <span>TikTok</span>
+    </a>
+  </div>
+</section>
+
+<!-- VISIT / CONTACT + MAP -->
+<section class="visit" id="visit">
+  <div class="visit-content reveal">
+    <div class="section-num">— 04 —</div>
+    <div class="section-eyebrow">Visit The Atelier</div>
+    <h2>هل تبحث عن قطعة مميّزة؟ <span>Visit Us in Baghdad</span></h2>
+    <p class="visit-desc">
+      تواصل معنا مباشرة على واتساب، وأخبرنا عن ذوقك — فريقنا مستعد لخدمتك.
+    </p>
+    <div class="contact-block">
+      <div class="contact-row">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="contact-body">
+          <div class="contact-label">Location · العنوان</div>
+          <div class="contact-value small">بغداد · حي المعرب · قرب شارع الأعظمية</div>
+        </div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+        </div>
+        <div class="contact-body">
+          <div class="contact-label">WhatsApp · واتساب</div>
+          <div class="contact-value">+964 782 431 6008</div>
+        </div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </div>
+        <div class="contact-body">
+          <div class="contact-label">Hours · الدوام</div>
+          <div class="contact-value small">السبت — الخميس · 10:00 ص — 9:00 م</div>
+        </div>
+      </div>
+    </div>
+    <a class="btn btn-gold" href="#" onclick="openModal(event, '', 'استفسار عام')">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+      <span>ابدأ محادثة</span>
+    </a>
+  </div>
+  <div class="visit-map">
+    <div class="visit-map-frame"></div>
+    <a class="map-pill" href="https://maps.app.goo.gl/2oVfRbmL42x87Wzm6" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17l10-10M7 7h10v10"/></svg>
+      <span>Open in Maps</span>
+    </a>
+    <iframe
+      src="https://www.google.com/maps?q=33.363040,44.374528&hl=ar&z=16&output=embed"
+      loading="lazy"
+      referrerpolicy="no-referrer-when-downgrade"
+      title="Calyptus location">
+    </iframe>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-mark">C</div>
+  <div class="footer-name">CALYPTUS</div>
+  <div class="footer-tag">Classic Furniture · Baghdad</div>
+  <div class="footer-divider"></div>
+  <div class="footer-socials">
+    <a class="footer-social" href="https://www.instagram.com/calyptus.iq" target="_blank" rel="noopener" aria-label="Instagram">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+    </a>
+    <a class="footer-social" href="https://www.facebook.com/share/1YUkRg2wjb/?mibextid=wwXIfr" target="_blank" rel="noopener" aria-label="Facebook">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+    </a>
+    <a class="footer-social" href="https://wa.me/9647824316008" target="_blank" rel="noopener" aria-label="WhatsApp">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+    </a>
+    <a class="footer-social" href="https://www.tiktok.com/@calyptus.iq" target="_blank" rel="noopener" aria-label="TikTok">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-5.2 1.74 2.89 2.89 0 012.31-4.64 2.93 2.93 0 01.88.13V9.4a6.84 6.84 0 00-1-.05A6.33 6.33 0 005.8 20.1a6.34 6.34 0 0010.86-4.43V8.85a8.16 8.16 0 004.77 1.52v-3.4a4.85 4.85 0 01-1.84-.28z"/></svg>
+    </a>
+  </div>
+  <div class="footer-copy">© 2026 CALYPTUS · Baghdad, Iraq · All Rights Reserved</div>
+</footer>
+
+<!-- FLOATING WHATSAPP -->
+<a class="fab" href="#" onclick="openModal(event, '', 'استفسار عام')" aria-label="واتساب">
+  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+</a>
+
+<!-- MODAL -->
+<div class="modal" id="whatsapp-modal" onclick="if(event.target===this) closeModal()">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()" aria-label="إغلاق">×</button>
+    <div class="modal-eyebrow" id="modal-code">CALYPTUS · تواصل</div>
+    <h3 id="modal-title">تواصل معنا</h3>
+    <div class="modal-subtitle">Begin the Conversation</div>
+    <p>فقط أدخل اسمك، وسننتقل مباشرة إلى محادثة واتساب مع رسالة جاهزة.</p>
+    <label for="customer-name">الاسم الكريم</label>
+    <input type="text" id="customer-name" placeholder="مثال: أحمد الحسيني" autocomplete="name" />
+    <button class="modal-btn" onclick="sendWhatsApp()">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+      <span>فتح واتساب</span>
+    </button>
+  </div>
+</div>
+
+<script>
+  const WHATSAPP_NUMBER = "9647824316008";
+
+  const PRODUCTS = [
+    { code: "CL-001", cat: "Sofas", catAr: "أرائك", title: "أريكة تشسترفيلد الكلاسيكية", titleEn: "Chesterfield Classic", desc: "أريكة جلدية بلون الكراميل الدافئ بتفاصيل الأزرار المطرزة والمسامير النحاسية.", img: "images/sofa-classic.png" },
+    { code: "CL-002", cat: "Dining", catAr: "سفرة", title: "طقم سفرة ملكي", titleEn: "Royal Dining Suite", desc: "طاولة سفرة من خشب الجوز الفاخر مع 6 كراسي مبطنة بقماش مخملي كريمي.", img: "images/dining-set.png" },
+    { code: "CL-003", cat: "Bedroom", catAr: "غرف نوم", title: "سرير فرنسي فخم", titleEn: "Louis French Bed", desc: "سرير كينج بتاج منحوت يدوياً وظهر مبطن بأزرار كابتونيه، مع كومودينوين.", img: "images/bedroom-set.png" },
+    { code: "CL-004", cat: "Accent", catAr: "كراسي", title: "كرسي وينج مخملي", titleEn: "Emerald Wingback", desc: "كرسي مخملي زمردي بأرجل خشبية داكنة ونهايات نحاسية، مثالي لركن القراءة.", img: "images/armchair.png" },
+    { code: "CL-005", cat: "Console", catAr: "كونسول", title: "كونسول فرنسي منحوت", titleEn: "Carved French Console", desc: "طاولة كونسول بنقوش يدوية دقيقة وأرجل مقوّسة، تُبرز فخامة المدخل.", img: "images/console-table.png" },
+    { code: "CL-006", cat: "Storage", catAr: "دواليب", title: "دولاب كلاسيكي بمرايا", titleEn: "Mirrored Wardrobe", desc: "دولاب واسع بثلاث أبواب من المرايا وتاج منحوت، بلمسات نحاسية أصيلة.", img: "images/wardrobe.png" },
+  ];
+
+  const grid = document.getElementById("products-grid");
+  PRODUCTS.forEach((p, i) => {
+    const el = document.createElement("article");
+    el.className = "product reveal";
+    el.style.transitionDelay = (i * 80) + "ms";
+    el.innerHTML = `
+      <div class="product-media">
+        <span class="product-code">${p.code}</span>
+        <img src="${p.img}" alt="${p.title}" loading="lazy" />
+        <button class="product-hover-cta" onclick="event.stopPropagation(); openModal(event, '${p.code}', '${p.title.replace(/'/g, "\\'")}')">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+          <span>اطلب عبر واتساب</span>
+        </button>
+      </div>
+      <div class="product-info">
+        <div class="product-cat">${p.cat} · ${p.catAr}</div>
+        <h3 class="product-title">${p.title}</h3>
+        <div class="product-title-en">${p.titleEn}</div>
+        <p class="product-desc">${p.desc}</p>
+        <div class="product-inquire">
+          <span>Inquire</span>
+          <span>—</span>
+        </div>
+      </div>
+    `;
+    el.addEventListener("click", () => openModal(null, p.code, p.title));
+    grid.appendChild(el);
+  });
+
+  let currentCode = "";
+  let currentTitle = "";
+
+  function openModal(e, code, title) {
+    if (e) e.preventDefault();
+    currentCode = code || "";
+    currentTitle = title || "استفسار عام";
+    document.getElementById("modal-code").textContent = code ? ("Ref. · رمز المنتج " + code) : "CALYPTUS · تواصل";
+    document.getElementById("modal-title").textContent = code ? title : "تواصل معنا";
+    document.getElementById("whatsapp-modal").classList.add("active");
+    setTimeout(() => document.getElementById("customer-name").focus(), 150);
+  }
+
+  function closeModal() {
+    document.getElementById("whatsapp-modal").classList.remove("active");
+  }
+
+  function sendWhatsApp() {
+    const name = document.getElementById("customer-name").value.trim() || "زبون كريم";
+    let msg;
+    if (currentCode) {
+      msg = `السلام عليكم، أنا ${name}\nأرغب بالاستفسار عن المنتج:\n• ${currentTitle}\n• رمز المنتج: ${currentCode}\n\nشكراً لكم — Calyptus`;
+    } else {
+      msg = `السلام عليكم، أنا ${name}\nأرغب بالتواصل معكم بخصوص أثاث Calyptus.\n\nشكراً لكم`;
+    }
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+    closeModal();
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+    if (e.key === "Enter" && document.getElementById("whatsapp-modal").classList.contains("active")) sendWhatsApp();
+  });
+
+  // Header scroll
+  const header = document.getElementById("header");
+  window.addEventListener("scroll", () => {
+    if (window.scrollY > 40) header.classList.add("scrolled");
+    else header.classList.remove("scrolled");
+  });
+
+  // Reveal on scroll
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        e.target.classList.add("in");
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+
+  // Loader
+  const hideLoader = () => document.getElementById("loader").classList.add("hide");
+  if (document.readyState === "complete") {
+    setTimeout(hideLoader, 200);
+  } else {
+    window.addEventListener("load", () => setTimeout(hideLoader, 200));
+  }
+  // Safety fallback: hide loader after 2.5s no matter what
+  setTimeout(hideLoader, 2500);
+</script>
+</body>
+</html>

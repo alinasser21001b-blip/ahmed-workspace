@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+data/exports/*
+data/media/*
+!data/exports/.gitkeep
+!data/media/.gitkeep
+apps/web/node_modules/
+apps/web/.next/
+*.egg-info/
+dist/
+.DS_Store
