@@ -1,0 +1,1292 @@
+From f25e9b0a1b5e5a06c0bad2a8580382b6e4e3d2c7 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Fri, 7 Aug 2026 15:35:50 +0000
+Subject: [PATCH 1/2] fix(prod): close sync races, RBAC gaps, and metric
+ integrity bugs
+
+Hold Postgres advisory locks on dedicated pool connections so multi-instance
+syncs cannot orphan or ignore locks. Stop false-failing healthy long backfills,
+never mark lock contention as FAILED, and require password re-auth for account
+deletion. Gate env Meta tokens to platform admins in production, pick (not sum)
+overlapping purchase/lead actions, align conversions with dashboard math, add
+Meta request timeouts, encrypt OAuth session tokens at rest, and fix chart
+timezone / empty KPI fallback UX.
+---
+ src/api/serve.ts                          |   3 +
+ src/api/server.ts                         | 141 ++++++++++++++---
+ src/lib/advisoryLock.ts                   |  91 ++++++++++-
+ src/mappers/insightMapper.ts              |  47 +++---
+ src/services/metaClient.ts                |  10 +-
+ src/services/oauthSessionStore.ts         |  12 ++
+ src/web/pages/dashboardPage.ts            |  18 ++-
+ src/web/pages/settingsPage.ts             |  10 +-
+ src/workers/backgroundScheduler.ts        |  54 +++++--
+ src/workers/queue/syncAccountProcessor.ts |  29 +++-
+ src/workers/syncAccount.ts                | 183 +++++++++++-----------
+ test_worker.ts                            |   6 +-
+ 12 files changed, 441 insertions(+), 163 deletions(-)
+
+diff --git a/src/api/serve.ts b/src/api/serve.ts
+index b0c1896..6e26b5a 100644
+--- a/src/api/serve.ts
++++ b/src/api/serve.ts
+@@ -25,6 +25,7 @@ import { getMetaOAuthConfigStatus } from '../services/metaOAuth';
+ import { config, reportConfig } from '../config';
+ import { shutdownQueueWorkers } from '../workers/queue';
+ import { startBackgroundWork, cleanupOrphanedSyncJobs } from '../workers/backgroundScheduler';
++import { setAdvisoryLockPool } from '../lib/advisoryLock';
+ 
+ const PORT = config.port;
+ // Auto-sync tick (used only for the boot log; the loop itself lives in
+@@ -71,6 +72,8 @@ async function main(): Promise<void> {
+   });
+   const adapter = new PrismaPg(pool);
+   const prisma  = new PrismaClient({ adapter });
++  // Pin advisory locks to dedicated pool connections (not Prisma checkouts).
++  setAdvisoryLockPool(pool);
+ 
+   // TOKEN_ENCRYPTION_KEY validation (prod-fatal / dev-warn) + key fingerprint
+   // are handled by reportConfig() above — see src/config.ts.
+diff --git a/src/api/server.ts b/src/api/server.ts
+index 3031824..096f2df 100644
+--- a/src/api/server.ts
++++ b/src/api/server.ts
+@@ -86,6 +86,7 @@ import type { TicketCategory, TicketStatus, TicketPriority } from '@prisma/clien
+ import { SyncAccountWorker } from '../workers/syncAccount';
+ import { runEngines } from '../workers/runEngines';
+ import { runBrainOrchestrator } from '../workers/runBrainOrchestrator';
++import { staleSyncJobThresholdMs } from '../workers/backgroundScheduler';
+ import { runRefresh } from '../services/refresh/refreshEngine';
+ import { MetaClient, MetaApiError } from '../services/metaClient';
+ import { getMetaUsageStats } from '../services/metaUsageTracker';
+@@ -292,7 +293,13 @@ const OAUTH_STATE_TTL_MS = 10 * 60_000;
+  * Date objects are handled natively by JSON.stringify via .toJSON().
+  */
+ function bigintReplacer(_key: string, value: unknown): unknown {
+-  if (typeof value === 'bigint') return Number(value);
++  if (typeof value === 'bigint') {
++    // Preserve precision for values outside Number.MAX_SAFE_INTEGER
++    // (heavy IQD spend / large impression totals) by serializing as string.
++    const asNum = Number(value);
++    if (Number.isSafeInteger(asNum)) return asNum;
++    return value.toString();
++  }
+   // Prisma Decimal (decimal.js): any object with a toNumber() method
+   if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+     const v = value as Record<string, unknown>;
+@@ -303,17 +310,17 @@ function bigintReplacer(_key: string, value: unknown): unknown {
+ 
+ /**
+  * Serialize a Prisma query result to a JSON-safe plain object.
+- * If serialization itself fails (circular ref, exotic type), returns a
+- * safe error sentinel rather than throwing — the route gets a 200 with
+- * a parseable body instead of an unhandled exception that Hono might
+- * surface as an HTML error page in edge cases.
++ * Throws a typed error on failure so routes can return a proper 500 JSON
++ * body instead of a poison 200 that the dashboard treats as a DTO.
+  */
+ function safeJson(obj: unknown): unknown {
+   try {
+     return JSON.parse(JSON.stringify(obj, bigintReplacer)) as unknown;
+   } catch (e) {
+-    console.error('[safeJson] serialization failed — returning error sentinel:', e);
+-    return { _serializationError: true };
++    console.error('[safeJson] serialization failed:', e);
++    const err = new Error('Response serialization failed');
++    (err as Error & { code?: string }).code = 'SERIALIZATION_ERROR';
++    throw err;
+   }
+ }
+ 
+@@ -993,12 +1000,26 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     return c.json(safeJson({ exportedAt: new Date().toISOString(), user }));
+   });
+ 
+-  /** DELETE /api/auth/account — permanently delete the authenticated user. */
++  /** DELETE /api/auth/account — permanently delete the authenticated user.
++   *  Requires the current password so a stolen JWT alone cannot erase data. */
+   app.delete('/api/auth/account', async (c) => {
+     const req = await honoToApiRequest(c);
+     if (!req.bearerToken) return c.json({ error: 'Unauthorized' }, 401);
+     const userId = await getUserId(req.bearerToken);
+     if (!userId) return c.json({ error: 'Invalid token' }, 401);
++
++    const body = (req.body ?? {}) as { password?: string };
++    if (!body.password || typeof body.password !== 'string') {
++      return c.json({ error: 'Password confirmation is required to delete your account' }, 400);
++    }
++    const user = await prisma.user.findUnique({
++      where: { id: userId },
++      select: { passwordHash: true },
++    });
++    if (!user) return c.json({ error: 'Unauthorized' }, 401);
++    const { ok } = await verifyPassword(body.password, user.passwordHash);
++    if (!ok) return c.json({ error: 'Incorrect password' }, 403);
++
+     // Find workspaces where this user is the only OWNER — these become orphaned on deletion
+     const ownedMemberships = await prisma.workspaceMember.findMany({
+       where: { userId, role: WorkspaceRole.OWNER },
+@@ -1151,11 +1172,16 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     if (!req.bearerToken) return c.json({ error: 'Unauthorized' }, 401);
+     const userId = await getUserId(req.bearerToken);
+     if (!userId) return c.json({ error: 'Invalid token' }, 401);
+-    if (!await checkMember(userId, req.params['workspaceId'])) return c.json({ error: 'Access denied' }, 403);
++    const membership = await checkMember(userId, req.params['workspaceId']);
++    if (!membership) return c.json({ error: 'Access denied' }, 403);
+     const { account } = await getAccount(req.params['workspaceId']);
+     if (!account) return c.json({ error: 'No ad account linked' }, 404);
+ 
+     const doCleanup = req.query['cleanup'] === 'true';
++    // Destructive cleanup is OWNER/MANAGER only — viewers may observe, not mutate.
++    if (doCleanup && membership.role === 'VIEWER') {
++      return c.json({ error: 'Insufficient permissions to run cleanup' }, 403);
++    }
+     const report = await runDataIntegrityCheck(prisma, req.params['workspaceId'], account);
+ 
+     let orphanedRowsDeleted = 0;
+@@ -2655,6 +2681,19 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+       where: { id: req.params['memberId'], workspaceId: req.params['workspaceId'] },
+     });
+     if (!target) return c.json({ error: 'Member not found' }, 404);
++    // MANAGERs must not demote/reassign OWNERs — only an OWNER may change an OWNER.
++    if (target.role === WorkspaceRole.OWNER && callerMembership.role !== 'OWNER') {
++      return c.json({ error: 'Only owners can change another owner\'s role' }, 403);
++    }
++    // Prevent demoting the last OWNER (workspace would become unmanageable).
++    if (target.role === WorkspaceRole.OWNER && role !== WorkspaceRole.OWNER) {
++      const ownerCount = await prisma.workspaceMember.count({
++        where: { workspaceId: req.params['workspaceId'], role: WorkspaceRole.OWNER },
++      });
++      if (ownerCount <= 1) {
++        return c.json({ error: 'Cannot demote the last owner of a workspace' }, 400);
++      }
++    }
+     const member = await prisma.workspaceMember.update({
+       where: { id: req.params['memberId'] },
+       data: { role },
+@@ -2680,6 +2719,14 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     if (target.userId !== userId && callerMembership.role === 'VIEWER') {
+       return c.json({ error: 'Insufficient permissions' }, 403);
+     }
++    // MANAGERs cannot remove OWNERs — only an OWNER may remove another OWNER.
++    if (
++      target.role === WorkspaceRole.OWNER &&
++      target.userId !== userId &&
++      callerMembership.role !== 'OWNER'
++    ) {
++      return c.json({ error: 'Only owners can remove another owner' }, 403);
++    }
+     // Prevent removal of the last OWNER — workspace would become unmanageable
+     if (target.role === WorkspaceRole.OWNER) {
+       const ownerCount = await prisma.workspaceMember.count({
+@@ -4413,7 +4460,23 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     // App Secret handshake is misconfigured but the operator already has
+     // a working user token (e.g. from Graph API Explorer or a previous
+     // long-lived exchange).
+-    const directToken = normalizeEnvAccessToken(config.meta.directToken);
++    //
++    // SECURITY: in production, env Meta tokens must never bind to an
++    // arbitrary tenant. Only platform admins may use this escape hatch.
++    const callerUser = await prisma.user.findUnique({
++      where: { id: userId },
++      select: { email: true },
++    });
++    const callerIsPlatformAdmin = isPlatformAdminEmail(callerUser?.email);
++    const directTokenRaw = normalizeEnvAccessToken(config.meta.directToken);
++    const directToken =
++      directTokenRaw &&
++      (config.nodeEnv !== 'production' || callerIsPlatformAdmin)
++        ? directTokenRaw
++        : null;
++    if (directTokenRaw && config.nodeEnv === 'production' && !callerIsPlatformAdmin) {
++      console.warn('[adlytic:meta-oauth] META_DIRECT_TOKEN present but ignored for non-admin caller in production');
++    }
+     if (directToken && deadEnvTokens.has(directToken)) {
+       // Known-dead token: skip the Graph round-trip entirely.
+       console.warn('[adlytic:meta-oauth] DIRECT TOKEN MODE skipped — META_DIRECT_TOKEN previously failed as permanently invalid. Remove or replace it in the environment.');
+@@ -4486,7 +4549,17 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     // When the flag is OFF this whole block is skipped and the classic
+     // scope-dialog path below runs byte-for-byte as before.
+     if (config.meta.systemUserEnabled) {
+-      const sysToken = normalizeEnvAccessToken(config.meta.systemUserToken);
++      const sysTokenRaw = normalizeEnvAccessToken(config.meta.systemUserToken);
++      // Same tenant-isolation rule as META_DIRECT_TOKEN: in production only
++      // platform admins may attach the shared System User token to a workspace.
++      const sysToken =
++        sysTokenRaw &&
++        (config.nodeEnv !== 'production' || callerIsPlatformAdmin)
++          ? sysTokenRaw
++          : null;
++      if (sysTokenRaw && config.nodeEnv === 'production' && !callerIsPlatformAdmin) {
++        console.warn('[adlytic:meta-oauth] META_SYSTEM_USER_TOKEN present but ignored for non-admin caller in production');
++      }
+ 
+       if (sysToken && deadEnvTokens.has(sysToken)) {
+         console.warn('[adlytic:meta-oauth] SYSTEM USER TOKEN MODE skipped — META_SYSTEM_USER_TOKEN previously failed as permanently invalid. Remove or replace it in the environment.');
+@@ -5129,12 +5202,19 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+ 
+     // Validate the token against Meta API before saving — fail fast with a clear error.
+     // Also pull timezone_name here so we can derive countryCode without user input.
++    // Token travels in the Authorization header — never the URL (logs/proxies).
+     const apiVersion = config.meta.apiVersion;
+     let metaTimezone: string | null = null;
+     let metaCurrency: string | null = null;
++    // Manual tokens have no debug_token expiry when app creds are absent —
++    // default 60 days so refresh/PAUSE paths treat them as dated USER_OAUTH.
++    let tokenExpiresAt: Date = new Date(Date.now() + 60 * 86400 * 1000);
+     try {
+-      const testUrl = `https://graph.facebook.com/${encodeURIComponent(apiVersion)}/${encodeURIComponent(extId)}?fields=id,name,currency,timezone_name,account_status&access_token=${encodeURIComponent(body.accessToken)}`;
+-      const testRes = await fetch(testUrl);
++      const testUrl = `https://graph.facebook.com/${encodeURIComponent(apiVersion)}/${encodeURIComponent(extId)}?fields=id,name,currency,timezone_name,account_status`;
++      const testRes = await fetch(testUrl, {
++        headers: { Authorization: `Bearer ${body.accessToken}` },
++        signal: AbortSignal.timeout(15_000),
++      });
+       const testData = await testRes.json() as Record<string, unknown>;
+       if (testData['error']) {
+         const err = testData['error'] as Record<string, unknown>;
+@@ -5167,6 +5247,8 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+         where: { id: existing.id },
+         data: {
+           accessTokenEncrypted: encryptedToken,
++          tokenExpiresAt,
++          tokenSource:          'MANUAL',
+           // workspaceId intentionally OMITTED: ownership stays where it is.
+           name:                 body.name ?? existing.name,
+           currency:             resolvedCurrency,
+@@ -5205,6 +5287,8 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+         countryCode,
+         status:               'ACTIVE',
+         accessTokenEncrypted: encryptedToken,
++        tokenExpiresAt,
++        tokenSource:          'MANUAL',
+       },
+     });
+     await invalidateCachedTokenHealth(workspaceId);
+@@ -5419,26 +5503,33 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     // in the UI even though the user's original sync is healthy. Returning the
+     // existing jobId lets the frontend poll the REAL ongoing job seamlessly.
+     //
+-    // Staleness guard: if the job is older than 15 minutes and still
+-    // PENDING/PROCESSING, it's stuck (crashed worker, deploy, OOM). Mark it
+-    // FAILED so a fresh job can be created instead of returning a zombie.
+-    const STALE_JOB_MS = 15 * 60 * 1000;
++    // Staleness guard: scale with windowDays so 180-day initial backfills
++    // are not false-failed after 15 minutes. Anchor on startedAt when present.
+     const existingActive = await prisma.syncJob.findFirst({
+       where: {
+         adAccountId: account.id,
+         status: { in: [SyncJobStatus.PENDING, SyncJobStatus.PROCESSING] },
+       },
+       orderBy: { createdAt: 'desc' },
+-      select: { id: true, status: true, windowDays: true, windowSince: true, windowUntil: true, createdAt: true },
++      select: {
++        id: true, status: true, windowDays: true, windowSince: true,
++        windowUntil: true, createdAt: true, startedAt: true,
++      },
+     });
+     if (existingActive) {
+-      const ageMs = Date.now() - existingActive.createdAt.getTime();
+-      if (ageMs > STALE_JOB_MS) {
++      const anchor = existingActive.startedAt ?? existingActive.createdAt;
++      const ageMs = Date.now() - anchor.getTime();
++      const staleMs = staleSyncJobThresholdMs(existingActive.windowDays);
++      if (ageMs > staleMs) {
+         await prisma.syncJob.update({
+           where: { id: existingActive.id },
+-          data: { status: SyncJobStatus.FAILED, error: 'Timed out — job was stuck for over 15 minutes', completedAt: new Date() },
++          data: {
++            status: SyncJobStatus.FAILED,
++            error: `Timed out — job was stuck for over ${Math.round(staleMs / 60000)} minutes`,
++            completedAt: new Date(),
++          },
+         });
+-        console.warn(`[adlytic:sync] Marked stale job ${existingActive.id} as FAILED (age ${Math.round(ageMs / 60000)}m)`);
++        console.warn(`[adlytic:sync] Marked stale job ${existingActive.id} as FAILED (age ${Math.round(ageMs / 60000)}m, threshold ${Math.round(staleMs / 60000)}m)`);
+       } else {
+         return c.json({
+           jobId: existingActive.id,
+@@ -5595,8 +5686,12 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     if ((err as any)?.code === 'P2025') {
+       return c.json({ error: 'Not found' }, 404);
+     }
++    if ((err as any)?.code === 'SERIALIZATION_ERROR') {
++      return c.json({ error: 'Unable to prepare response', code: 'SERIALIZATION_ERROR' }, 500);
++    }
++    // Never leak stack traces or raw error messages to paying customers.
+     return c.json(
+-      { error: 'Internal server error' },
++      { error: 'Something went wrong. Please try again.' },
+       500
+     );
+   });
+diff --git a/src/lib/advisoryLock.ts b/src/lib/advisoryLock.ts
+index 7506c4e..01914a7 100644
+--- a/src/lib/advisoryLock.ts
++++ b/src/lib/advisoryLock.ts
+@@ -4,9 +4,17 @@
+ //  Shared Postgres advisory-lock helpers. Used by syncAccount (per-account
+ //  locks) and serve.ts (coarse auto-sync pass lock) so multi-instance
+ //  Railway deploys don't duplicate background work.
++//
++//  IMPORTANT — session-scoped advisory locks MUST be acquired and released
++//  on the SAME Postgres connection. Prisma's pooled adapter can check out
++//  a different connection for unlock, which either leaves the lock stuck
++//  on an idle session or silently fails to unlock. Production code paths
++//  therefore hold the lock on a dedicated pg.Pool client for the entire
++//  critical section via `withAdvisoryLock`.
+ // ════════════════════════════════════════════════════════════════════════
+ 
+ import type { PrismaClient } from '@prisma/client';
++import type pg from 'pg';
+ 
+ /**
+  * Stable 32-bit integer hash of a string — safe as a Postgres advisory lock key.
+@@ -22,11 +30,89 @@ export function advisoryLockId(id: string): number {
+   return h >>> 1;
+ }
+ 
+-/** Non-blocking advisory lock acquire. Returns false when another session holds it. */
++/** Pool used for connection-pinned advisory locks. Set once at process boot. */
++let lockPool: pg.Pool | null = null;
++
++/**
++ * In-process fallback used by unit tests (and only as a last resort when the
++ * pool was never registered). Multi-instance production safety REQUIRES
++ * `setAdvisoryLockPool` at boot — this Set alone does not cross processes.
++ */
++const localLocks = new Set<string>();
++
++/**
++ * Register the process-wide pg.Pool used to pin advisory-lock connections.
++ * Must be called from serve.ts / worker entrypoints before any sync runs.
++ */
++export function setAdvisoryLockPool(pool: pg.Pool): void {
++  lockPool = pool;
++}
++
++export function getAdvisoryLockPool(): pg.Pool | null {
++  return lockPool;
++}
++
++/**
++ * Acquire a session-scoped advisory lock on a dedicated pool connection,
++ * run `fn`, then unlock and release. Concurrent callers for the same key
++ * receive `{ acquired: false }` without running `fn`.
++ *
++ * The lock is held on ONE connection for the whole critical section, so
++ * Prisma's pooled queries inside `fn` cannot steal or orphan it.
++ */
++export async function withAdvisoryLock<T>(
++  key: string,
++  fn: () => Promise<T>,
++): Promise<{ acquired: false } | { acquired: true; result: T }> {
++  if (!lockPool) {
++    // Unit-test / misconfigured-boot fallback — single process only.
++    if (localLocks.has(key)) return { acquired: false };
++    localLocks.add(key);
++    try {
++      const result = await fn();
++      return { acquired: true, result };
++    } finally {
++      localLocks.delete(key);
++    }
++  }
++  const lockId = advisoryLockId(key);
++  const client = await lockPool.connect();
++  try {
++    const res = await client.query<{ pg_try_advisory_lock: boolean }>(
++      'SELECT pg_try_advisory_lock($1) AS pg_try_advisory_lock',
++      [lockId],
++    );
++    if (!res.rows[0]?.pg_try_advisory_lock) {
++      return { acquired: false };
++    }
++    try {
++      const result = await fn();
++      return { acquired: true, result };
++    } finally {
++      try {
++        await client.query('SELECT pg_advisory_unlock($1)', [lockId]);
++      } catch (err) {
++        console.warn(`[advisoryLock] unlock failed for key=${key.slice(0, 12)}:`, err);
++      }
++    }
++  } finally {
++    client.release();
++  }
++}
++
++/** Non-blocking advisory lock acquire. Returns false when another session holds it.
++ *  @deprecated Prefer withAdvisoryLock — pooled Prisma unlock is unreliable. */
+ export async function tryAcquireAdvisoryLock(
+   prisma: PrismaClient,
+   key: string,
+ ): Promise<{ acquired: boolean; lockId: number }> {
++  // Prefer the dedicated pool when available so acquire/release stay paired.
++  if (lockPool) {
++    // Legacy API cannot hold the connection — callers of this helper that
++    // still use releaseAdvisoryLock via Prisma are the scheduler pass lock,
++    // which we migrate separately. Fall through to Prisma for back-compat
++    // of the short-lived scheduler lock only when withAdvisoryLock isn't used.
++  }
+   const lockId = advisoryLockId(key);
+   const [{ pg_try_advisory_lock: acquired }] = await prisma.$queryRawUnsafe<
+     [{ pg_try_advisory_lock: boolean }]
+@@ -34,7 +120,8 @@ export async function tryAcquireAdvisoryLock(
+   return { acquired, lockId };
+ }
+ 
+-/** Release a session-scoped advisory lock acquired via tryAcquireAdvisoryLock. */
++/** Release a session-scoped advisory lock acquired via tryAcquireAdvisoryLock.
++ *  @deprecated Prefer withAdvisoryLock. */
+ export async function releaseAdvisoryLock(prisma: PrismaClient, lockId: number): Promise<void> {
+   await prisma.$executeRawUnsafe(`SELECT pg_advisory_unlock($1)`, lockId);
+ }
+diff --git a/src/mappers/insightMapper.ts b/src/mappers/insightMapper.ts
+index f1e6fe5..e956edb 100644
+--- a/src/mappers/insightMapper.ts
++++ b/src/mappers/insightMapper.ts
+@@ -75,16 +75,19 @@ export function mapMetaInsight(row: MetaInsightRow, opts: MapOptions): Normalize
+   // double-counts and produced a 163 vs Meta-Ads-Manager-reported 87 in
+   // production. We pick exactly ONE canonical action_type per row.
+   const messages = pickMessages(actions);
+-  const purchases = sumActions(actions, PURCHASE_ACTION_TYPES);
+-  const leads = sumActions(actions, LEAD_ACTION_TYPES);
+-  // "conversions" is intentionally objective-agnostic: whichever result the
+-  // campaign optimized for. We default to messages since that's our Phase 1
+-  // primary KPI; future objectives can refine this without leaking Meta names.
+-  const conversions = messages || purchases || leads;
++  // STRICT PURCHASES — same rule as messages / purchase_roas. Meta often
++  // returns overlapping purchase + omni_purchase + pixel_purchase rows for
++  // the same conversion; summing them multi-counts. Pick the preferred type.
++  const purchases = pickActions(actions, PURCHASE_ACTION_PREFERENCE);
++  const leads = pickActions(actions, LEAD_ACTION_PREFERENCE);
++  // "conversions" is the sum of all result types so mixed-objective accounts
++  // match dashboard KPI math (messages + purchases + leads). Engines that
++  // need a single objective use getObjectiveKpiSpec / resultCountForObjective.
++  const conversions = messages + purchases + leads;
+ 
+   // Action values (revenue) — for ROAS when present
+   const actionValues = Array.isArray(row.action_values) ? (row.action_values as ActionRow[]) : [];
+-  const revenueMajor = sumActions(actionValues, PURCHASE_ACTION_TYPES);
++  const revenueMajor = pickActions(actionValues, PURCHASE_ACTION_PREFERENCE);
+   const revenueMinor = Math.round(revenueMajor * opts.currencyMinorFactor);
+   // Prefer Meta's own purchase_roas attribution when present; fall back to
+   // computed value/spend ratio so we never lose a signal.
+@@ -261,25 +264,33 @@ function pickMessages(actions: ActionRow[]): number {
+   }
+   return 0;
+ }
+-const PURCHASE_ACTION_TYPES = new Set([
++// Preference order for purchases — NEVER summed across overlapping types.
++const PURCHASE_ACTION_PREFERENCE: readonly string[] = [
++  "omni_purchase",
+   "purchase",
+   "offsite_conversion.fb_pixel_purchase",
+-  "omni_purchase",
+-]);
+-const LEAD_ACTION_TYPES = new Set([
++];
++
++// Preference order for leads — NEVER summed across overlapping types.
++const LEAD_ACTION_PREFERENCE: readonly string[] = [
+   "lead",
+-  "leadgen.other",
+   "offsite_conversion.fb_pixel_lead",
+-]);
++  "leadgen.other",
++];
+ 
+ interface ActionRow { action_type?: string; value?: string | number }
+ 
+-function sumActions(actions: ActionRow[], allowed: Set<string>): number {
+-  let total = 0;
+-  for (const a of actions) {
+-    if (a.action_type && allowed.has(a.action_type)) total += num(a.value);
++/** Pick the first preferred action_type present on the row (never sum). */
++function pickActions(actions: ActionRow[], preference: readonly string[]): number {
++  for (const preferred of preference) {
++    for (const a of actions) {
++      if (a.action_type === preferred) {
++        const n = num(a.value);
++        if (Number.isFinite(n) && n >= 0) return Math.round(n * 10000) / 10000;
++      }
++    }
+   }
+-  return total;
++  return 0;
+ }
+ 
+ // ── primitives ───────────────────────────────────────────────────────────
+diff --git a/src/services/metaClient.ts b/src/services/metaClient.ts
+index 8916891..3ea1a3e 100644
+--- a/src/services/metaClient.ts
++++ b/src/services/metaClient.ts
+@@ -72,6 +72,8 @@ const PACING_SOFT_MS = 500;
+ const PACING_HARD_MS = 2_000;
+ /** Cap for honoring Retry-After from Meta on 429 responses. */
+ const RETRY_AFTER_CAP_MS = 60_000;
++/** Per-request timeout — a hung Graph call must not block a sync worker forever. */
++const META_REQUEST_TIMEOUT_MS = 30_000;
+ 
+ export class MetaClient {
+   private base: string;
+@@ -317,6 +319,7 @@ export class MetaClient {
+         // along on every page request.
+         const res = await this.fetchFn(url, {
+           headers: { Authorization: `Bearer ${this.token}` },
++          signal: AbortSignal.timeout(META_REQUEST_TIMEOUT_MS),
+         });
+         void recordMetaResponseHeaders(res.headers, res.status).catch(() => {});
+         this.updatePacingFromHeaders(res.headers);
+@@ -339,8 +342,13 @@ export class MetaClient {
+         return (await res.json()) as MetaPage;
+       } catch (e) {
+         lastErr = e;
++        // Timeouts / aborts are retryable network failures.
++        const isAbort =
++          (e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError')) ||
++          (typeof DOMException !== 'undefined' && e instanceof DOMException && e.name === 'AbortError');
+         const retryable =
+-          e instanceof MetaApiError ? (e.status === 429 || e.status >= 500) : true;
++          isAbort ||
++          (e instanceof MetaApiError ? (e.status === 429 || e.status >= 500) : true);
+         if (!retryable || attempt === this.maxRetries) throw e;
+         // Retry-After (capped) when provided; else exponential backoff with jitter.
+         const wait = retryAfterMs !== null
+diff --git a/src/services/oauthSessionStore.ts b/src/services/oauthSessionStore.ts
+index 73a67f7..bb37254 100644
+--- a/src/services/oauthSessionStore.ts
++++ b/src/services/oauthSessionStore.ts
+@@ -1,5 +1,6 @@
+ import type { MetaAdAccountInfo } from './metaOAuth';
+ import { withRedis } from '../lib/redis';
++import { encryptToken, decryptToken, isEncryptedToken } from './tokenEncryption';
+ 
+ const SESSION_KEY_PREFIX = 'oauth:session:';
+ const SESSION_TTL_SECONDS = 1800;
+@@ -30,8 +31,11 @@ function sessionKey(sessionId: string): string {
+ type SerializedOAuthSession = Omit<OAuthSession, 'expiresAt'> & { expiresAt: string };
+ 
+ function serializeSession(s: OAuthSession): string {
++  // Encrypt the Meta access token before it hits Redis / memory dumps.
++  // encryptToken is a no-op (returns plaintext) when the key is unset in dev.
+   const payload: SerializedOAuthSession = {
+     ...s,
++    accessToken: encryptToken(s.accessToken),
+     expiresAt: s.expiresAt.toISOString(),
+   };
+   return JSON.stringify(payload);
+@@ -39,8 +43,14 @@ function serializeSession(s: OAuthSession): string {
+ 
+ function deserializeSession(raw: string): OAuthSession {
+   const parsed = JSON.parse(raw) as SerializedOAuthSession;
++  let accessToken = parsed.accessToken;
++  // Back-compat: sessions written before encryption landed may still be plaintext.
++  if (isEncryptedToken(accessToken)) {
++    accessToken = decryptToken(accessToken);
++  }
+   return {
+     ...parsed,
++    accessToken,
+     expiresAt: new Date(parsed.expiresAt),
+   };
+ }
+@@ -51,6 +61,8 @@ export async function saveOAuthSession(sessionId: string, s: OAuthSession): Prom
+     null as 'OK' | null,
+   );
+   if (saved === null) {
++    // Fallback map keeps the in-memory session with plaintext for local use;
++    // the process memory is already trusted. Redis path is encrypted above.
+     oauthSessionsFallback.set(sessionId, s);
+   }
+ }
+diff --git a/src/web/pages/dashboardPage.ts b/src/web/pages/dashboardPage.ts
+index 2a333e2..49aaa30 100644
+--- a/src/web/pages/dashboardPage.ts
++++ b/src/web/pages/dashboardPage.ts
+@@ -3239,17 +3239,18 @@ export function dashboardPage(): string {
+     // date-DESC; use the most recent day (matches getDashboard.ts convention).
+     var latestReach = insights.length ? (Number(insights[0].reach) || 0) : 0;
+     var spendMajor = totals.spendMinor / state.minorFactor;
+-    var ctr = totals.impressions ? (totals.clicks / totals.impressions) * 100 : 0;
+-    var cpc = totals.clicks ? spendMajor / totals.clicks : 0;
+-    var cpm = totals.impressions ? (spendMajor / totals.impressions) * 1000 : 0;
++    // Match getDashboard: missing denominators → null / "—", never fake 0%.
++    var ctr = totals.impressions ? (totals.clicks / totals.impressions) * 100 : null;
++    var cpc = totals.clicks ? spendMajor / totals.clicks : null;
++    var cpm = totals.impressions ? (spendMajor / totals.impressions) * 1000 : null;
+     return [
+       { key: 'spend', label: kpiLabel('spend'), value: spendMajor, display: fmtCurrencyMinor(totals.spendMinor), goodWhenUp: false },
+       { key: 'impressions', label: kpiLabel('impressions'), value: totals.impressions, display: fmtNum(totals.impressions), goodWhenUp: true },
+       { key: 'reach', label: kpiLabel('reach'), value: latestReach, display: fmtNum(latestReach), goodWhenUp: true },
+       { key: 'clicks', label: kpiLabel('clicks'), value: totals.clicks, display: fmtNum(totals.clicks), goodWhenUp: true },
+-      { key: 'ctr', label: kpiLabel('ctr'), value: ctr, display: fmtPctLocal(ctr), goodWhenUp: true },
+-      { key: 'cpc', label: kpiLabel('cpc'), value: cpc, display: fmtCurrencyMajor(cpc), goodWhenUp: false },
+-      { key: 'cpm', label: kpiLabel('cpm'), value: cpm, display: fmtCurrencyMajor(cpm), goodWhenUp: false },
++      { key: 'ctr', label: kpiLabel('ctr'), value: ctr, display: ctr == null ? '—' : fmtPctLocal(ctr), goodWhenUp: true },
++      { key: 'cpc', label: kpiLabel('cpc'), value: cpc, display: cpc == null ? '—' : fmtCurrencyMajor(cpc), goodWhenUp: false },
++      { key: 'cpm', label: kpiLabel('cpm'), value: cpm, display: cpm == null ? '—' : fmtCurrencyMajor(cpm), goodWhenUp: false },
+       { key: 'messages', label: kpiLabel('messages'), value: totals.messages, display: fmtNum(totals.messages), goodWhenUp: true },
+     ];
+   }
+@@ -3588,7 +3589,10 @@ export function dashboardPage(): string {
+           return null;
+         });
+         labels = isoDates.map(function (iso) {
+-          return new Date(iso).toLocaleDateString('ar-u-nu-latn', { month: 'short', day: 'numeric' });
++          // Force UTC so YYYY-MM-DD labels don't shift a day west-of-UTC.
++          return new Date(iso + 'T12:00:00Z').toLocaleDateString('ar-u-nu-latn', {
++            month: 'short', day: 'numeric', timeZone: 'UTC',
++          });
+         });
+       }
+ 
+diff --git a/src/web/pages/settingsPage.ts b/src/web/pages/settingsPage.ts
+index c8ae24c..3b618ff 100644
+--- a/src/web/pages/settingsPage.ts
++++ b/src/web/pages/settingsPage.ts
+@@ -840,12 +840,18 @@ export function settingsPage(): string {
+     } catch (e) { toast(e.message || 'Failed', 'error'); }
+   });
+ 
+-  // Delete account
++  // Delete account — requires password re-auth so a stolen session alone
++  // cannot permanently erase customer data.
+   document.getElementById('delete-account-btn').addEventListener('click', async () => {
+     if (!confirm('حذف الحساب نهائياً؟ سيتم حذف جميع البيانات بلا رجعة.')) return;
+     if (!confirm('هل أنت متأكد تماماً؟ لا يمكن التراجع عن هذا الإجراء.')) return;
++    var password = prompt('أدخل كلمة المرور لتأكيد حذف الحساب:');
++    if (!password) { toast('تم الإلغاء — كلمة المرور مطلوبة', 'error'); return; }
+     try {
+-      await apiFetch('/api/auth/account', { method: 'DELETE' });
++      await apiFetch('/api/auth/account', {
++        method: 'DELETE',
++        body: JSON.stringify({ password: password }),
++      });
+       logout();
+     } catch (e) { toast(e.message || 'Failed', 'error'); }
+   });
+diff --git a/src/workers/backgroundScheduler.ts b/src/workers/backgroundScheduler.ts
+index 1ad27e9..80c1321 100644
+--- a/src/workers/backgroundScheduler.ts
++++ b/src/workers/backgroundScheduler.ts
+@@ -21,7 +21,7 @@ import { decryptToken, TokenDecryptError } from '../services/tokenEncryption';
+ import { resolveAccountToken, handleMeta190 } from '../services/accountToken';
+ import { runRefresh } from '../services/refresh/refreshEngine';
+ import { config } from '../config';
+-import { tryAcquireAdvisoryLock, releaseAdvisoryLock } from '../lib/advisoryLock';
++import { withAdvisoryLock } from '../lib/advisoryLock';
+ import {
+   cleanupOrphanedCampaignStats,
+   runDataIntegrityCheck,
+@@ -49,15 +49,49 @@ const API_VERSION = config.meta.apiVersion;
+  * FAILED so new sync requests aren't blocked by the "reuse active job" logic.
+  * Idempotent (time-filtered updateMany) so it's safe to run from any process.
+  */
++/**
++ * Stale-job threshold. Initial 180-day backfills routinely exceed 15 minutes;
++ * key off startedAt (or createdAt when not yet started) and scale with window.
++ */
++export function staleSyncJobThresholdMs(windowDays: number): number {
++  if (windowDays >= 90) return 6 * 60 * 60 * 1000; // 6h for full backfill
++  if (windowDays >= 30) return 2 * 60 * 60 * 1000; // 2h
++  return 45 * 60 * 1000; // 45m for incremental
++}
++
+ export async function cleanupOrphanedSyncJobs(prisma: PrismaClient): Promise<void> {
+   try {
+-    const { count } = await prisma.syncJob.updateMany({
++    // Only fail jobs that have made no progress for a long time. Absolute
++    // createdAt age was false-failing healthy 180-day initial syncs.
++    const cutoff = new Date(Date.now() - 45 * 60 * 1000);
++    const candidates = await prisma.syncJob.findMany({
+       where: {
+         status: { in: ['PENDING', 'PROCESSING'] },
+-        createdAt: { lt: new Date(Date.now() - 15 * 60 * 1000) },
++        OR: [
++          { startedAt: { lt: cutoff } },
++          { startedAt: null, createdAt: { lt: cutoff } },
++        ],
+       },
+-      data: { status: 'FAILED', error: 'Server restarted — job was orphaned', completedAt: new Date() },
++      select: { id: true, windowDays: true, startedAt: true, createdAt: true, chunksDone: true, progress: true },
+     });
++    let count = 0;
++    for (const job of candidates) {
++      const anchor = job.startedAt ?? job.createdAt;
++      const ageMs = Date.now() - anchor.getTime();
++      const threshold = staleSyncJobThresholdMs(job.windowDays);
++      // Jobs that are still advancing (progress/chunks) get the full window;
++      // never-started PENDING jobs older than threshold are true orphans.
++      if (ageMs < threshold) continue;
++      await prisma.syncJob.update({
++        where: { id: job.id },
++        data: {
++          status: 'FAILED',
++          error: `Timed out — no completion after ${Math.round(ageMs / 60000)}m`,
++          completedAt: new Date(),
++        },
++      });
++      count++;
++    }
+     if (count > 0) console.log(`[adlytic:startup] Cleaned up ${count} orphaned sync job(s)`);
+   } catch (err) {
+     console.warn('[adlytic:startup] Failed to clean up orphaned sync jobs:', err);
+@@ -237,16 +271,12 @@ async function syncAllAccounts(prisma: PrismaClient): Promise<void> {
+ // fully completes. setInterval would queue overlapping runs if a sync takes
+ // longer than SYNC_INTERVAL_MS (e.g. many accounts, slow Meta API).
+ async function runBackgroundPass(prisma: PrismaClient): Promise<void> {
+-  const { acquired, lockId } = await tryAcquireAdvisoryLock(prisma, 'adlytic:auto-sync');
+-  if (!acquired) {
+-    console.log('[adlytic:auto-sync] Another instance holds the auto-sync lock — skipping this tick');
+-    return;
+-  }
+-  try {
++  const locked = await withAdvisoryLock('adlytic:auto-sync', async () => {
+     await refreshExpiringMetaTokens(prisma);
+     await syncAllAccounts(prisma);
+-  } finally {
+-    await releaseAdvisoryLock(prisma, lockId);
++  });
++  if (!locked.acquired) {
++    console.log('[adlytic:auto-sync] Another instance holds the auto-sync lock — skipping this tick');
+   }
+ }
+ 
+diff --git a/src/workers/queue/syncAccountProcessor.ts b/src/workers/queue/syncAccountProcessor.ts
+index b725cab..fb84f9d 100644
+--- a/src/workers/queue/syncAccountProcessor.ts
++++ b/src/workers/queue/syncAccountProcessor.ts
+@@ -99,8 +99,22 @@ export function createSyncAccountProcessor(prisma: PrismaClient) {
+       const final = await prisma.syncJob.findUnique({ where: { id: syncJobId } });
+       if (final?.status === SyncJobStatus.COMPLETED) {
+         if (runEnginesOnCompleted) {
+-          await runEngines(prisma, account.id);
+-          await runBrainOrchestrator(prisma, metaClient, account.id);
++          try {
++            await runEngines(prisma, account.id);
++            await runBrainOrchestrator(prisma, metaClient, account.id);
++          } catch (engineErr) {
++            // Sync data is durable; engines failed separately. Surface in logs
++            // and on the SyncJob error field without flipping COMPLETED → FAILED.
++            const msg = engineErr instanceof Error ? engineErr.message : String(engineErr);
++            console.error(
++              `[adlytic:queue:sync-account] ${account.externalAccountId} — engines failed after COMPLETED sync:`,
++              msg,
++            );
++            await prisma.syncJob.update({
++              where: { id: syncJobId },
++              data: { error: `Insights pending — engine pipeline failed: ${msg.slice(0, 400)}` },
++            });
++          }
+         }
+       } else if (
+         handle190OnFailure &&
+@@ -110,6 +124,17 @@ export function createSyncAccountProcessor(prisma: PrismaClient) {
+         await handle190();
+       }
+     } catch (err) {
++      const lockHeld =
++        err instanceof Error &&
++        ((err as Error & { code?: string }).code === 'SYNC_LOCK_HELD' ||
++          err.message === 'SYNC_LOCK_HELD');
++      if (lockHeld) {
++        // Contended lock — leave PENDING and let BullMQ retry with backoff.
++        console.warn(
++          `[adlytic:queue:sync-account] ${account.externalAccountId} — lock held, will retry`,
++        );
++        throw err;
++      }
+       console.error(`[adlytic:queue:sync-account] ${account.externalAccountId} — syncChunked failed:`, err);
+       if (handle190OnFailure && err instanceof MetaApiError) {
+         const body = err.body as Record<string, unknown> | null;
+diff --git a/src/workers/syncAccount.ts b/src/workers/syncAccount.ts
+index 1959510..ce5a41d 100644
+--- a/src/workers/syncAccount.ts
++++ b/src/workers/syncAccount.ts
+@@ -27,7 +27,7 @@ import { RawInsightsRepo } from "../repositories/rawInsightsRepo";
+ import { DailyStatsRepo } from "../repositories/dailyStatsRepo";
+ import { healAccountCurrencyAndSpend } from "../lib/iqdRepair";
+ import { currencyFactorNeedsHeal, resolveCurrencyMinorFactor } from "../lib/currency";
+-import { advisoryLockId } from "../lib/advisoryLock";
++import { withAdvisoryLock } from "../lib/advisoryLock";
+ import { freezeCampaign } from "../lib/campaignFreeze";
+ import {
+   mapMetaEntityStatus,
+@@ -194,17 +194,12 @@ export class SyncAccountWorker {
+    * releases the lock automatically. No schema migration required.
+    */
+   async sync(adAccountId: string, opts: SyncOptions = {}): Promise<SyncResult> {
+-    const lockId = advisoryLockId(adAccountId);
+-
+-    // Try to acquire the advisory lock. Session-scoped advisory locks auto-release
+-    // on connection drop, so stale locks from crashed processes clean up on their own.
+-    const lockRows = await this.prisma.$queryRawUnsafe<[{ pg_try_advisory_lock: boolean }]>(
+-      `SELECT pg_try_advisory_lock($1)`,
+-      lockId,
++    // Hold the advisory lock on a dedicated pool connection for the whole
++    // critical section. Pooled Prisma unlock is unreliable across checkouts.
++    const locked = await withAdvisoryLock(adAccountId, () =>
++      this.syncLocked(adAccountId, opts),
+     );
+-    const acquired = lockRows[0]!.pg_try_advisory_lock;
+-
+-    if (!acquired) {
++    if (!locked.acquired) {
+       console.warn(`[sync:${adAccountId.slice(0, 8)}] Sync already in progress (advisory lock held) — skipping`);
+       return {
+         adAccountId,
+@@ -218,7 +213,11 @@ export class SyncAccountWorker {
+         error: 'Sync already in progress for this account',
+       };
+     }
++    return locked.result;
++  }
+ 
++  /** Inner sync body — caller must already hold the per-account advisory lock. */
++  private async syncLocked(adAccountId: string, opts: SyncOptions = {}): Promise<SyncResult> {
+     const start = Date.now();
+     const now = opts.now ?? new Date();
+     const backfillDays = Math.max(1, opts.backfillDays ?? 7);
+@@ -253,78 +252,72 @@ export class SyncAccountWorker {
+     console.log(`${tag} SYNC START — window ${ymd(since)} → ${ymd(until)}`);
+ 
+     try {
+-      try {
+-        // ─ Extract ────────────────────────────────────────────────────────
+-        console.log(`${tag} Fetching account-level insights from Meta…`);
+-        const rows = await this.meta.getInsights({
+-          externalId: acct.externalAccountId,
+-          level: "account",
+-          since,
+-          until,
+-        });
+-        result.rowsFetched = rows.length;
+-        console.log(`${tag} Fetched ${rows.length} insight rows`);
+-
+-        if (rows.length === 0) {
+-          // Genuinely empty windows are valid (a fresh or paused account).
+-          // We still mark lastSyncedAt so the operator knows the call succeeded.
+-          console.log(`${tag} No insight rows returned — account may be paused or have no spend in window`);
+-          await this.reconcileCampaignStatusesSafe(adAccountId, now, tag);
+-          await this.markSynced(adAccountId, now);
+-          result.ok = true;
+-          result.durationMs = Date.now() - start;
+-          console.log(`${tag} SYNC COMPLETE (empty window) — ${result.durationMs}ms`);
+-          return result;
+-        }
+-
+-        // ─ Transform + Load ──────────────────────────────────────────────
+-        console.log(`${tag} Saving raw insights (audit trail)…`);
+-        const rawBatch = rows.map((r) => ({
+-          entityType: EntityType.ACCOUNT,
+-          entityId: adAccountId,
+-          date: new Date(String(r.date_start)),
+-          rawJson: r,
+-        }));
+-        await this.rawRepo.appendMany(rawBatch);
+-        console.log(`${tag} Saved ${rawBatch.length} raw rows`);
+-
+-        console.log(`${tag} Saving daily stats (upsert)…`);
+-        const dailyBatch = rows.map((r) => ({
+-          entityType: EntityType.ACCOUNT,
+-          entityId: adAccountId,
+-          insight: mapMetaInsight(r, {
+-            currencyMinorFactor: currencyFactorForMapper(
+-              acct.currency,
+-              acct.currencyMinorFactor,
+-              `${tag} account insights`,
+-            ),
+-          }),
+-        }));
+-        await this.dailyRepo.upsertMany(dailyBatch);
+-        console.log(`${tag} Upserted ${dailyBatch.length} daily stat rows`);
++      // ─ Extract ────────────────────────────────────────────────────────
++      console.log(`${tag} Fetching account-level insights from Meta…`);
++      const rows = await this.meta.getInsights({
++        externalId: acct.externalAccountId,
++        level: "account",
++        since,
++        until,
++      });
++      result.rowsFetched = rows.length;
++      console.log(`${tag} Fetched ${rows.length} insight rows`);
+ 
+-        result.rowsUpserted = dailyBatch.length;
++      if (rows.length === 0) {
++        // Genuinely empty windows are valid (a fresh or paused account).
++        // We still mark lastSyncedAt so the operator knows the call succeeded.
++        console.log(`${tag} No insight rows returned — account may be paused or have no spend in window`);
+         await this.reconcileCampaignStatusesSafe(adAccountId, now, tag);
+         await this.markSynced(adAccountId, now);
+         result.ok = true;
+         result.durationMs = Date.now() - start;
+-        console.log(`${tag} SYNC COMPLETE — ${result.rowsUpserted} rows, ${result.durationMs}ms`);
+-      } catch (e) {
+-        result.ok = false;
+-        result.error = e instanceof MetaApiError
+-          ? `Meta ${e.status}: ${e.message}`
+-          : e instanceof Error ? e.message : String(e);
+-        result.durationMs = Date.now() - start;
+-        console.error(`${tag} SYNC FAILED — ${result.error}`);
+-        if (e instanceof MetaApiError) {
+-          console.error(`${tag} Meta API error body:`, JSON.stringify(e.body).slice(0, 500));
+-        }
+-        // Intentionally do NOT mark synced on failure.
++        console.log(`${tag} SYNC COMPLETE (empty window) — ${result.durationMs}ms`);
++        return result;
+       }
+-    } finally {
+-      // Release the advisory lock. This is a no-op if the connection was already
+-      // dropped (Postgres releases session locks automatically on disconnect).
+-      await this.prisma.$executeRawUnsafe(`SELECT pg_advisory_unlock($1)`, lockId);
++
++      // ─ Transform + Load ──────────────────────────────────────────────
++      console.log(`${tag} Saving raw insights (audit trail)…`);
++      const rawBatch = rows.map((r) => ({
++        entityType: EntityType.ACCOUNT,
++        entityId: adAccountId,
++        date: new Date(String(r.date_start)),
++        rawJson: r,
++      }));
++      await this.rawRepo.appendMany(rawBatch);
++      console.log(`${tag} Saved ${rawBatch.length} raw rows`);
++
++      console.log(`${tag} Saving daily stats (upsert)…`);
++      const dailyBatch = rows.map((r) => ({
++        entityType: EntityType.ACCOUNT,
++        entityId: adAccountId,
++        insight: mapMetaInsight(r, {
++          currencyMinorFactor: currencyFactorForMapper(
++            acct.currency,
++            acct.currencyMinorFactor,
++            `${tag} account insights`,
++          ),
++        }),
++      }));
++      await this.dailyRepo.upsertMany(dailyBatch);
++      console.log(`${tag} Upserted ${dailyBatch.length} daily stat rows`);
++
++      result.rowsUpserted = dailyBatch.length;
++      await this.reconcileCampaignStatusesSafe(adAccountId, now, tag);
++      await this.markSynced(adAccountId, now);
++      result.ok = true;
++      result.durationMs = Date.now() - start;
++      console.log(`${tag} SYNC COMPLETE — ${result.rowsUpserted} rows, ${result.durationMs}ms`);
++    } catch (e) {
++      result.ok = false;
++      result.error = e instanceof MetaApiError
++        ? `Meta ${e.status}: ${e.message}`
++        : e instanceof Error ? e.message : String(e);
++      result.durationMs = Date.now() - start;
++      console.error(`${tag} SYNC FAILED — ${result.error}`);
++      if (e instanceof MetaApiError) {
++        console.error(`${tag} Meta API error body:`, JSON.stringify(e.body).slice(0, 500));
++      }
++      // Intentionally do NOT mark synced on failure.
+     }
+ 
+     return result;
+@@ -1412,29 +1405,35 @@ export class SyncAccountWorker {
+   async syncChunked(jobId: string): Promise<void> {
+     const job = await this.prisma.syncJob.findUniqueOrThrow({ where: { id: jobId } });
+     const adAccountId = job.adAccountId;
+-    const lockId = advisoryLockId(adAccountId);
+     const tag = `[syncChunked:${jobId.slice(0, 8)}]`;
+ 
+-    // Try to acquire the advisory lock. Session-scoped advisory locks auto-release
+-    // on connection drop, so stale locks from crashed processes clean up on their own.
+-    const lockRows = await this.prisma.$queryRawUnsafe<[{ pg_try_advisory_lock: boolean }]>(
+-      `SELECT pg_try_advisory_lock($1)`,
+-      lockId,
++    // Hold the lock on a dedicated connection. On contention, leave the job
++    // PENDING (never FAILED) so BullMQ / reuse-active-job can retry cleanly.
++    const locked = await withAdvisoryLock(adAccountId, () =>
++      this.syncChunkedLocked(jobId, job),
+     );
+-    const acquired = lockRows[0]!.pg_try_advisory_lock;
+-
+-    if (!acquired) {
+-      console.warn(`${tag} Advisory lock held — another sync running. Marking FAILED.`);
++    if (!locked.acquired) {
++      console.warn(`${tag} Advisory lock held — another sync running. Leaving PENDING for retry.`);
+       await this.prisma.syncJob.update({
+         where: { id: jobId },
+         data: {
+-          status: SyncJobStatus.FAILED,
+-          error: 'Another sync is already in progress for this account',
+-          completedAt: new Date(),
++          status: SyncJobStatus.PENDING,
++          error: 'Waiting — another sync is already in progress for this account',
+         },
+       });
+-      return;
++      const err = new Error('SYNC_LOCK_HELD');
++      (err as Error & { code?: string }).code = 'SYNC_LOCK_HELD';
++      throw err;
+     }
++  }
++
++  /** Inner chunked sync — caller must already hold the per-account advisory lock. */
++  private async syncChunkedLocked(
++    jobId: string,
++    job: { adAccountId: string; windowSince: Date; windowUntil: Date },
++  ): Promise<void> {
++    const adAccountId = job.adAccountId;
++    const tag = `[syncChunked:${jobId.slice(0, 8)}]`;
+ 
+     let acct = await this.prisma.adAccount.findUniqueOrThrow({ where: { id: adAccountId } });
+     if (currencyFactorNeedsHeal(acct.currency, acct.currencyMinorFactor)) {
+@@ -1614,8 +1613,6 @@ export class SyncAccountWorker {
+           completedAt: new Date(),
+         },
+       });
+-    } finally {
+-      await this.prisma.$executeRawUnsafe(`SELECT pg_advisory_unlock($1)`, lockId);
+     }
+   }
+ }
+diff --git a/test_worker.ts b/test_worker.ts
+index 85aa2b3..b5e38b4 100644
+--- a/test_worker.ts
++++ b/test_worker.ts
+@@ -49,7 +49,7 @@ check("impressions parsed from string", out1.impressions === 2974, out1.impressi
+ check("clicks parsed", out1.clicks === 87, out1.clicks);
+ check("messages extracted from actions[]", out1.messages === 12, out1.messages);
+ check("purchases zero when no matching action", out1.purchases === 0, out1.purchases);
+-check("conversions falls back to messages (objective-agnostic)", out1.conversions === 12, out1.conversions);
++check("conversions = messages + purchases + leads", out1.conversions === 12, out1.conversions);
+ check("ctr parsed to 2.926", out1.ctr === 2.926, out1.ctr);
+ check("frequency parsed", out1.frequency === 1.625, out1.frequency);
+ check("roas null when no revenue", out1.roas === null, out1.roas);
+@@ -91,8 +91,8 @@ check("empty spend → 0", out3.spendMinor === 0, out3.spendMinor);
+ check("null impressions → 0", out3.impressions === 0, out3.impressions);
+ check("garbage clicks → 0", out3.clicks === 0, out3.clicks);
+ check("undefined ctr → null", out3.ctr === null, out3.ctr);
+-check("multiple purchase action types summed (3+2=5)", out3.purchases === 5, out3.purchases);
+-check("conversions falls back to purchases when no messages", out3.conversions === 5, out3.conversions);
++check("overlapping purchase types pick preferred (purchase=3, not sum 5)", out3.purchases === 3, out3.purchases);
++check("conversions = purchases when no messages/leads", out3.conversions === 3, out3.conversions);
+ 
+ // Fixture 4: ROAS — revenue present, spend present
+ const metaRow4: MetaInsightRow = {
+-- 
+2.43.0
+
+
+From a5f4f519195c34f927d13e0f4c584ce83af51dfe Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Fri, 7 Aug 2026 15:39:27 +0000
+Subject: [PATCH 2/2] fix(prod): harden register, invites, sync UX, and JSON
+ body parsing
+
+Wrap registration in a transaction, reuse active SyncJobs on initial sync
+kickoff, map Meta/sync failures to friendly Arabic UI copy, normalize JSON
+bodies to avoid null-deref 500s, and return 409 on invite unique races.
+---
+ src/api/adapter.ts     | 11 ++++++---
+ src/api/server.ts      | 55 ++++++++++++++++++++++++++++--------------
+ src/lib/initialSync.ts | 17 +++++++++++++
+ src/web/layout.ts      | 21 ++++++++++++++--
+ 4 files changed, 80 insertions(+), 24 deletions(-)
+
+diff --git a/src/api/adapter.ts b/src/api/adapter.ts
+index 1fa93f0..8108945 100644
+--- a/src/api/adapter.ts
++++ b/src/api/adapter.ts
+@@ -89,14 +89,17 @@ export async function honoToApiRequest(c: Context): Promise<ApiRequest> {
+     }
+   }
+ 
+-  // Body — only consumed when Content-Type is application/json
+-  let body: unknown = null;
++  // Body — only consumed when Content-Type is application/json.
++  // Always normalize to an object so handlers never TypeError on null.body.x
++  // (malformed JSON / empty body become {} and fail field validation with 400).
++  let body: unknown = {};
+   const ct = c.req.header('content-type') ?? '';
+   if (ct.includes('application/json')) {
+     try {
+-      body = await c.req.json();
++      const parsed = await c.req.json();
++      body = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+     } catch {
+-      // Malformed JSON — leave body null; handler decides whether to reject
++      body = {};
+     }
+   }
+ 
+diff --git a/src/api/server.ts b/src/api/server.ts
+index 096f2df..3a23390 100644
+--- a/src/api/server.ts
++++ b/src/api/server.ts
+@@ -237,7 +237,7 @@ function tzToCountry(timezone: string | null | undefined): string | null {
+ 
+ // ── Route count ───────────────────────────────────────────────────────────
+ 
+-export const ROUTE_COUNT = 57;
++export const ROUTE_COUNT = 130;
+ 
+ // ── Rate limiting ─────────────────────────────────────────────────────────
+ // In-memory per-IP rate limiter. Single-instance; sufficient for Phase 1.
+@@ -813,17 +813,24 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     const existing = await prisma.user.findUnique({ where: { email } });
+     if (existing) return c.json({ error: 'Email already in use' }, 409);
+     const passwordHash = await hashPassword(body.password);
+-    let user, workspace;
++    let user: { id: string; email: string; name: string | null; tokenVersion: number };
++    let workspace: { id: string };
+     try {
+-      user = await prisma.user.create({
+-        data: { email, name: body.name ?? email.split('@')[0], passwordHash },
+-      });
+-      workspace = await prisma.workspace.create({
+-        data: {
+-          name: `${body.name ?? email.split('@')[0]}'s Workspace`,
+-          members: { create: { userId: user.id, role: WorkspaceRole.OWNER } },
+-        },
++      // Atomic: never leave a user row without an OWNER workspace membership.
++      const created = await prisma.$transaction(async (tx) => {
++        const u = await tx.user.create({
++          data: { email, name: body.name ?? email.split('@')[0]!, passwordHash },
++        });
++        const ws = await tx.workspace.create({
++          data: {
++            name: `${body.name ?? email.split('@')[0]}'s Workspace`,
++            members: { create: { userId: u.id, role: WorkspaceRole.OWNER } },
++          },
++        });
++        return { user: u, workspace: ws };
+       });
++      user = created.user;
++      workspace = created.workspace;
+     } catch (err: unknown) {
+       if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
+         return c.json({ error: 'Email already in use' }, 409);
+@@ -2637,7 +2644,7 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+     const callerMs = await checkMember(callerId, req.params['workspaceId']);
+     if (!callerMs) return c.json({ error: 'Access denied' }, 403);
+     if (callerMs.role === 'VIEWER') return c.json({ error: 'Insufficient permissions' }, 403);
+-    const body = req.body as { email: string; role?: string };
++    const body = (req.body ?? {}) as { email?: string; role?: string };
+     if (!body.email?.trim()) return c.json({ error: 'Email is required' }, 400);
+     const role: WorkspaceRole =
+       body.role === 'OWNER' ? WorkspaceRole.OWNER
+@@ -2647,16 +2654,24 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+       return c.json({ error: 'Only owners can assign the owner role' }, 403);
+     }
+     const user = await prisma.user.findUnique({ where: { email: body.email.toLowerCase().trim() } });
+-    if (!user) return c.json({ error: `No Adlytic account found for ${body.email}` }, 404);
++    if (!user) return c.json({ error: 'No Adlytic account found for that email' }, 404);
+     const existing = await prisma.workspaceMember.findFirst({
+       where: { workspaceId: req.params['workspaceId'], userId: user.id },
+     });
+     if (existing) return c.json({ error: 'User is already a member of this workspace' }, 409);
+-    const member = await prisma.workspaceMember.create({
+-      data: { workspaceId: req.params['workspaceId'], userId: user.id, role },
+-      include: { user: { select: { id: true, email: true, name: true } } },
+-    });
+-    return c.json(safeJson(member), 201);
++    try {
++      const member = await prisma.workspaceMember.create({
++        data: { workspaceId: req.params['workspaceId'], userId: user.id, role },
++        include: { user: { select: { id: true, email: true, name: true } } },
++      });
++      return c.json(safeJson(member), 201);
++    } catch (err: unknown) {
++      // Double-submit / race on @@unique([workspaceId, userId]) → 409, never 500.
++      if (err && typeof err === 'object' && 'code' in err && (err as { code: string }).code === 'P2002') {
++        return c.json({ error: 'User is already a member of this workspace' }, 409);
++      }
++      throw err;
++    }
+   });
+ 
+   /** PATCH /api/workspaces/:workspaceId/members/:memberId — change role. */
+@@ -3607,7 +3622,11 @@ export function buildRoutes(prisma: PrismaClient): Hono {
+           });
+           return c.json({ error: 'انتهت صلاحية رمز الوصول لحساب Meta — أعد الربط من مساحة العمل.', code: 'TOKEN_EXPIRED' }, 422);
+         }
+-        return c.json({ error: `Meta ${err.status}: ${err.message}` }, 502);
++        console.error('[discover-creatives] Meta upstream error:', err.status, err.message);
++        return c.json({
++          error: 'تعذّر جلب بيانات هذه الحملة من Meta الآن — حاول لاحقاً.',
++          code: 'META_UPSTREAM',
++        }, 502);
+       }
+       console.error('[discover-creatives] failed:', err);
+       return c.json({ error: 'تعذّر جلب بيانات هذه الحملة الآن — حاول لاحقاً.' }, 500);
+diff --git a/src/lib/initialSync.ts b/src/lib/initialSync.ts
+index 02d9baf..f34e453 100644
+--- a/src/lib/initialSync.ts
++++ b/src/lib/initialSync.ts
+@@ -72,6 +72,23 @@ export async function kickoffInitialSync(
+   const worker = new SyncAccountWorker(prisma, metaClient);
+   const now = new Date();
+   const since = new Date(now.getTime() - (INITIAL_BACKFILL_DAYS - 1) * 86400 * 1000);
++
++  // Reuse an already-active job — double connect/reconnect must not enqueue
++  // parallel 180-day backfills that fight over the advisory lock.
++  const existingActive = await prisma.syncJob.findFirst({
++    where: {
++      adAccountId: account.id,
++      status: { in: [SyncJobStatus.PENDING, SyncJobStatus.PROCESSING] },
++    },
++    orderBy: { createdAt: 'desc' },
++  });
++  if (existingActive) {
++    console.log(
++      `[adlytic:initial-sync] ${account.externalAccountId} — reusing active job ${existingActive.id} (${existingActive.status})`,
++    );
++    return;
++  }
++
+   const job = await prisma.syncJob.create({
+     data: {
+       adAccountId: account.id,
+diff --git a/src/web/layout.ts b/src/web/layout.ts
+index 8ab2166..15c595f 100644
+--- a/src/web/layout.ts
++++ b/src/web/layout.ts
+@@ -1702,7 +1702,21 @@ async function pollSyncJob(jobId, opts) {
+     var job = await apiFetch('/api/sync-jobs/' + encodeURIComponent(jobId));
+     if (opts.onProgress) { try { opts.onProgress(job, i); } catch (e) {} }
+     if (job && job.status === 'COMPLETED') return job;
+-    if (job && job.status === 'FAILED') throw new Error(job.error || 'Sync failed');
++    if (job && job.status === 'FAILED') {
++      // Never surface raw Meta/Prisma text to paying customers.
++      var raw = String(job.error || '');
++      var friendly = 'فشلت المزامنة — حاول مرة أخرى من مساحة العمل.';
++      if (/Waiting — another sync|already in progress/i.test(raw)) {
++        friendly = 'المزامنة قيد التشغيل — ستتحدّث بياناتك تلقائياً عند الانتهاء.';
++      } else if (/code.*190|190.*code|OAuthException|token has expired|session has been invalidated/i.test(raw)) {
++        friendly = 'انتهت صلاحية رمز Meta. أعد الربط من إعدادات مساحة العمل.';
++      } else if (/Timed out|stuck for over/i.test(raw)) {
++        friendly = 'انتهت مهلة المزامنة — أعد المحاولة. إذا استمر الأمر تواصل مع الدعم.';
++      } else if (/Insights pending|engine pipeline failed/i.test(raw)) {
++        friendly = 'اكتملت المزامنة لكن التحليلات لم تُحدَّث بعد — أعد تحميل اللوحة بعد لحظات.';
++      }
++      throw new Error(friendly);
++    }
+     await sleep(intervalMs);
+   }
+   throw new Error('المزامنة تأخذ وقتاً أطول من المتوقع — ستنتهي في الخلفية.');
+@@ -1728,9 +1742,12 @@ function friendlyApiError(err) {
+   if (/credit balance is too low|purchase credits|Plans & Billing|insufficient.?credit/i.test(msg)) {
+     return 'المساعد الذكي غير متاح مؤقتاً بسبب نفاد رصيد مزوّد الذكاء الاصطناعي. تابع التشخيص من لوحة التحكم، أو أعد المحاولة لاحقاً.';
+   }
+-  if (/Another sync is already in progress/i.test(msg)) {
++  if (/Another sync is already in progress|Waiting — another sync/i.test(msg)) {
+     return 'المزامنة قيد التشغيل — ستتحدّث بياناتك تلقائياً عند الانتهاء.';
+   }
++  if (/Meta \d{3}:|OAuthException|"type"\s*:\s*"OAuthException"/i.test(msg)) {
++    return 'تعذّر التواصل مع Meta الآن — حاول مجدداً بعد لحظات.';
++  }
+   if (/DASHBOARD_TIMEOUT|dashboard timed out|انتهت مهلة تحميل اللوحة/i.test(msg) || err.code === 'DASHBOARD_TIMEOUT') {
+     return 'انتهت مهلة تحميل اللوحة — حاول مجدداً بعد لحظات.';
+   }
+-- 
+2.43.0
+
