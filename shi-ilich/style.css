@@ -114,18 +114,23 @@ body[data-ember="7"] #ember i{
 #stage{
   position: relative; z-index: 10;
   height: 100dvh;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   padding: 24px;
 }
 
 .scene{
+  /* margin:auto بدل align/justify center: يخلي المشهد الطويل ينسحب بدل ما ينگص */
+  margin: auto;
   width: 100%; max-width: 420px;
   display: flex; flex-direction: column;
   align-items: center; text-align: center;
   gap: 6px;
+  padding: 16px 0;
   transition: opacity .8s ease, transform .8s ease, filter .8s ease;
 }
-.scene.out{ opacity: 0; transform: translateY(-14px); filter: blur(6px); }
+.scene.out{ opacity: 0; transform: translateY(-14px); filter: blur(6px); pointer-events: none; }
 
 /* ---------- السطور ---------- */
 .line{
@@ -333,6 +338,11 @@ body[data-ember="7"] #ember i{
   font-size: 14px; letter-spacing: 7px;
   color: var(--ink); opacity: .7; margin-top: 12px;
 }
+.tk-tagline{
+  font-family: var(--font-ticket); font-weight: 500;
+  font-size: 9.5px; letter-spacing: 4px;
+  color: var(--ember); opacity: .85; margin-top: 8px;
+}
 
 .tk-perf{ /* خط التخريم */
   position: relative; height: 1px; margin: 4px 18px;
@@ -357,8 +367,13 @@ body[data-ember="7"] #ember i{
   letter-spacing: 3px; color: var(--dim);
 }
 .tk-value{
-  font-size: 15px; font-weight: 600; margin-top: 4px;
-  color: var(--ink); line-height: 1.6;
+  font-family: var(--font-ticket); font-weight: 500;
+  font-size: 15px; letter-spacing: .5px; margin-top: 5px;
+  color: var(--ink); line-height: 1.5;
+}
+.tk-value[dir="rtl"]{
+  font-family: var(--font-body); font-weight: 600;
+  font-size: 14.5px; letter-spacing: 0; line-height: 1.9;
 }
 .tk-value.gold{ color: var(--ember); }
 .tk-for{
@@ -510,6 +525,24 @@ body[data-ember="7"] #ember i{
   min-height: 1em;
 }
 .countdown:empty{ display: none; }
+
+/* ---------- صورة التذكرة الرسمية ---------- */
+.photo-overlay{
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(4,3,8,.94);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 18px;
+  padding: 20px;
+  animation: lineIn .5s ease;
+  cursor: pointer;
+}
+.photo-overlay img{
+  max-width: 92vw; max-height: 78vh;
+  border-radius: 14px;
+  border: 1px solid rgba(245,168,60,.4);
+  box-shadow: 0 20px 70px rgba(0,0,0,.8), 0 0 50px rgba(245,168,60,.18);
+}
+.photo-hint{ color: var(--dim); font-size: 13px; }
 
 /* ---------- زر القلب الأخير ---------- */
 .heart-btn{

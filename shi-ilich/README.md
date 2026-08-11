@@ -27,7 +27,8 @@ Open **`config.js`** — every personal detail lives there and nowhere else:
 | `finalMessage` | **The most important text in the whole thing.** Write it yourself, in your own words |
 | `secret` | Optional Easter egg — message + optional photo (`photo: "us.jpg"`, put the file in this folder) |
 | `song` | Official Cairokee YouTube embed shown with the final letter (default: كان لك معايا). Swap `youtubeId` for any song |
-| `concert.dateISO` | Optional exact concert datetime (e.g. `"2026-09-20T20:00:00+03:00"`) → shows a live countdown under the ticket |
+| `concert.dateISO` | Exact concert datetime → drives the live countdown under the ticket |
+| `ticketPhoto` | **Save your real ticket screenshot in this folder as `ticket.jpg`.** A "التذكرة الرسمية 📄" button then appears under the designed ticket and opens it full-screen. If the file is missing the button simply never appears — nothing breaks |
 | `revealTrack` | Optional: a song file (that you have the right to use) that plays when the ticket appears, e.g. `"song.mp3"` |
 
 No other file needs editing.

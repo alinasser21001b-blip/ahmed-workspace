@@ -177,6 +177,7 @@ const audio = (() => {
 
   function startCrowd(){
     ensure();
+    stopAll();   // نوقف فرشة الليل الهادئة — صار وقت الجمهور
     // همهمة جمهور: ضوضاء مفلترة تتنفس
     const src = ac.createBufferSource();
     src.buffer = noiseBuffer(); src.loop = true;
@@ -308,10 +309,12 @@ const on = (root, sel, fn) => {
 };
 
 /* "عم يكتب…" قبل الرد — يعطي إحساس إنه آني اللي دأرد عليها */
+let respondTimer = null;
 function respond($el, html, wireFn){
+  clearTimeout(respondTimer);              // تخمين جديد يلغي رد التخمين القديم
   $el.innerHTML = `<div class="gap-m"></div>
     <p class="typing-dots"><span></span><span></span><span></span></p>`;
-  setTimeout(() => {
+  respondTimer = setTimeout(() => {
     $el.innerHTML = html;
     if (wireFn) wireFn();
   }, 850);
@@ -646,16 +649,24 @@ function sceneReveal(){
       ${L(`مع ${C.concert.bandArabic} 🎸`, "line--huge line--glow", 5.8)}
       ${GAP("l")}
       ${BTN("شوفي التذكرة 🎟️", "tk", "btn--primary", 8)}
-    `, (root) => on(root, "#tk", sceneTicket));
+    `, (root) => on(root, "#tk", () => {
+      // الأغنية المخصصة لازم تبدي بنفس لمسة الزر — آيفون يرفضها إذا تأخرت
+      if (C.revealTrack && !sceneReveal.played){
+        sceneReveal.played = true;
+        const a = new Audio(C.revealTrack);
+        a.volume = .8;
+        a.play().catch(() => {});
+      }
+      sceneTicket();
+    }));
   }, 2100);
 }
 
 /* ١١ — التذكرة */
 function sceneTicket(){
   const k = C.concert;
-  const extra = [];
-  if (k.gate) extra.push(`<div class="tk-cell"><div class="tk-label">GATE</div><div class="tk-value">${k.gate}</div></div>`);
-  if (k.seat) extra.push(`<div class="tk-cell"><div class="tk-label">SEAT</div><div class="tk-value">${k.seat}</div></div>`);
+  const extra = (k.extras || []).map(x =>
+    `<div class="tk-cell"><div class="tk-label">${x.label}</div><div class="tk-value gold">${x.value}</div></div>`);
   show(() => `
     <div class="ticket-wrap" id="tw" style="--d:.3s">
       <div class="tk-flip" id="tkFlip">
@@ -665,16 +676,17 @@ function sceneTicket(){
             <div class="tk-band">${k.bandLatin}</div>
             <div class="tk-band-ar">${k.bandArabic}</div>
             <div class="tk-city">LIVE IN ${k.cityLatin}</div>
+            ${k.taglineLatin ? `<div class="tk-tagline">${k.taglineLatin}</div>` : ""}
           </div>
           <div class="tk-perf"></div>
           <div class="tk-details">
             <div class="tk-cell"><div class="tk-label">DATE</div><div class="tk-value">${k.dateLatin}</div></div>
-            <div class="tk-cell"><div class="tk-label">VENUE</div><div class="tk-value">${k.venueLatin}</div></div>
+            <div class="tk-cell"><div class="tk-label">SHOW STARTS</div><div class="tk-value">${k.timeLatin}</div></div>
             ${extra.join("")}
             <div class="tk-cell wide"><div class="tk-label">ADMIT ONE</div>
-              <div class="tk-value" dir="rtl">${k.dateDisplay} · ${k.venueArabic}</div></div>
+              <div class="tk-value" dir="rtl">${k.dateDisplay} — ${k.timeDisplay}</div></div>
             <div class="tk-cell wide"><div class="tk-label">FOR</div>
-              <div class="tk-for" dir="rtl">${C.herName} ❤</div></div>
+              <div class="tk-for" dir="rtl">${k.holderName || C.herName} ❤</div></div>
           </div>
           <div class="tk-barcode"></div>
           <div class="tk-serial">${k.serial}</div>
@@ -689,16 +701,31 @@ function sceneTicket(){
     ${GAP("s")}
     ${L("دوسي عليها… إلها وجه ثاني 🙂", "line--dim", 2.4)}
     <p class="line countdown" id="cd" style="--d:3s"></p>
+    <button class="btn btn--ghost" id="realTk" style="--d:3.3s;display:none">التذكرة الرسمية 📄</button>
     ${BTN("اكو شي بعد…", "more", "btn--ghost", 3.6)}
   `, (root) => {
-    if (C.revealTrack && !sceneTicket.played){
-      sceneTicket.played = true;
-      const a = new Audio(C.revealTrack);
-      a.volume = .8;
-      a.play().catch(() => {});
-    }
     on(root, "#tw", () => { buzz(12); root.querySelector("#tkFlip").classList.toggle("flipped"); });
     on(root, "#more", sceneLetter);
+
+    // صورة التذكرة الرسمية — الزر يظهر بس إذا الصورة فعلًا موجودة
+    if (C.ticketPhoto){
+      const probe = new Image();
+      probe.onload = () => {
+        const btn = root.querySelector("#realTk");
+        if (!btn) return;
+        btn.style.display = "";
+        btn.addEventListener("click", () => {
+          audio.blip();
+          const ov = document.createElement("div");
+          ov.className = "photo-overlay";
+          ov.innerHTML = `<img src="${C.ticketPhoto}" alt="التذكرة الرسمية">
+                          <span class="photo-hint">دوسي بأي مكان حتى ترجعين</span>`;
+          ov.addEventListener("click", () => ov.remove());
+          document.body.appendChild(ov);
+        });
+      };
+      probe.src = C.ticketPhoto;
+    }
 
     // عدّاد تنازلي حي (إذا محدد dateISO بالإعدادات)
     if (k.dateISO){
