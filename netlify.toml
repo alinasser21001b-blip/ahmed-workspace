@@ -1,0 +1,3 @@
+# Netlify: serve the surprise experience as the site root
+[build]
+  publish = "shi-ilich"
