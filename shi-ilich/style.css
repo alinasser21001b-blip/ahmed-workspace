@@ -12,6 +12,10 @@
   --ember:  #f5a83c;   /* amber stage light (second half)      */
   --ember-deep: #c96f1e;
   --rose:   #e0708a;   /* one drop of warmth, letter only      */
+  /* حواف الشاشة (النوتش) — منفصلة حتى نگدر نحسب عليها بمكان واحد */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --chrome-top: 40px;   /* ارتفاع الضوة + زر الصوت فوق المحتوى */
   --font-body: "Cairo", "Segoe UI", system-ui, sans-serif;
   --font-display: "Aref Ruqaa", "Cairo", serif;
   --font-ticket: "Oswald", "Arial Narrow", sans-serif;
@@ -71,7 +75,7 @@ body[data-ember="7"] #horizon{
 
 /* ---------- الضوة: نظام التقدّم ---------- */
 #ember{
-  position: fixed; top: max(20px, env(safe-area-inset-top));
+  position: fixed; top: max(20px, var(--sat));
   left: 50%; transform: translateX(-50%);
   z-index: 30; pointer-events: none;
   opacity: 0; transition: opacity 2s ease;
@@ -98,7 +102,7 @@ body[data-ember="7"] #ember i{
 
 /* ---------- زر الصوت ---------- */
 #soundToggle{
-  position: fixed; top: max(14px, env(safe-area-inset-top)); left: 14px;
+  position: fixed; top: max(14px, var(--sat)); left: 14px;
   z-index: 50;
   width: 46px; height: 46px; border-radius: 50%;
   border: 1px solid rgba(242,239,233,.14);
@@ -117,7 +121,9 @@ body[data-ember="7"] #ember i{
   display: flex;
   overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  padding: 24px;
+  /* المحتوى ما ينزل تحت الضوة ولا زر الصوت، ولا تحت شريط البيت */
+  padding: max(24px, calc(var(--sat) + var(--chrome-top))) 24px
+           max(24px, calc(var(--sab) + 24px));
 }
 
 .scene{
@@ -493,9 +499,18 @@ body[data-ember="7"] #ember i{
   aspect-ratio: 16 / 9;
   border-radius: 16px; overflow: hidden;
   border: 1px solid rgba(245,168,60,.4);
+  /* خلفية غامجة: إذا الفيديو ما انفتح (نت ضعيف) يبقى المنظر أنيق */
+  background: #0c0b13;
   box-shadow: 0 14px 44px rgba(0,0,0,.6), 0 0 34px rgba(245,168,60,.14);
 }
-.song-frame iframe{ width: 100%; height: 100%; display: block; }
+.song-frame iframe{ width: 100%; height: 100%; display: block; border: 0; }
+.song-fallback{
+  opacity: 0; animation: lineIn 1s ease forwards; animation-delay: 1.6s;
+  display: inline-block; margin-top: 10px;
+  color: var(--dim); font-size: 13px; text-decoration: none;
+  border-bottom: 1px solid rgba(143,138,158,.35);
+  padding-bottom: 2px;
+}
 
 /* ---------- قلب التذكرة (الوجهين) ---------- */
 .tk-flip{

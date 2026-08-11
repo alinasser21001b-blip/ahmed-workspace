@@ -773,9 +773,11 @@ function sceneLetter(){
         card.outerHTML = `
           <div class="song-frame" style="--d:0s">
             <iframe src="https://www.youtube-nocookie.com/embed/${C.song.youtubeId}?autoplay=1&playsinline=1&rel=0"
-              title="${C.song.title}" frameborder="0"
+              title="${C.song.title}"
               allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
-          </div>`;
+          </div>
+          <a class="song-fallback" target="_blank" rel="noopener"
+             href="https://www.youtube.com/watch?v=${C.song.youtubeId}">ما اشتغلت؟ افتحيها بيوتيوب ↗</a>`;
       });
     }
     if (C.secret.enabled) on(root, "#egg", sceneSecret);
