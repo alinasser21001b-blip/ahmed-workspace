@@ -26,6 +26,8 @@ Open **`config.js`** — every personal detail lives there and nowhere else:
 | `clues` | The 3 ambiguous hints (keep them ambiguous!) |
 | `finalMessage` | **The most important text in the whole thing.** Write it yourself, in your own words |
 | `secret` | Optional Easter egg — message + optional photo (`photo: "us.jpg"`, put the file in this folder) |
+| `song` | Official Cairokee YouTube embed shown with the final letter (default: كان لك معايا). Swap `youtubeId` for any song |
+| `concert.dateISO` | Optional exact concert datetime (e.g. `"2026-09-20T20:00:00+03:00"`) → shows a live countdown under the ticket |
 | `revealTrack` | Optional: a song file (that you have the right to use) that plays when the ticket appears, e.g. `"song.mp3"` |
 
 No other file needs editing.
@@ -61,9 +63,9 @@ Then send her **just the link**, with no context. Something like:
 5. **The guessing game** — whatever she guesses (even "حفلة"!), the site playfully deflects
 6. **Fake ending** — "خلاص راح أگلچ" … "لا. بعدني ما خلصت 😌"
 7. **The last question** — everything goes quiet: "توافقين تنطيني ليلة وحدة؟"
-8. **Blackout → crowd lights ignite → "عندچ موعد. مع كايروكي 🎸"**
-9. **The ticket** — a gold-foil concert pass with her name on it
-10. **Your letter** — then an optional hidden Easter egg
+8. **Blackout → warm flash → crowd lights + stage beams ignite → "عندچ موعد. مع كايروكي 🎸"**
+9. **The ticket** — a gold-foil concert pass with her name; tap it to flip to a hidden message on the back, with an optional live countdown to the show
+10. **Your letter** — with a tap-to-play official Cairokee song embed (كان لك معايا), then a hidden Easter egg ending in a rain of hearts
 
 Sound is opt-in via the 🔊 button (generated ambience only — no copyrighted
 audio is embedded). The little light at the top of the screen is the hidden

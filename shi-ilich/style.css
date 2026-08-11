@@ -403,6 +403,130 @@ body[data-ember="7"] #ember i{
   box-shadow: 0 18px 50px rgba(0,0,0,.6);
 }
 
+/* ---------- "عم يكتب…" ---------- */
+.typing-dots{
+  display: flex; gap: 7px; justify-content: center;
+  padding: 10px 0;
+}
+.typing-dots span{
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dim);
+  animation: typingBounce 1.1s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2){ animation-delay: .18s; }
+.typing-dots span:nth-child(3){ animation-delay: .36s; }
+@keyframes typingBounce{
+  0%,60%,100%{ transform: none; opacity: .35; }
+  30%{ transform: translateY(-6px); opacity: 1; }
+}
+
+/* ---------- ومضة "أوافق" ---------- */
+#flash{
+  position: fixed; inset: 0; z-index: 55; pointer-events: none;
+  background: radial-gradient(80% 60% at 50% 45%, rgba(255,222,160,.5), rgba(245,168,60,.15) 55%, transparent 80%);
+  opacity: 0; transition: opacity .3s ease;
+}
+#flash.on{ opacity: 1; transition: opacity .18s ease; }
+
+/* ---------- أعمدة ضوة المسرح ---------- */
+#beams{ position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0; transition: opacity 4s ease; }
+#beams.on{ opacity: 1; }
+#beams i{
+  position: absolute; top: -12vh; width: 34vw; height: 130vh;
+  background: linear-gradient(to bottom, rgba(255,214,140,.14), rgba(255,214,140,.03) 55%, transparent 80%);
+  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
+  filter: blur(6px);
+  animation: beamSway 9s ease-in-out infinite alternate;
+}
+#beams i:first-child{ left: 2vw; transform-origin: top center; }
+#beams i:last-child{ right: 2vw; animation-delay: -4.5s; }
+@keyframes beamSway{
+  from{ transform: rotate(-7deg); } to{ transform: rotate(7deg); }
+}
+
+/* ---------- كارت الأغنية ---------- */
+.song-card{
+  opacity: 0; animation: lineIn 1.2s ease forwards; animation-delay: var(--d,0s);
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; max-width: 340px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(245,168,60,.35);
+  background: rgba(245,168,60,.06);
+  cursor: pointer;
+  transition: background .3s, transform .15s;
+  text-align: right;
+}
+.song-card:active{ transform: scale(.97); }
+.song-play{
+  flex: none;
+  width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(245,168,60,.16);
+  border: 1px solid rgba(245,168,60,.5);
+  color: var(--ember); font-size: 15px;
+  padding-inline-start: 3px;
+  box-shadow: 0 0 18px rgba(245,168,60,.2);
+  animation: emberPulse 2.6s ease-in-out infinite;
+}
+.song-meta{ display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.song-meta b{ font-weight: 600; font-size: 14.5px; color: var(--ink); }
+.song-meta i{ font-style: normal; font-size: 13px; color: var(--dim); }
+.song-frame{
+  opacity: 0; animation: lineIn .8s ease forwards;
+  width: 100%; max-width: 340px;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px; overflow: hidden;
+  border: 1px solid rgba(245,168,60,.4);
+  box-shadow: 0 14px 44px rgba(0,0,0,.6), 0 0 34px rgba(245,168,60,.14);
+}
+.song-frame iframe{ width: 100%; height: 100%; display: block; }
+
+/* ---------- قلب التذكرة (الوجهين) ---------- */
+.tk-flip{
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform .9s cubic-bezier(.3,.7,.3,1);
+}
+.tk-flip.flipped{ transform: rotateY(180deg); }
+.tk-front, .tk-back{ backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.tk-back{
+  position: absolute; inset: 0;
+  transform: rotateY(180deg);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px; padding: 26px;
+}
+.tk-back-heart{ font-size: 34px; }
+.tk-back-line{
+  font-size: 16.5px; line-height: 2.1; color: var(--ink);
+}
+.tk-back .tk-serial{ padding-bottom: 0; }
+
+/* ---------- العدّاد ---------- */
+.countdown{
+  font-size: 14px !important; color: var(--ember) !important;
+  letter-spacing: .5px;
+  min-height: 1em;
+}
+.countdown:empty{ display: none; }
+
+/* ---------- زر القلب الأخير ---------- */
+.heart-btn{
+  border: none; background: transparent;
+  font-size: 44px; min-height: 64px;
+  filter: drop-shadow(0 0 18px rgba(224,112,138,.5));
+  animation: lineIn 1.2s ease forwards, heartBeat 1.6s ease-in-out infinite;
+  animation-delay: var(--d, 0s), calc(var(--d, 0s) + 2s);
+}
+@keyframes heartBeat{
+  0%,100%{ transform: scale(1); }
+  12%{ transform: scale(1.14); }
+  24%{ transform: scale(1); }
+  36%{ transform: scale(1.1); }
+  48%{ transform: scale(1); }
+}
+
 /* ---------- ومضة الخدعة ---------- */
 .flicker{ animation: flick .5s steps(2) 2; }
 @keyframes flick{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }

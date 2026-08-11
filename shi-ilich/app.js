@@ -52,6 +52,17 @@ const sky = (() => {
         hue: Math.random() < .85 ? "220,228,255" : "255,224,170",
       });
     }
+    if (m === "hearts"){
+      const n = reduceMotion ? 20 : 46;
+      for (let i = 0; i < n; i++) parts.push({
+        x: rnd(0, W), y: H + rnd(0, H * .8),
+        r: rnd(7, 17) * devicePixelRatio,
+        vx: 0, vy: -rnd(.25, .8) * devicePixelRatio,
+        sway: rnd(6, 22) * devicePixelRatio, swaySpeed: rnd(.0004, .001),
+        a: rnd(.15, .6), tw: rnd(.001, .003), ph: rnd(0, 6.28),
+        hue: "hearts", baseX: 0,
+      }), parts[parts.length - 1].baseX = parts[parts.length - 1].x;
+    }
     if (m === "crowd"){
       const n = reduceMotion ? 60 : 150;
       for (let i = 0; i < n; i++){
@@ -79,6 +90,17 @@ const sky = (() => {
     for (const p of parts){
       const tw = .5 + .5 * Math.sin(t * p.tw + p.ph);
       let x = p.x;
+      if (mode === "hearts"){
+        p.y += p.vy;
+        if (p.y < -30) { p.y = H + 30; p.baseX = Math.random() * W; }
+        x = p.baseX + Math.sin(t * p.swaySpeed + p.ph) * p.sway;
+        ctx.globalAlpha = p.a * (.4 + .6 * tw);
+        ctx.font = `${p.r}px serif`;
+        ctx.fillStyle = "rgb(224,112,138)";
+        ctx.fillText("❤", x, p.y);
+        ctx.globalAlpha = 1;
+        continue;
+      }
       if (mode === "crowd"){
         x = p.baseX + Math.sin(t * p.swaySpeed + p.ph) * p.sway * 14;
       } else {
@@ -222,16 +244,34 @@ const audio = (() => {
   return { startAmbient, startCrowd, chordSwell, blip, setOn, get on(){ return on; } };
 })();
 
+/* أي مشهد نصب أي "فرشة" صوت — حتى إذا شغّلت الصوت متأخر يشتغل الصح */
+let audioBed = "ambient";
+let bedStarted = false;
+function setBed(name){
+  audioBed = name;
+  if (audio.on){
+    if (name === "ambient") audio.startAmbient();
+    if (name === "crowd"){ audio.startCrowd(); }
+    bedStarted = true;
+  } else bedStarted = false;
+}
+
 $sound.addEventListener("click", () => {
   const next = !audio.on;
   audio.setOn(next);
-  if (next && !$sound.dataset.started){
-    $sound.dataset.started = "1";
-    audio.startAmbient();
+  if (next && !bedStarted){
+    bedStarted = true;
+    if (audioBed === "crowd") audio.startCrowd();
+    else audio.startAmbient();
   }
   $sound.textContent = next ? "🔊" : "🔇";
   $sound.classList.toggle("on", next);
 });
+
+/* اهتزاز خفيف (أندرويد) — آيفون يتجاهلها بهدوء */
+function buzz(pattern){
+  try{ navigator.vibrate && navigator.vibrate(pattern); }catch(e){}
+}
 
 /* ------------------------------------------------------------
    محرك المشاهد
@@ -266,6 +306,16 @@ function ember(level){ $body.dataset.ember = level; }
 const on = (root, sel, fn) => {
   root.querySelector(sel).addEventListener("click", (e) => { audio.blip(); fn(e); }, { once: false });
 };
+
+/* "عم يكتب…" قبل الرد — يعطي إحساس إنه آني اللي دأرد عليها */
+function respond($el, html, wireFn){
+  $el.innerHTML = `<div class="gap-m"></div>
+    <p class="typing-dots"><span></span><span></span><span></span></p>`;
+  setTimeout(() => {
+    $el.innerHTML = html;
+    if (wireFn) wireFn();
+  }, 850);
+}
 
 /* ------------------------------------------------------------
    المشاهد
@@ -347,11 +397,11 @@ function sceneDoorMemory(){
         const opt = q.options[+btn.dataset.i];
         root.querySelectorAll(".choice").forEach(b => b.classList.add(b === btn ? "picked" : "faded"));
         btn.style.pointerEvents = "none";
-        root.querySelector("#resp").innerHTML = `
-          ${GAP("m")}
-          <p class="line ${opt.correct ? "" : "line--dim"}" style="--d:.5s">${opt.response}</p>
-          ${BTN("الباب الثاني ←", "next", "", 1.8)}`;
-        on(root, "#next", sceneDoorDiscovery);
+        buzz(12);
+        respond(root.querySelector("#resp"), `
+          <p class="line ${opt.correct ? "" : "line--dim"}" style="--d:.1s">${opt.response}</p>
+          ${BTN("الباب الثاني ←", "next", "", 1.2)}`,
+          () => on(root, "#next", sceneDoorDiscovery));
       }, { once: true });
     });
   });
@@ -393,7 +443,7 @@ function sceneDoorDiscovery(){
 
     fly.addEventListener("click", () => {
       alive = false;
-      audio.blip();
+      audio.blip(); buzz(25);
       fly.style.transition = "transform .7s ease, opacity .7s ease";
       fly.style.transform = "scale(3)";
       fly.style.opacity = "0";
@@ -430,11 +480,11 @@ function sceneDoorHeart(){
         const opt = q.options[+btn.dataset.i];
         root.querySelectorAll(".choice").forEach(b => b.classList.add(b === btn ? "picked" : "faded"));
         btn.style.pointerEvents = "none";
-        root.querySelector("#resp").innerHTML = `
-          ${GAP("m")}
-          <p class="line" style="--d:.5s">${opt.response}</p>
-          ${BTN("اطلعي من البواب ←", "next", "btn--primary", 1.9)}`;
-        on(root, "#next", sceneShift);
+        buzz(12);
+        respond(root.querySelector("#resp"), `
+          <p class="line" style="--d:.1s">${opt.response}</p>
+          ${BTN("اطلعي من البواب ←", "next", "btn--primary", 1.3)}`,
+          () => on(root, "#next", sceneShift));
       }, { once: true });
     });
   });
@@ -491,17 +541,19 @@ function sceneGuess(){
     </div>
     <div id="resp"></div>
   `, (root) => {
+    // تگدر تجرب أكثر من تخمين — كل تخمين إله رد
     root.querySelectorAll(".choice").forEach(btn => {
       btn.addEventListener("click", () => {
-        audio.blip();
+        if (btn.classList.contains("picked")) return;
+        audio.blip(); buzz(12);
         const g = guesses[+btn.dataset.i];
-        root.querySelectorAll(".choice").forEach(b => b.classList.add(b === btn ? "picked" : "faded"));
-        root.querySelector("#resp").innerHTML = `
-          ${GAP("m")}
-          <p class="line" style="--d:.4s">${g.r}</p>
-          ${BTN("خلص گلي!! 😤", "fake", "btn--primary", 1.7)}`;
-        on(root, "#fake", sceneFakeEnd);
-      }, { once: true });
+        root.querySelectorAll(".choice").forEach(b => b.classList.remove("picked"));
+        btn.classList.add("picked");
+        respond(root.querySelector("#resp"), `
+          <p class="line" style="--d:.1s">${g.r}</p>
+          ${BTN("خلص گلي!! 😤", "fake", "btn--primary", 1.3)}`,
+          () => on(root, "#fake", sceneFakeEnd));
+      });
     });
   });
 }
@@ -547,7 +599,16 @@ function sceneLock(){
     ${L("توافقين تنطيني ياها؟", "line--big", 5.8)}
     ${GAP("l")}
     ${BTN("أوافق ❤️", "yes", "btn--love", 7.4)}
-  `, (root) => on(root, "#yes", sceneReveal));
+  `, (root) => on(root, "#yes", () => {
+    // ومضة دافية قبل التعتيم — مثل فلاش كاميرا من بعيد
+    buzz([30, 90, 30]);
+    const flash = document.createElement("div");
+    flash.id = "flash";
+    document.body.appendChild(flash);
+    requestAnimationFrame(() => flash.classList.add("on"));
+    setTimeout(() => flash.remove(), 900);
+    setTimeout(sceneReveal, 350);
+  }));
 }
 
 /* ١٠ — الكشف */
@@ -562,7 +623,17 @@ function sceneReveal(){
     $stage.innerHTML = "";
     ember(7);
     sky.seed("crowd");
-    if (audio.on){ audio.startCrowd(); audio.chordSwell(); }
+    setBed("crowd");
+    if (audio.on) audio.chordSwell();
+    buzz([40, 120, 40, 120, 200]);
+    // أعمدة ضوة المسرح
+    if (!document.getElementById("beams")){
+      const beams = document.createElement("div");
+      beams.id = "beams";
+      beams.innerHTML = "<i></i><i></i>";
+      document.body.appendChild(beams);
+      requestAnimationFrame(() => beams.classList.add("on"));
+    }
     black.classList.remove("on");
     setTimeout(() => black.remove(), 1800);
 
@@ -587,30 +658,38 @@ function sceneTicket(){
   if (k.seat) extra.push(`<div class="tk-cell"><div class="tk-label">SEAT</div><div class="tk-value">${k.seat}</div></div>`);
   show(() => `
     <div class="ticket-wrap" id="tw" style="--d:.3s">
-      <div class="ticket" dir="ltr">
-        <div class="tk-top">
-          <div class="tk-eyebrow">ONE NIGHT ONLY</div>
-          <div class="tk-band">${k.bandLatin}</div>
-          <div class="tk-band-ar">${k.bandArabic}</div>
-          <div class="tk-city">LIVE IN ${k.cityLatin}</div>
+      <div class="tk-flip" id="tkFlip">
+        <div class="ticket tk-front" dir="ltr">
+          <div class="tk-top">
+            <div class="tk-eyebrow">ONE NIGHT ONLY</div>
+            <div class="tk-band">${k.bandLatin}</div>
+            <div class="tk-band-ar">${k.bandArabic}</div>
+            <div class="tk-city">LIVE IN ${k.cityLatin}</div>
+          </div>
+          <div class="tk-perf"></div>
+          <div class="tk-details">
+            <div class="tk-cell"><div class="tk-label">DATE</div><div class="tk-value">${k.dateLatin}</div></div>
+            <div class="tk-cell"><div class="tk-label">VENUE</div><div class="tk-value">${k.venueLatin}</div></div>
+            ${extra.join("")}
+            <div class="tk-cell wide"><div class="tk-label">ADMIT ONE</div>
+              <div class="tk-value" dir="rtl">${k.dateDisplay} · ${k.venueArabic}</div></div>
+            <div class="tk-cell wide"><div class="tk-label">FOR</div>
+              <div class="tk-for" dir="rtl">${C.herName} ❤</div></div>
+          </div>
+          <div class="tk-barcode"></div>
+          <div class="tk-serial">${k.serial}</div>
         </div>
-        <div class="tk-perf"></div>
-        <div class="tk-details">
-          <div class="tk-cell"><div class="tk-label">DATE</div><div class="tk-value">${k.dateLatin}</div></div>
-          <div class="tk-cell"><div class="tk-label">VENUE</div><div class="tk-value">${k.venueLatin}</div></div>
-          ${extra.join("")}
-          <div class="tk-cell wide"><div class="tk-label">ADMIT ONE</div>
-            <div class="tk-value" dir="rtl">${k.dateDisplay} · ${k.venueArabic}</div></div>
-          <div class="tk-cell wide"><div class="tk-label">FOR</div>
-            <div class="tk-for" dir="rtl">${C.herName} ❤</div></div>
+        <div class="ticket tk-back">
+          <div class="tk-back-heart">🤍</div>
+          <p class="tk-back-line">هاي مو بس تذكرة.<br>هاي أول ليلة من الليالي اللي<br>راح نحچي عنها بعد سنين.</p>
+          <div class="tk-serial">${k.serial} · ${C.herName} ♡ ${C.myName}</div>
         </div>
-        <div class="tk-barcode"></div>
-        <div class="tk-serial">${k.serial}</div>
       </div>
     </div>
-    ${GAP("m")}
-    ${L("هاي إلچ. إلچ بس 🙂", "line--dim", 2.2)}
-    ${BTN("اكو شي بعد…", "more", "btn--ghost", 3.4)}
+    ${GAP("s")}
+    ${L("دوسي عليها… إلها وجه ثاني 🙂", "line--dim", 2.4)}
+    <p class="line countdown" id="cd" style="--d:3s"></p>
+    ${BTN("اكو شي بعد…", "more", "btn--ghost", 3.6)}
   `, (root) => {
     if (C.revealTrack && !sceneTicket.played){
       sceneTicket.played = true;
@@ -618,21 +697,60 @@ function sceneTicket(){
       a.volume = .8;
       a.play().catch(() => {});
     }
-    on(root, "#tw", () => root.querySelector("#tw").classList.toggle("zoomed"));
+    on(root, "#tw", () => { buzz(12); root.querySelector("#tkFlip").classList.toggle("flipped"); });
     on(root, "#more", sceneLetter);
+
+    // عدّاد تنازلي حي (إذا محدد dateISO بالإعدادات)
+    if (k.dateISO){
+      const cd = root.querySelector("#cd");
+      const target = new Date(k.dateISO).getTime();
+      const fmt = (n) => n.toLocaleString("ar-EG");
+      const tick = () => {
+        if (!document.contains(cd)) return clearInterval(iv);
+        const left = target - Date.now();
+        if (left <= 0){ cd.textContent = "الليلة هي الليلة 🎶"; return clearInterval(iv); }
+        const d = Math.floor(left / 864e5),
+              h = Math.floor(left % 864e5 / 36e5),
+              m = Math.floor(left % 36e5 / 6e4);
+        cd.textContent = `باقي ${fmt(d)} يوم · ${fmt(h)} ساعة · ${fmt(m)} دقيقة`;
+      };
+      const iv = setInterval(tick, 1e4);
+      tick();
+    }
   });
 }
 
-/* ١٢ — الرسالة الأخيرة */
+/* ١٢ — الرسالة الأخيرة + الأغنية */
 function sceneLetter(){
+  const hasSong = C.song && C.song.youtubeId;
   show(() => `
     ${L("مني، إلچ:", "line--dim", .4)}
+    ${hasSong ? `
+      <div class="song-card" id="songCard" style="--d:1s">
+        <span class="song-play">▶</span>
+        <span class="song-meta">
+          <b>${C.song.kicker}</b>
+          <i>${C.song.title}</i>
+        </span>
+      </div>` : ""}
     ${GAP("m")}
-    <p class="letter" style="--d:1.2s">${C.finalMessage}</p>
+    <p class="letter" style="--d:${hasSong ? 1.8 : 1.2}s">${C.finalMessage}</p>
     ${GAP("m")}
-    <p class="letter-sign" style="--d:3.2s">— ${C.myName}</p>
+    <p class="letter-sign" style="--d:3.8s">— ${C.myName}</p>
     ${C.secret.enabled ? `<div class="gap-l"></div>${BTN("بعدچ ما خلصتي 👀", "egg", "btn--ghost", 7)}` : ""}
   `, (root) => {
+    if (hasSong){
+      on(root, "#songCard", () => {
+        // تضمين الفيديو الرسمي من قناة كايروكي — يشتغل بلمستها (مسموح بالموبايل)
+        const card = root.querySelector("#songCard");
+        card.outerHTML = `
+          <div class="song-frame" style="--d:0s">
+            <iframe src="https://www.youtube-nocookie.com/embed/${C.song.youtubeId}?autoplay=1&playsinline=1&rel=0"
+              title="${C.song.title}" frameborder="0"
+              allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+          </div>`;
+      });
+    }
     if (C.secret.enabled) on(root, "#egg", sceneSecret);
   });
 }
@@ -644,7 +762,20 @@ function sceneSecret(){
     ${GAP("m")}
     <p class="letter" style="--d:${C.secret.photo ? 1.6 : .5}s">${C.secret.message}</p>
     ${GAP("l")}
-    ${L("هسه خلصتي 🙂 أشوفچ هناك ✦", "line--dim", 4.5)}
+    <button class="btn heart-btn" id="heart" style="--d:4.5s" aria-label="قلب">❤️</button>
+    ${L("دوسي عالقلب", "line--dim", 5.3)}
+  `, (root) => on(root, "#heart", sceneHearts));
+}
+
+/* ١٤ — الختام: مطر قلوب */
+function sceneHearts(){
+  sky.seed("hearts");
+  buzz([20, 60, 20]);
+  show(() => `
+    ${GAP("l")}
+    ${L(`أحبچ يا ${C.herName} ❤️`, "line--huge", 1)}
+    ${GAP("m")}
+    ${L("أشوفچ بالحفلة ✦", "line--dim", 2.8)}
   `);
 }
 
