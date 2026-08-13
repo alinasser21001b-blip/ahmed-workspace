@@ -5,8 +5,9 @@ communities, study groups, messaging, classrooms, lectures, quizzes and an AI
 layer — built as **one academic graph**, not as separate products stapled
 together.
 
-> Status: **Phase 0 (Foundation) and Phase 1 (Identity) complete.**
-> 114 tests passing. The first user journey runs end-to-end in a browser.
+> Status: **Phases 0–2 complete** — Foundation, Identity, and Social core.
+> 154 tests passing. The full journey — sign up through publishing a post,
+> commenting, liking and saving — runs end-to-end in a real browser.
 
 ## Read this first
 
@@ -55,8 +56,8 @@ pnpm dev:mobile                             # Expo dev server
 
 ```bash
 pnpm typecheck          # all four packages
-pnpm test:unit          # 72 unit tests (@sos/core)
-pnpm test:integration   # 42 integration tests against real Postgres
+pnpm test:unit          # 81 unit tests (@sos/core)
+pnpm test:integration   # 73 integration tests against real Postgres
 ```
 
 Integration tests run against a **real database**, not a mock. Permission bugs
@@ -91,6 +92,9 @@ layout bugs actually appear.
 | Every async surface has loading / empty / error / retry | `states.tsx` primitives |
 | Learning signals are not claims about learning | Named `learning signals` in schema, API and UI, with a visible disclaimer |
 | Messages survive bad networks | Server-assigned `seq`, client-minted idempotency key, unit-tested state machine |
+| The feed cannot leak across cohorts | The permission filter is pushed into the SQL `WHERE`, never applied after the fetch ([ADR-0003](docs/adr/0003-single-authorization-layer.md)) |
+| Ranking matches its documented formula | SQL and TypeScript implementations compared by a parity test ([ADR-0007](docs/adr/0007-ranking-in-sql-with-parity-test.md)) |
+| An upload is what it claims to be | Format read from magic bytes; the declared MIME type is discarded |
 
 ## Deliberately not built yet
 

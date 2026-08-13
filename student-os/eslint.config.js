@@ -1,4 +1,5 @@
 import js from '@eslint/js';
+import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 /**
@@ -52,6 +53,18 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  {
+    // The client is React. `exhaustive-deps` catches the exact class of bug
+    // that made a freshly-published post fail to appear in the feed, so it is
+    // an error rather than a warning — and the two places we deliberately
+    // diverge carry an explicit disable comment explaining why.
+    files: ['apps/mobile/**/*.ts', 'apps/mobile/**/*.tsx'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: {
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
     },
   },
   {

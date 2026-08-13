@@ -16,6 +16,7 @@
     "@sos/contracts": "workspace:*",
     "expo": "~57.0.12",
     "expo-constants": "~57.0.10",
+    "expo-image-picker": "^57.0.9",
     "expo-linking": "~57.0.5",
     "expo-localization": "~57.0.1",
     "expo-router": "~57.0.12",

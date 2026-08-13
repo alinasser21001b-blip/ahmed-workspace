@@ -2,7 +2,7 @@
 
 > Constitution §89.C. The **migrations are the source of truth**
 > (`apps/api/migrations/*.sql`); this document explains the decisions behind
-> them. 77 tables across six migrations.
+> them. 78 tables across seven migrations.
 
 ## 1. Conventions
 
@@ -127,7 +127,27 @@ before a single model call ships. A row in `ai_sources` is *proof* a source was
 retrieved and passed to the model — that is what makes the citation validator
 able to reject a fabricated reference (§28) rather than merely discourage one.
 
-### 3.10 Sessions store hashes, never tokens
+### 3.10 Files carry an academic context
+
+Added in `0007`. `canAccessFile` decides from the file's placement, but the
+original `files` table had only an owner and a visibility — so a `stage`-visible
+attachment had no stage to compare against and the policy could only answer
+"owner or nobody". Denormalised at upload time, for the same reason content is.
+
+`attached_at` marks the moment an upload is claimed by a post. Until then it is
+owner-only, which means an upload that is never posted never becomes readable,
+and orphaned uploads are cheap to find and sweep.
+
+### 3.11 `content_views` is one row per viewer, not per impression
+
+The feed's seen-penalty needs "has *this* student seen it?", which the aggregate
+`view_count` cannot answer. An append-only impression log would be the
+fastest-growing table in the product for no V1 benefit, so the table holds one
+row per (user, content) with a repeat counter. `content_items.view_count` is
+incremented only on the first view, so it stays a distinct-viewer count rather
+than a refresh counter.
+
+### 3.12 Sessions store hashes, never tokens
 
 `sessions.token_hash` holds SHA-256 of an opaque refresh token.
 `rotated_to_id` makes reuse of a rotated token detectable, which is the

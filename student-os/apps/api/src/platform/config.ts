@@ -36,7 +36,20 @@ const envSchema = z.object({
    */
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
 
-  /** Object storage. Optional in Phase 0; required before uploads ship. */
+  /**
+   * Object storage. `local` writes to disk and is for development and test
+   * only — a container filesystem is ephemeral, so a production deploy on
+   * `local` would lose every upload on restart.
+   */
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_LOCAL_DIR: z.string().default('.storage'),
+  /**
+   * Signing key for media URLs. Separate from JWT_SECRET so that rotating one
+   * does not invalidate the other, and defaulted to JWT_SECRET only in
+   * development.
+   */
+  MEDIA_URL_SECRET: z.string().min(32).optional(),
+  MEDIA_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
   STORAGE_BUCKET: z.string().optional(),
   STORAGE_REGION: z.string().optional(),
   STORAGE_ENDPOINT: z.string().optional(),
@@ -56,6 +69,8 @@ export interface AppConfig {
   isProduction: boolean;
   isTest: boolean;
   corsOrigins: string[] | true;
+  /** Falls back to JWT_SECRET outside production, where a second secret is friction. */
+  mediaUrlSecret: string;
 }
 
 let cached: AppConfig | null = null;
@@ -71,11 +86,23 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const env = parsed.data;
+
+  // A production deploy that writes uploads to a container filesystem loses
+  // them on the next restart. Fail at boot rather than at the first user
+  // complaint about a missing image.
+  if (env.NODE_ENV === 'production' && env.STORAGE_DRIVER === 'local') {
+    throw new Error('STORAGE_DRIVER=local is not permitted in production.');
+  }
+  if (env.NODE_ENV === 'production' && !env.MEDIA_URL_SECRET) {
+    throw new Error('MEDIA_URL_SECRET is required in production.');
+  }
+
   return {
     env,
     isProduction: env.NODE_ENV === 'production',
     isTest: env.NODE_ENV === 'test',
     corsOrigins: env.CORS_ORIGINS === '*' ? true : env.CORS_ORIGINS.split(',').map((o) => o.trim()),
+    mediaUrlSecret: env.MEDIA_URL_SECRET ?? env.JWT_SECRET,
   };
 }
 

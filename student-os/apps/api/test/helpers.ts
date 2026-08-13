@@ -1,4 +1,4 @@
-import type { AuthSession } from '@sos/contracts';
+import type { AuthSession, ContentItem } from '@sos/contracts';
 import { buildApp, type App } from '../src/http/app.js';
 import { queryOne, queryRows } from '../src/platform/db.js';
 
@@ -163,4 +163,91 @@ export async function onboardedUser(
 
 export function auth(session: AuthSession): { authorization: string } {
   return { authorization: `Bearer ${session.tokens.accessToken}` };
+}
+
+// --- Phase 2 helpers --------------------------------------------------------
+
+/**
+ * A valid 1×1 PNG.
+ *
+ * Real bytes, not a stub: the upload path sniffs magic bytes and reads
+ * dimensions from the IHDR chunk, so a placeholder would be rejected — which
+ * is exactly what the tests are there to verify.
+ */
+export const TINY_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+/** Bytes that are not any image format, used to prove MIME sniffing works. */
+export const NOT_AN_IMAGE = Buffer.from('#!/bin/sh\necho definitely not a png\n', 'utf8');
+
+/** Builds a multipart body by hand — `inject` has no form-data helper. */
+export function multipartBody(
+  bytes: Buffer,
+  filename: string,
+  declaredMime: string,
+): { payload: Buffer; headers: Record<string, string> } {
+  const boundary = `----sosTest${Math.random().toString(36).slice(2)}`;
+  const head = Buffer.from(
+    `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+      `Content-Type: ${declaredMime}\r\n\r\n`,
+    'utf8',
+  );
+  const tail = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+  return {
+    payload: Buffer.concat([head, bytes, tail]),
+    headers: { 'content-type': `multipart/form-data; boundary=${boundary}` },
+  };
+}
+
+export async function uploadImage(
+  session: AuthSession,
+  bytes: Buffer = TINY_PNG,
+  filename = 'photo.png',
+  declaredMime = 'image/png',
+): Promise<{ statusCode: number; body: { id: string; url: string; width: number | null } }> {
+  const app = await getApp();
+  const { payload, headers } = multipartBody(bytes, filename, declaredMime);
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/files',
+    headers: { ...headers, ...auth(session) },
+    payload,
+  });
+  return {
+    statusCode: response.statusCode,
+    body: response.statusCode === 201 ? response.json() : { id: '', url: '', width: null },
+  };
+}
+
+export async function createPost(
+  session: AuthSession,
+  payload: Record<string, unknown>,
+): Promise<{ statusCode: number; body: ContentItem }> {
+  const app = await getApp();
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/content',
+    headers: auth(session),
+    payload,
+  });
+  return { statusCode: response.statusCode, body: response.json() };
+}
+
+export async function readFeed(
+  session: AuthSession,
+  query = '',
+): Promise<{ items: ContentItem[]; nextCursor: string | null }> {
+  const app = await getApp();
+  const response = await app.inject({
+    method: 'GET',
+    url: `/v1/feed${query}`,
+    headers: auth(session),
+  });
+  if (response.statusCode !== 200) {
+    throw new Error(`feed failed (${response.statusCode}): ${response.body}`);
+  }
+  return response.json();
 }

@@ -9,8 +9,12 @@ import {
 } from 'fastify-type-provider-zod';
 import { getConfig } from '../platform/config.js';
 import { getLogger } from '../platform/logger.js';
+import multipart from '@fastify/multipart';
 import { academicRoutes } from '../modules/academic/academic.routes.js';
 import { authRoutes } from '../modules/auth/auth.routes.js';
+import { contentRoutes } from '../modules/content/content.routes.js';
+import { filesRoutes } from '../modules/files/files.routes.js';
+import { socialRoutes } from '../modules/social/social.routes.js';
 import { healthRoutes } from '../modules/health/health.routes.js';
 import { usersRoutes } from '../modules/users/users.routes.js';
 import { authenticatePlugin } from './plugins/authenticate.js';
@@ -58,7 +62,13 @@ export async function buildApp() {
   await app.register(cors, {
     origin: config.corsOrigins,
     credentials: true,
+    // Must be explicit: the default set omits PUT, PATCH and DELETE, which
+    // silently breaks every mutation from a browser client while leaving reads
+    // working — a failure mode that looks like a client bug for days.
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['content-type', 'authorization', 'accept', 'accept-language', 'x-request-id'],
     exposedHeaders: ['x-request-id'],
+    maxAge: 86_400,
   });
 
   await app.register(rateLimit, {
@@ -70,6 +80,12 @@ export async function buildApp() {
     keyGenerator: (request) => request.actor?.userId ?? request.ip,
   });
 
+  // Uploads bypass the 1 MiB JSON body limit; the per-file cap is enforced by
+  // the upload route and re-checked against the actual byte count.
+  await app.register(multipart, {
+    limits: { fileSize: 8 * 1024 * 1024, files: 1, fields: 4 },
+  });
+
   await app.register(authenticatePlugin);
   await app.register(errorHandlerPlugin);
 
@@ -77,6 +93,9 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: '/v1/auth' });
   await app.register(academicRoutes, { prefix: '/v1/academic' });
   await app.register(usersRoutes, { prefix: '/v1' });
+  await app.register(filesRoutes, { prefix: '/v1' });
+  await app.register(contentRoutes, { prefix: '/v1' });
+  await app.register(socialRoutes, { prefix: '/v1' });
 
   return app;
 }

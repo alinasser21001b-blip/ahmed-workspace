@@ -5,7 +5,8 @@ import { mkdir } from 'node:fs/promises';
  * E2E: the first working user journey (§91).
  *
  *   sign up → university → college → program → stage → profile + interests
- *           → academic home
+ *           → academic home → create a post → see it in the feed
+ *           → open the thread → comment → like → save
  *
  * The Constitution is explicit that this journey must work end to end before
  * the product expands, so it is a test rather than a manual checklist. It runs
@@ -123,11 +124,7 @@ try {
   check(home.includes(displayName), 'home greets the student by name');
   check(home.includes('كلية الطب'), 'home shows the real college from the profile');
   check(home.includes('المرحلة الخامسة'), 'home shows the real stage from the profile');
-  check(
-    home.includes('هذه مؤشرات نشاط دراسي، وليست تقييماً لمستواك.'),
-    'learning signals carry their honesty disclaimer',
-  );
-  check(home.includes('لا يوجد جديد بعد'), 'the empty feed has a real empty state');
+  check(home.includes('كن أول من ينشر'), 'the empty feed has a real empty state');
 
   console.log('step 5 — the five primary destinations');
   for (const [tab, label] of [
@@ -143,7 +140,53 @@ try {
   check(shell.includes('لا توجد مجموعات دراسية بعد'), 'groups shell has an empty state');
   check(shell.includes('مقطع تعليمي'), 'create sheet offers academic content types');
   check(shell.includes('مواضيع تحتاج مراجعة'), 'learn shell exposes weak topics');
+  check(
+    shell.includes('هذه مؤشرات نشاط دراسي، وليست تقييماً لمستواك.'),
+    'learning signals carry their honesty disclaimer where they are shown',
+  );
   check(shell.includes('لا توجد محادثات'), 'chat shell has an empty state');
+
+  console.log('step 6 — the social core loop (phase 2)');
+  await visibleText('الرئيسية').click();
+  await settle('14-home-feed');
+
+  const postBody = `منشور اختباري ${Date.now()}`;
+  await page.getByLabel('منشور جديد').last().click();
+  await settle('15-composer');
+  check(
+    await page.getByText('من يمكنه الرؤية').last().isVisible(),
+    'the composer makes the audience an explicit choice',
+  );
+
+  await page.locator('textarea:visible, input:visible').first().fill(postBody);
+  await page.getByRole('button', { name: 'نشر' }).last().click();
+  await page.waitForTimeout(2500);
+  await settle('16-post-detail');
+  check((await page.locator('body').innerText()).includes(postBody), 'the new post opens after publishing');
+
+  const comment = 'تعليق اختباري على المنشور مع تفاصيل كافية لتكون مساهمة.';
+  await page.getByLabel('اكتب تعليقاً…').last().fill(comment);
+  await page.getByLabel('إرسال').last().click();
+  await page.waitForTimeout(1800);
+  await settle('17-comment-posted');
+  check((await page.locator('body').innerText()).includes(comment), 'the comment appears in the thread');
+
+  await page.getByLabel('إعجاب').last().click();
+  await page.getByLabel('حفظ').last().click();
+  await page.waitForTimeout(1200);
+  await settle('18-liked-and-saved');
+  check(
+    await page.getByLabel('محفوظ').last().isVisible(),
+    'saving flips the affordance to its saved state',
+  );
+
+  await page.getByLabel('رجوع').last().click();
+  await page.waitForTimeout(2000);
+  await settle('19-feed-with-post');
+  check(
+    (await page.locator('body').innerText()).includes(postBody),
+    'the post is in the author’s own cohort feed',
+  );
 
   check(jsErrors.length === 0, `no uncaught JS errors (saw ${jsErrors.length})`);
   if (jsErrors.length > 0) console.log(jsErrors.slice(0, 5));

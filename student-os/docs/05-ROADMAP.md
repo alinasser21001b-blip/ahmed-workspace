@@ -10,8 +10,8 @@
 | --- | --- | --- |
 | **0 — Foundation** | repo, architecture, database, auth, config, design system, navigation, error handling, logging, tests, CI | ✅ **Done** |
 | **1 — Identity** | signup/login, profile, academic placement, interests, privacy | ✅ **Done** |
-| 2 — Social core | feed, posts, media upload, comments, reactions, bookmarks, reports | Next |
-| 3 — Community | communities, groups, membership, group posts | |
+| **2 — Social core** | feed, posts, image upload, comments, reactions, bookmarks, reports, follow/block/mute | ✅ **Done** |
+| 3 — Community | communities, groups, membership, group posts | Next |
 | 4 — Messaging | 1:1 + group chat, realtime, presence, typing, receipts, attachments | |
 | 5 — Learning | courses, classrooms, lectures, resources, PDF viewing, discussion | |
 | 6 — AI v1 | lecture summary, ask-AI, MCQ generation — all source-grounded | |
@@ -37,8 +37,16 @@
 - privacy settings default to cohort scope
 - **the first journey (§91, first half) passes end-to-end in a browser, in Arabic**
 
-**Phase 2.** A student creates a post with an image, it appears in cohort-mates'
-feeds and nowhere else, and cross-cohort access is proven blocked by test.
+**Phase 2 — met.**
+- a post with an image reaches cohort-mates' feeds and nowhere else, proven by
+  test at both the feed and single-item level
+- private, followers-scoped, blocked, deleted and suspended-author content are
+  each excluded from the feed by test
+- the feed pages without duplicating or dropping rows, on a ranked ordering
+- uploads are validated by magic bytes, not by the client's claim; media cannot
+  be attached by a non-owner or reused across posts
+- SQL and TypeScript ranking agree to six decimal places (parity test)
+- the browser journey now runs through publish → comment → like → save
 
 **Phase 3.** A private group's posts are invisible to non-members through the
 API, search, and (later) AI retrieval — one policy, three surfaces, one test

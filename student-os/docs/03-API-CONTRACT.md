@@ -97,13 +97,52 @@ Every node returns both `nameAr` and `nameEn`.
 `Profile.viewer` carries the relationship (`isSelf`, `isFollowing`,
 `isBlocked`, `canMessage`) so the client never has to infer permissions.
 
+### Files — `/v1`
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| POST | `/files` | required | 30/min. Multipart. Format read from magic bytes; the declared type is ignored. Max 8 MiB. Lands unattached and owner-only. |
+| GET | `/files/:id/raw` | **signature** | Serves bytes. Unauthenticated by necessity — an `<img>` cannot send a header — so the signature is the credential. |
+| GET | `/files/:id` | required | Mints a fresh signed URL after a policy check. |
+| DELETE | `/files/:id` | required | Owner only. |
+
+### Content and the feed — `/v1`
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| GET | `/feed` | required | Scopes: `home` (ranked), `recent`, `author`, `saved`. Cursor-paginated. |
+| POST | `/content` | required | 60/min. Author and academic context come from the token and profile, never the body. |
+| GET | `/content/:id` | required | Honours the admin bypass for moderation; 404 when not visible. |
+| PATCH | `/content/:id` | required | Author only. |
+| DELETE | `/content/:id` | required | Author, platform admin, or container moderator. |
+| PUT/DELETE | `/content/:id/reaction` | required | Returns the reconciled like count. |
+| PUT/DELETE | `/content/:id/bookmark` | required | |
+| POST | `/content/:id/view` | required | 600/min. Counts a distinct viewer once. |
+| GET/POST | `/content/:id/comments` | required | Threads are one level deep. |
+| PATCH/DELETE | `/comments/:id` | required | Author, post author, or platform admin may delete. |
+| PUT/DELETE | `/comments/:id/reaction` | required | |
+
+### Social graph and reporting — `/v1`
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| GET | `/profiles/:handle/relationship` | required | |
+| PUT/DELETE | `/profiles/:handle/follow` | required | Unfollow does not require visibility. |
+| PUT/DELETE | `/profiles/:handle/block` | required | Blocking severs follows in both directions. |
+| GET | `/profiles/:handle/followers` / `/following` | required | Cursor-paginated, block-filtered. |
+| PUT/DELETE | `/mutes` | required | user / conversation / group / community / topic. |
+| POST | `/reports` | required | 20/min. One open report per reporter per target. |
+
+**CORS.** The allowed-methods list is set explicitly. The library default omits
+`PUT`, `PATCH` and `DELETE`, which leaves reads working and every mutation from
+a browser failing at preflight — a failure that looks like a client bug.
+
 ## 3. Contracted for later phases
 
 Shapes are settled; implementation follows the roadmap.
 
 | Phase | Surface |
 | --- | --- |
-| 2 — Social | `POST/GET/PATCH/DELETE /v1/content`, `/v1/content/:id/comments`, `/reactions`, `/bookmarks`, `GET /v1/feed` |
 | 3 — Community | `/v1/communities`, `/v1/groups`, `/members`, join/leave |
 | 4 — Messaging | `/v1/conversations`, `/messages` (cursor by `seq`), `WS /v1/realtime` |
 | 5 — Learning | `/v1/classrooms`, `/lectures`, `/materials`, `/v1/files` (signed URLs) |

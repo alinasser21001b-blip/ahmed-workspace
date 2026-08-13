@@ -143,6 +143,52 @@ export class ApiClient {
     }
   }
 
+  /**
+   * Multipart upload.
+   *
+   * Deliberately does NOT set `content-type`: the platform has to generate the
+   * multipart boundary itself, and setting the header manually produces a body
+   * the server cannot parse.
+   *
+   * It also does not go through `request`, because a `FormData` body must not
+   * be JSON-stringified. The 401-refresh-and-replay is repeated here rather
+   * than shared, since replaying an upload means re-reading a stream.
+   */
+  async upload<T>(path: string, form: FormData): Promise<T> {
+    const send = async (): Promise<Response> => {
+      const token = this.options.tokens?.getAccessToken();
+      try {
+        return await fetch(`${this.options.baseUrl}${path}`, {
+          method: 'POST',
+          headers: token ? { authorization: `Bearer ${token}` } : {},
+          body: form,
+        });
+      } catch (cause) {
+        throw new NetworkError(cause);
+      }
+    };
+
+    let response = await send();
+    if (response.status === 401 && this.options.tokens?.getRefreshToken()) {
+      if (await this.refreshTokens()) response = await send();
+    }
+
+    const text = await response.text();
+    const payload: unknown = text ? safeParse(text) : null;
+
+    if (!response.ok) {
+      const error = (payload as ErrorEnvelope | null)?.error;
+      throw new ApiError(
+        error?.code ?? 'INTERNAL',
+        error?.message ?? 'Upload failed',
+        response.status,
+        error?.requestId ?? 'unknown',
+        error?.details,
+      );
+    }
+    return payload as T;
+  }
+
   get<T>(path: string, init: { auth?: boolean } = {}): Promise<T> {
     return this.request<T>(path, { method: 'GET', ...init });
   }

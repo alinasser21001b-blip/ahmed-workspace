@@ -33,6 +33,9 @@ export default function RootLayout(): React.JSX.Element {
               <Stack.Screen name="(auth)" />
               <Stack.Screen name="(onboarding)" />
               <Stack.Screen name="(tabs)" />
+              {/* Modal-style routes that sit above the tab shell. */}
+              <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="post/[id]" />
             </Stack>
           </SessionProvider>
         </ThemeProvider>

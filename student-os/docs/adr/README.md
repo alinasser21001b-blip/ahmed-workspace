@@ -11,3 +11,4 @@ future us) can tell the difference between a considered choice and an accident.
 | [0004](0004-sql-over-orm.md) | Hand-written SQL in repositories, not an ORM |
 | [0005](0005-scrypt-password-hashing.md) | scrypt from Node's standard library for password hashing |
 | [0006](0006-expo-universal-client.md) | Expo + Expo Router for iOS, Android and web from one codebase |
+| [0007](0007-ranking-in-sql-with-parity-test.md) | Feed ranking in SQL, kept honest by a parity test against TypeScript |

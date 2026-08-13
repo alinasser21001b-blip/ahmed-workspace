@@ -47,8 +47,14 @@ export const FEED_WEIGHTS = {
   seenPenalty: 0.35,
 } as const;
 
-/** Recency decays with a 36-hour half-life: fast enough for a daily-use app. */
-const RECENCY_HALF_LIFE_HOURS = 36;
+/**
+ * Recency decays with a 36-hour half-life: fast enough for a daily-use app.
+ *
+ * Exported because the feed query implements this same formula in SQL, and the
+ * constants must have one source of truth. A parity test asserts the two
+ * implementations agree.
+ */
+export const RECENCY_HALF_LIFE_HOURS = 36;
 
 export function scoreFeedCandidate(candidate: FeedCandidate, now: Date = new Date()): number {
   const ageHours = Math.max(0, (now.getTime() - candidate.createdAt.getTime()) / 3_600_000);

@@ -12,3 +12,6 @@ coverage/
 web-build/
 *.log
 .DS_Store
+
+# Local storage driver output — uploads must never be committed.
+.storage/
