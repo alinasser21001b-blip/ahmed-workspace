@@ -14,6 +14,7 @@
 | **3 — Community** | communities, groups, membership, join requests, group posts, search | ✅ **Done and closed** |
 | **4 — Messaging** | 1:1 + group chat, realtime, presence, typing, receipts, attachments | ✅ **Done** |
 | **5 — Knowledge foundation** | knowledge type, difficulty, language, sources, corrections, topic surface, learning signals, Learn | ✅ **Done** |
+| **5.1 — CI & test infrastructure** | root-level GitHub Actions workflow, test-database safety contract | ✅ **Done** |
 | 5b — Classrooms | classrooms, lectures, materials, PDF viewing, discussion attached to a lecture | Next |
 | 6 — AI v1 | lecture summary, ask-AI, MCQ generation — all source-grounded | |
 | 7 — Quizzes | authoring, taking, attempts, scoring, explanations, topic performance | |
@@ -150,6 +151,29 @@ Classrooms move to 5b, unchanged in scope.
   mistaken for the author ([ADR-0013](adr/0013-provenance-classes.md))
 - 24 new integration tests; 167 integration and 201 unit tests pass; the layout
   audit covers the two new surfaces at 272 checks
+
+**Phase 5.1 — met.**
+
+Infrastructure only; no product change. Both defects predate Phase 5 and were
+found by merging it ([`07-PHASE-5-AUDIT.md` §10](07-PHASE-5-AUDIT.md)).
+
+- the CI workflow lives at the **repository root**, where GitHub Actions can
+  actually find it. It had been nested inside `student-os/`, so the API reported
+  zero registered workflows and Phases 0–5 all merged with zero checks — which
+  reads as "nothing to report" and meant "nothing was run"
+- the workflow is scoped to this project by a `paths` filter and
+  `working-directory`, so it cannot reach the sibling projects in the workspace
+- migration verification now **asserts** that applied migrations equal the
+  `.sql` files on disk, rather than trusting an exit code
+- the integration suite can no longer target a development or production
+  database. One contract in `database-safety.ts` — name ends in `_test`, host is
+  private, `NODE_ENV` is not production — asserted at the Vitest config, at the
+  global setup, and again inside `resetTestDatabase` at the moment of
+  destruction
+- `DATABASE_URL` is no longer consulted when choosing the test target, and an
+  ambient one that disagrees fails the run rather than silently winning it
+- 22 unit tests cover the contract itself, and `pnpm test:unit` no longer loads
+  the database-dropping global setup at all
 
 **Phase 5b.** A student opens a classroom, reads a lecture, and downloads a
 resource through a signed URL that a non-member cannot use.

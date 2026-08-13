@@ -13,7 +13,7 @@
     "db:reset": "tsx src/platform/migrate-cli.ts --reset",
     "db:seed": "tsx scripts/seed.ts",
     "test": "vitest run",
-    "test:unit": "vitest run --dir src --passWithNoTests",
+    "test:unit": "vitest run --config vitest.unit.config.ts --passWithNoTests",
     "test:integration": "vitest run --dir test",
     "demo:seed": "tsx scripts/seed-demo.ts"
   },

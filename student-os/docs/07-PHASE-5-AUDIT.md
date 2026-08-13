@@ -470,3 +470,68 @@ tests were looking for. The fix was to default the helper to
 `?scope=recent&limit=50`. Both scopes run the identical permission predicate, so
 no test lost the security property it was written to assert — but it is worth
 recording that a ranking change can break tests that are not about ranking.
+
+---
+
+## 10. Phase 5 merged, and Phase 5.1
+
+**Phase 5 merged into `main` on 13 August 2026** — PR #5, merge commit
+`e2693df`. The branch carried four commits, because Phase 4 had never been
+merged either: Phase 4 messaging, the review tooling, Phase 5, and a
+cross-origin media fix. Post-merge verification on `main` was green across
+typecheck, lint, 201 unit, 167 integration, 11/11 migrations from empty, 78/78
+API smoke, both browser journeys and the 272/272 layout audit.
+
+The merge also surfaced two infrastructure defects that had been true for every
+prior phase, and Phase 5.1 exists to close them. Neither is a product change.
+
+### 10.1 CI had never run
+
+The workflow lived at `student-os/.github/workflows/ci.yml`. GitHub Actions only
+discovers workflows in `.github/workflows/` at the **repository root**, and this
+repository's root is the `ahmed-workspace` workspace, which holds `student-os`
+alongside `furniture-os`, `medmind` and a static site. The GitHub API reported
+**zero workflows registered**; every pull request, including the ones that
+merged Phases 0 through 5, showed zero checks.
+
+Zero checks reads as "nothing to report". It meant "nothing was run".
+
+Phase 5.1 moves the workflow to the repository root, scopes it to `student-os`
+with a `paths` filter and `working-directory`, and adds an explicit assertion to
+the migration step: the number of applied migrations must equal the number of
+`.sql` files on disk, rather than the step merely exiting zero.
+
+### 10.2 The integration suite could drop the development database
+
+`test/global-setup.ts` resolved its database with
+`process.env.DATABASE_URL ??= ...`. That reads as a default and behaves as an
+override — whatever the shell already had, won. Since the API loads no `.env`
+file, `source apps/api/.env` is the ambient local practice, and a developer who
+did that before `pnpm test:integration` handed the destructive reset their
+development database. It was dropped and re-migrated. Observed, not theorised.
+
+Two things kept it quiet:
+
+- `resetDatabase` permits `_dev` — correctly, because `pnpm db:reset` exists to
+  reset the development database. The right guard for the CLI is the wrong guard
+  for the suite.
+- Vitest's `test.env` block configures the test **workers**; `globalSetup` runs
+  in the parent process and never sees it. So the workers still connected to
+  `studentos_test` while the drop landed on `studentos_dev` — meaning the test
+  database was silently **not** reset that run, and the suite ran on rows left
+  over from previous runs. The stale data is what failed assertions, which
+  pointed investigation at the tests rather than at the environment.
+
+Phase 5.1 replaces the default with a contract, stated once in
+`src/platform/database-safety.ts` and asserted at three layers: Vitest config
+load, global setup, and `resetTestDatabase` at the moment of destruction. A
+database is destroyable only if its name ends in `_test` and its host is
+private. `DATABASE_URL` is no longer consulted when choosing the target, and an
+ambient one that disagrees fails the run rather than winning it.
+
+The innermost assertion is the load-bearing one: a guard that lives only in the
+caller is a guard the next caller can skip.
+
+Proven by a deliberate negative test, not by inspection: pointing
+`DATABASE_URL` at `studentos_dev` fails the run before a connection is opened,
+and the development database is byte-identical afterwards.

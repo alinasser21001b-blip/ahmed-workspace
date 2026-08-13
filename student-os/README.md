@@ -82,13 +82,55 @@ pnpm dev:mobile                             # Expo dev server
 
 ```bash
 pnpm typecheck          # all four packages
-pnpm test:unit          # 201 unit tests (@sos/core)
+pnpm test:unit          # 223 unit tests (@sos/core + @sos/api), no database needed
 pnpm test:integration   # 167 integration tests against real Postgres
 ```
 
 Integration tests run against a **real database**, not a mock. Permission bugs
 — the class of bug this product can least afford — do not reproduce against a
 mock, because the mock agrees with whatever the code believes.
+
+### Which database the tests use, and why you cannot get it wrong
+
+The integration suite **drops and rebuilds the schema on every run**. That is
+deliberate — it re-proves the migration path each time instead of trusting it —
+and it means the only thing standing between the suite and a database you care
+about is a connection string.
+
+So the string is not taken from your environment. It is resolved from
+`TEST_DATABASE_URL`, defaulting to
+`postgres://postgres:postgres@localhost:5432/studentos_test`, and checked
+against a contract before anything connects:
+
+| A database may be destroyed by the test suite only if | |
+| --- | --- |
+| its **name ends in `_test`** | rules out `studentos_dev` by name, not by hope |
+| its **host is private** | localhost, or a single-label container hostname. A production database lives behind a dotted public name and cannot satisfy this |
+| `NODE_ENV` **is not `production`** | |
+
+`DATABASE_URL` is never consulted when choosing the target. If one is set in
+your shell and it is not this run's test database, the suite **refuses to
+start** rather than overriding it silently — because a shell that has the wrong
+`DATABASE_URL` is about to run migrations and seeds too, and you should know.
+
+```
+$ DATABASE_URL=postgres://…/studentos_dev pnpm test:integration
+The integration suite refused: DATABASE_URL is set in this environment and does
+not match the test database. … The suite DROPS THE SCHEMA of the database it
+runs against …
+```
+
+The usual cause is `source apps/api/.env` in the same shell. Either open a
+shell without it or `unset DATABASE_URL`.
+
+The rule is asserted three times — when Vitest loads its config, in the global
+setup, and again inside `resetTestDatabase` at the moment of destruction — from
+one shared definition in `apps/api/src/platform/database-safety.ts`. The
+innermost check is the one that matters: it makes "tests cannot drop the dev
+database" a property of the code rather than of how you happen to call it.
+
+To use a different test database, set `TEST_DATABASE_URL` — the name must still
+end in `_test`.
 
 ### End-to-end
 
@@ -101,8 +143,8 @@ pnpm dev:api &
 pnpm --filter @sos/mobile export:web
 npx serve apps/mobile/dist -l 8081 --single &
 
-pnpm --filter @sos/api demo:seed             # a cohort with real content
-node apps/mobile/e2e/smoke.mjs              # 76 API checks across every area
+pnpm --filter @sos/api demo:seed            # a cohort with real content
+node apps/mobile/e2e/smoke.mjs              # 78 API checks across every area
 
 pnpm test:e2e        # the first journey, in Arabic
 pnpm test:messaging  # two students, two browsers, one dropped connection
@@ -123,7 +165,34 @@ checks, including the Phase 5 topic and knowledge surfaces. It exists because
 the three worst RTL defects in this repository were all invisible to code
 review and to a single screenshot.
 
-Both run in CI, against a real API and a real bundle.
+All of it runs in CI, against a real API and a real bundle.
+
+## CI
+
+The workflow is [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) at the
+**repository root** — not inside `student-os/`. This matters: GitHub Actions
+only discovers workflows at the root, so the copy that used to live at
+`student-os/.github/workflows/ci.yml` was never registered and never ran. Zero
+checks on a pull request read like "nothing to report" and actually meant
+"nothing was run".
+
+The repository root is a workspace holding several unrelated projects, so the
+workflow is scoped to this one: a `paths` filter on `student-os/**` decides when
+it runs, and `working-directory: student-os` means no step can reach a sibling
+project. A pull request touching only another project shows no checks from it,
+which is correct rather than a repeat of the old failure.
+
+Two jobs, each with its own disposable Postgres 16 service container that starts
+empty and dies with the runner:
+
+| Job | What it proves |
+| --- | --- |
+| **verify** | typecheck, lint, unit, integration, migrations from an empty database (asserting applied count equals files on disk), API build, client bundle |
+| **journey** | seed → serve → the 78-check API smoke suite, the Arabic first journey, the two-browser messaging journey, and the RTL/layout audit |
+
+No credential in this repository points anywhere but a container that lives for
+minutes. The `verify` job deliberately sets **no** `DATABASE_URL` at all — only
+`TEST_DATABASE_URL` — so CI exercises the same resolution path a developer does.
 
 ## Principles that are enforced, not aspirational
 

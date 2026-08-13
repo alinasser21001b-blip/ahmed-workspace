@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { assertTestDatabaseUrl } from './database-safety.js';
 import { getPool } from './db.js';
 
 /**
@@ -123,6 +124,12 @@ export async function migrate(
  * Drops and recreates the public schema. Guarded so it can never run against a
  * production database — a reset command that can reach production is a matter
  * of time, not of care.
+ *
+ * This is the DEVELOPER reset, reached through `pnpm db:reset`, and it
+ * deliberately permits `_dev`: wiping your own development database is the
+ * entire point of the command. That permission is also why it is the wrong
+ * guard for the test suite, which must never be able to reach `_dev` at all —
+ * see `resetTestDatabase` below.
  */
 export async function resetDatabase(): Promise<void> {
   const url = process.env.DATABASE_URL ?? '';
@@ -134,6 +141,25 @@ export async function resetDatabase(): Promise<void> {
       'resetDatabase refused: DATABASE_URL does not look like a local dev or test database',
     );
   }
+  await getPool().query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+}
+
+/**
+ * Drops and recreates the public schema for the integration suite.
+ *
+ * The same destruction as `resetDatabase`, behind the much narrower
+ * test-database contract: the name must end in `_test` and the host must be
+ * private. Development databases are refused by name.
+ *
+ * This exists as a second, independent check rather than as a comment on the
+ * first. The global setup already refuses an unsafe URL before it gets here,
+ * but a guard that only runs one layer up is a guard that a future caller can
+ * skip without noticing. Asserting again at the point of destruction is what
+ * makes "tests cannot drop the dev database" a property of the code rather
+ * than of the calling convention.
+ */
+export async function resetTestDatabase(): Promise<void> {
+  assertTestDatabaseUrl(process.env.DATABASE_URL, 'resetTestDatabase');
   await getPool().query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
 }
 
