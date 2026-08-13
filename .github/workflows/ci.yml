@@ -139,8 +139,17 @@ jobs:
       - name: Verify the API builds
         run: pnpm --filter @sos/api build
 
+      # Through `build:web`, not `expo export` directly, so the bundle check also
+      # checks the thing that makes a bundle shippable: that it was told where
+      # its API lives. A web bundle has no runtime environment, so an unset
+      # EXPO_PUBLIC_API_URL used to produce an app addressed to the machine that
+      # built it. `build:web` refuses that build; this step proves it still can.
+      # The host is a documentation-reserved name — nothing resolves it, and
+      # nothing needs to: this step bundles, it does not run.
       - name: Verify the client bundles
-        run: pnpm --filter @sos/mobile exec expo export --platform web --output-dir dist
+        env:
+          EXPO_PUBLIC_API_URL: https://api.studentos.example
+        run: pnpm --filter @sos/mobile build:web
 
   # ---------------------------------------------------------------------------
   # The API smoke suite and the browser journeys, against a real server and a
@@ -217,7 +226,7 @@ jobs:
       - name: Build the API and the web bundle
         run: |
           pnpm --filter @sos/api build
-          pnpm --filter @sos/mobile exec expo export --platform web --output-dir dist
+          pnpm --filter @sos/mobile build:web
 
       - name: Start the API
         run: |

@@ -11,9 +11,6 @@
     "experiments": {
       "typedRoutes": false
     },
-    "extra": {
-      "apiBaseUrl": "http://localhost:4000"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.studentos.client"
