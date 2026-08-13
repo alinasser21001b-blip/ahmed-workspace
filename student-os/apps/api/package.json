@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.ts --passWithNoTests",
     "test:integration": "vitest run --dir test",
-    "demo:seed": "tsx scripts/seed-demo.ts"
+    "demo:seed": "tsx scripts/seed-demo.ts",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",

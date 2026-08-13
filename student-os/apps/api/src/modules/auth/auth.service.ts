@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { AuthSession, AuthUser, LoginRequest, SignupRequest } from '@sos/contracts';
+import { isTeachingLevel } from '@sos/core';
 import { withTransaction } from '../../platform/db.js';
 import { errors, PG_UNIQUE_VIOLATION, pgErrorCode } from '../../platform/errors.js';
 import * as repo from './auth.repository.js';
@@ -29,6 +30,13 @@ function toAuthUser(row: repo.UserRow): AuthUser {
     status: row.status,
     locale: row.locale,
     onboardingCompleted: row.onboarding_completed,
+    /*
+     * Projected, not left to the client to infer from `verificationLevel`.
+     * A client that decides for itself which levels count would drift from the
+     * server that enforces it, and the drift would surface as a Create
+     * Classroom button that 403s.
+     */
+    teachingEligible: isTeachingLevel(row.verification_level),
   };
 }
 

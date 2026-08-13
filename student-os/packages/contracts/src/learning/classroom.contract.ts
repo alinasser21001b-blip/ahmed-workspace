@@ -51,9 +51,21 @@ export const classroomViewerStateSchema = z.object({
   canRead: z.boolean(),
   canJoin: z.boolean(),
   canLeave: z.boolean(),
-  /** Publish lectures and attach materials. Instructor and TAs. */
+  /** Ask and answer in a lecture's discussion. Any member, students included. */
+  canParticipate: z.boolean(),
+  /** Run the roster, and see the join code and drafts. Teaching staff of this room. */
+  canManageMembership: z.boolean(),
+  /**
+   * Publish lectures and attach official materials.
+   *
+   * The only capability that depends on something outside this classroom: it
+   * requires teaching staffhood here AND global instructor verification. An
+   * owner who loses verification keeps `canManage` and `canManageMembership`
+   * and loses this one — which is why the client must render from these flags
+   * rather than inferring authoring rights from `role === 'owner'`.
+   */
   canTeach: z.boolean(),
-  /** Rename, archive, change the join code. Instructor only. */
+  /** Rename, archive, change the join code, transfer ownership. Owner and admins. */
   canManage: z.boolean(),
 });
 

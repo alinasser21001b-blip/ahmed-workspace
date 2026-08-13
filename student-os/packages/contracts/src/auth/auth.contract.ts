@@ -47,6 +47,17 @@ export const authUserSchema = z.object({
    * into the app shell. Computed server-side so the rule lives in one place.
    */
   onboardingCompleted: z.boolean(),
+  /**
+   * Whether this account is academically eligible to teach anywhere.
+   *
+   * Derived from `verificationLevel` by the policy layer rather than left for
+   * the client to compute, for the same reason every other capability is
+   * projected: a client that decides for itself which levels count will drift
+   * from the server that enforces it, and the drift shows up as a button that
+   * 403s. Classroom-scoped authoring still needs the room's own `canTeach` —
+   * this flag only says whether offering to open a classroom makes sense.
+   */
+  teachingEligible: z.boolean(),
 });
 export type AuthUser = z.infer<typeof authUserSchema>;
 

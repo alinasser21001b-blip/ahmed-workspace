@@ -7,8 +7,16 @@
  * that the real authorization, validation and ranking paths would never
  * produce, and then the review is of a fiction.
  *
- * The two exceptions are marked where they occur, and both are moderation-style
- * facts a student cannot set about themselves.
+ * There is exactly one exception, marked where it occurs: promoting @amjad to
+ * platform administrator. That one cannot go through the API by construction —
+ * only an administrator may create an administrator — so the first one in any
+ * database has to come from outside it. Everything downstream of it, including
+ * granting instructor verification, then goes through the real admin endpoints,
+ * which means this seed exercises the Phase 5c workflow rather than
+ * short-circuiting it, and leaves a genuine audit trail behind.
+ *
+ * It therefore needs DATABASE_URL as well as API_URL, pointed at the same
+ * database the API is serving.
  *
  * Run against a database that is NOT production:
  *   DATABASE_URL=postgres://…/studentos_demo pnpm db:reset
@@ -16,6 +24,9 @@
  *   (start the API against the same database)
  *   API_URL=http://localhost:4000 pnpm --filter @sos/api demo:seed
  */
+
+import { closePool } from '../src/platform/db.js';
+import { bootstrapPlatformAdmin } from './bootstrap-admin.js';
 
 const API = process.env.API_URL ?? 'http://localhost:4000';
 const PASSWORD = 'correct-horse-battery';
@@ -496,10 +507,39 @@ log('  request-to-join group with 1 pending request (queue visible to @amjad)');
  * fresh database leaves the Classrooms screen empty, and an empty screen tells
  * a reviewer nothing about whether the feature works.
  *
- * Course-scoped, which is possible now that onboarding enrols a student in
- * their stage's courses — @amjad really is enrolled in Pediatrics, so
- * `POST /classrooms` accepts it rather than refusing a course they are not in.
+ * Course-scoped, which needs two things that are now both true: onboarding
+ * enrols a student in their stage's courses, and @amjad was granted instructor
+ * eligibility above. Either one missing and `POST /classrooms` refuses — which
+ * is the Phase 5c invariant, demonstrated rather than asserted.
  */
+
+log('\nacademic authority');
+
+/*
+ * THE ONE DIRECT WRITE. See the header: only a platform administrator can make
+ * a platform administrator, so the first one is an operator action by
+ * definition. It grants no academic authority of its own — @amjad still has to
+ * be verified through the audited endpoint below, like anyone else.
+ */
+const bootstrapped = await bootstrapPlatformAdmin(amjad.email);
+log(`  @${amjad.handle} is a platform administrator (bootstrapped out of band)`);
+
+/*
+ * And now the real workflow, over HTTP, by an administrator: @amjad grants
+ * themselves instructor eligibility. @zainab and @omar are deliberately left
+ * as ordinary students — the demo is only useful if it shows both sides of the
+ * boundary, so one account can teach and two cannot.
+ */
+await call(`/v1/admin/users/${bootstrapped.userId}/verification`, {
+  method: 'PUT',
+  token: token(amjad),
+  body: {
+    verificationLevel: 'instructor',
+    reason: 'Faculty of Medicine — pediatrics teaching staff, demo cohort',
+  },
+});
+log(`  @${amjad.handle} verified as an instructor — through the admin API, and audited`);
+log(`  @${zainab.handle} and @${omar.handle} remain ordinary students and cannot open a classroom`);
 
 log('\nclassroom');
 
@@ -713,3 +753,7 @@ log('');
 log(`Classroom  /classrooms/${classroom.id}`);
 log(`Lecture    /lecture/${nephrotic.id}`);
 log('─────────────────────────────────────────────');
+
+// The bootstrap above opened a connection pool; without this the process keeps
+// the event loop alive and the script appears to hang after printing.
+await closePool();

@@ -272,7 +272,25 @@ await api(`/v1/content/${classified.id}/corrections`, {
  * screens are dense chip rows over mixed-direction text with a long external
  * URL — the shape that wraps badly in one direction and looks fine in the
  * other.
+ *
+ * Opening one needs instructor eligibility since Phase 5c, so the audit account
+ * is granted it first — through the real admin endpoint, using the demo
+ * cohort's administrator. A layout audit has no business bypassing an
+ * authorization rule to build its fixture; if the grant path breaks, this
+ * should notice.
  */
+const adminSession = await api('/v1/auth/login', {
+  method: 'POST',
+  body: { email: 'amjad@uob.edu.iq', password: PASSWORD },
+}).catch(() => {
+  throw new Error('the demo cohort is missing — run `pnpm --filter @sos/api demo:seed` first');
+});
+await api(`/v1/admin/users/${session.user.id}/verification`, {
+  method: 'PUT',
+  token: adminSession.tokens.accessToken,
+  body: { verificationLevel: 'instructor', reason: 'RTL audit fixture' },
+});
+
 const classroom = await api('/v1/classrooms', {
   method: 'POST',
   token,

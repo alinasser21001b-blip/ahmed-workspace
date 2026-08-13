@@ -13,6 +13,7 @@ import {
   ensureCohort,
   getApp,
   onboardedUser,
+  verifiedInstructor,
   readFeed,
   signupUser,
   TINY_PNG,
@@ -94,7 +95,7 @@ async function publishLecture(
 describe('the phase 5b exit criterion', () => {
   it('lets a student open a classroom, read a lecture, and fetch its material', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const student = await onboardedUser();
 
     const classroom = await createClassroom(instructor.session);
@@ -157,7 +158,7 @@ describe('the phase 5b exit criterion', () => {
    */
   it('refuses a non-member every route to a signed material URL', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const outsider = await onboardedUser();
 
     const classroom = await createClassroom(instructor.session);
@@ -203,7 +204,7 @@ describe('the phase 5b exit criterion', () => {
 describe('classroom visibility', () => {
   it('lets an enrolled non-member see a course-visible room but not read it', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const peer = await onboardedUser();
     const classroom = await createClassroom(instructor.session);
 
@@ -234,7 +235,7 @@ describe('classroom visibility', () => {
 
   it('hides an unlisted room entirely, and opens it only with the join code', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const peer = await onboardedUser();
     const classroom = await createClassroom(instructor.session, { visibility: 'classroom' });
 
@@ -289,7 +290,7 @@ describe('classroom visibility', () => {
 describe('teaching is a role, not a checkbox', () => {
   it('refuses to let a student publish a lecture or attach a material', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const student = await onboardedUser();
     const classroom = await createClassroom(instructor.session);
     const lecture = await publishLecture(instructor.session, classroom.id);
@@ -320,7 +321,7 @@ describe('teaching is a role, not a checkbox', () => {
 
   it('shows drafts to teaching staff and hides them from students', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const student = await onboardedUser();
     const classroom = await createClassroom(instructor.session);
     const draft = await publishLecture(instructor.session, classroom.id, {
@@ -365,7 +366,7 @@ describe('teaching is a role, not a checkbox', () => {
 
   it('refuses to let an owner strand their own classroom by leaving', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const classroom = await createClassroom(instructor.session);
 
     const leaving = await app.inject({
@@ -383,7 +384,7 @@ describe('teaching is a role, not a checkbox', () => {
 describe('unauthorised access', () => {
   it('refuses every classroom surface without a token', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const classroom = await createClassroom(instructor.session);
     const lecture = await publishLecture(instructor.session, classroom.id);
 
@@ -402,7 +403,7 @@ describe('unauthorised access', () => {
 
   it('refuses a signed-in account that has not completed onboarding', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const classroom = await createClassroom(instructor.session);
     // Signed up, never onboarded: no stage, so no enrolment, so no course.
     const stranger = await signupUser();
@@ -417,7 +418,7 @@ describe('unauthorised access', () => {
 
   it('does not let a classroom id from another cohort be opened', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const classroom = await createClassroom(instructor.session);
     // A student placed in a different stage is enrolled in different courses.
     const otherStage = await onboardedUser({ stageId: cohort.stage4Id });
@@ -446,7 +447,7 @@ describe('unauthorised access', () => {
 describe('membership and persistence', () => {
   it('is idempotent: joining twice is one membership', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const student = await onboardedUser();
     const classroom = await createClassroom(instructor.session);
 
@@ -471,7 +472,7 @@ describe('membership and persistence', () => {
 
   it('persists: a joined classroom is still there on a fresh read', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const student = await onboardedUser();
     const classroom = await createClassroom(instructor.session);
     await publishLecture(instructor.session, classroom.id);
@@ -499,7 +500,7 @@ describe('membership and persistence', () => {
 
   it('records reading progress without letting it go backwards', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const classroom = await createClassroom(instructor.session);
     const lecture = await publishLecture(instructor.session, classroom.id);
 
@@ -535,7 +536,7 @@ describe('lecture discussion', () => {
    */
   it('lets a member read and post, and keeps each lecture’s thread separate', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const student = await onboardedUser();
     const classroom = await createClassroom(instructor.session);
     const lectureA = await publishLecture(instructor.session, classroom.id, { title: 'Lecture A' });
@@ -580,7 +581,7 @@ describe('lecture discussion', () => {
 
   it('refuses a non-member both reading and posting', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const outsider = await onboardedUser();
     const classroom = await createClassroom(instructor.session);
     const lecture = await publishLecture(instructor.session, classroom.id);
@@ -610,7 +611,7 @@ describe('lecture discussion', () => {
 
   it('refuses an unauthenticated caller', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const classroom = await createClassroom(instructor.session);
     const lecture = await publishLecture(instructor.session, classroom.id);
 
@@ -626,7 +627,7 @@ describe('lecture discussion', () => {
 
   it('does not leak a classroom post into the ordinary cohort feed', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const peer = await onboardedUser();
     const classroom = await createClassroom(instructor.session);
     const lecture = await publishLecture(instructor.session, classroom.id);
@@ -646,7 +647,7 @@ describe('lecture discussion', () => {
 
   it('persists: the discussion is still there on a fresh read', async () => {
     const app = await getApp();
-    const instructor = await onboardedUser();
+    const instructor = await verifiedInstructor();
     const classroom = await createClassroom(instructor.session);
     const lecture = await publishLecture(instructor.session, classroom.id);
 
@@ -692,7 +693,7 @@ describe('instructor authority is derived server-side', () => {
 
   it('allows the owner', async () => {
     const app = await getApp();
-    const owner = await onboardedUser();
+    const owner = await verifiedInstructor();
     const classroom = await createClassroom(owner.session);
     const lecture = await publishLecture(owner.session, classroom.id);
 
@@ -709,7 +710,7 @@ describe('instructor authority is derived server-side', () => {
 
   it('refuses a member, even one who claims a role in the payload', async () => {
     const app = await getApp();
-    const owner = await onboardedUser();
+    const owner = await verifiedInstructor();
     const member = await onboardedUser();
     const classroom = await createClassroom(owner.session);
     const lecture = await publishLecture(owner.session, classroom.id);
@@ -734,7 +735,7 @@ describe('instructor authority is derived server-side', () => {
 
   it('refuses a non-member', async () => {
     const app = await getApp();
-    const owner = await onboardedUser();
+    const owner = await verifiedInstructor();
     const outsider = await onboardedUser();
     const classroom = await createClassroom(owner.session);
     const lecture = await publishLecture(owner.session, classroom.id);
@@ -753,7 +754,7 @@ describe('instructor authority is derived server-side', () => {
 
   it('refuses an unauthenticated caller', async () => {
     const app = await getApp();
-    const owner = await onboardedUser();
+    const owner = await verifiedInstructor();
     const classroom = await createClassroom(owner.session);
     const lecture = await publishLecture(owner.session, classroom.id);
 

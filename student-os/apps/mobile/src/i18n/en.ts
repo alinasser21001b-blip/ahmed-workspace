@@ -145,6 +145,7 @@ export const en: Record<keyof typeof ar, string> = {
   'classrooms.discover': 'Open to join',
   'classrooms.empty.title': 'You are not in a classroom yet',
   'classrooms.empty.body': 'Join one from your course, or open a classroom for the students you teach.',
+  'classrooms.empty.body.student': 'Join a classroom from your courses to follow its lectures and materials.',
   'classrooms.empty.action': 'Find a classroom',
   'classrooms.discover.empty.title': 'Nothing open to join',
   'classrooms.discover.empty.body': 'When an instructor opens a classroom for one of your courses, it appears here.',
