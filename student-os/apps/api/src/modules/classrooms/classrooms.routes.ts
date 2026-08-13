@@ -1,5 +1,8 @@
 import {
   addMaterialRequestSchema,
+  contentItemSchema,
+  createPostRequestSchema,
+  feedPageSchema,
   classroomDetailSchema,
   classroomMemberSchema,
   classroomSummarySchema,
@@ -280,6 +283,69 @@ export const classroomRoutes: FastifyPluginAsyncZod = async (app) => {
         request.actor!,
         request.params.lectureId,
         request.body,
+      );
+      return reply.status(201).send(created);
+    },
+  );
+
+  // --- lecture discussion ---------------------------------------------------
+
+  app.get(
+    '/lectures/:lectureId/discussion',
+    {
+      onRequest: [app.requireAuth],
+      schema: {
+        tags: ['classrooms'],
+        summary: 'The discussion attached to a lecture — members only',
+        description:
+          'These are ordinary content items in the classroom container, pointed at a lecture, ' +
+          'so they inherit the feed’s permission predicate rather than getting a second one. ' +
+          '`lectureId` narrows the view; it never grants access, so a lecture id from another ' +
+          'classroom returns nothing rather than its posts.',
+        params: lectureParams,
+        querystring: z.object({
+          cursor: z.string().max(500).optional(),
+          limit: z.coerce.number().int().min(1).max(50).default(20),
+        }),
+        response: { 200: feedPageSchema, 404: errorEnvelopeSchema },
+      },
+    },
+    async (request) =>
+      classrooms.listLectureDiscussion(
+        request.actor!,
+        request.params.lectureId,
+        request.query,
+        localeOf(request),
+      ),
+  );
+
+  app.post(
+    '/lectures/:lectureId/discussion',
+    {
+      onRequest: [app.requireAuth],
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      schema: {
+        tags: ['classrooms'],
+        summary: 'Ask or answer in a lecture’s discussion — any member',
+        description:
+          'Students included: a classroom where only staff may post is a broadcast channel. ' +
+          'Visibility is forced to `classroom` server-side, so a client cannot publish a post ' +
+          'made inside a room to the whole stage.',
+        params: lectureParams,
+        body: createPostRequestSchema,
+        response: {
+          201: contentItemSchema,
+          403: errorEnvelopeSchema,
+          404: errorEnvelopeSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const created = await classrooms.createLectureDiscussionPost(
+        request.actor!,
+        request.params.lectureId,
+        request.body,
+        localeOf(request),
       );
       return reply.status(201).send(created);
     },

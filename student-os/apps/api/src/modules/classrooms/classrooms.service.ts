@@ -7,6 +7,9 @@ import type {
   CreateLectureRequest,
   LectureDetail,
   LectureSummary,
+  ContentItem,
+  CreatePostRequest,
+  FeedPage,
   Locale,
   MembershipRole,
   MembershipStatus,
@@ -16,6 +19,7 @@ import {
   canJoinClassroom,
   canLeaveClassroom,
   canManageClassroom,
+  canPostInClassroom,
   canReadClassroom,
   canTeachInClassroom,
   canViewClassroom,
@@ -27,6 +31,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import { withTransaction } from '../../platform/db.js';
 import { errors } from '../../platform/errors.js';
+import * as content from '../content/content.service.js';
 import { signMediaUrl } from '../files/signed-url.js';
 import * as repo from './classrooms.repository.js';
 
@@ -496,4 +501,91 @@ export async function assertCanManage(actor: Actor, classroomId: string): Promis
   const { membership } = await loadVisible(actor, classroomId);
   const decision = canManageClassroom(actor, membership);
   if (!decision.allowed) throw errors.forbidden(decision.reason);
+}
+
+// --- lecture discussion -----------------------------------------------------
+
+/**
+ * Loads a lecture the actor may read, together with its classroom.
+ *
+ * Every discussion call goes through this, so the chain is verified once and
+ * in one order: the actor is authenticated, the lecture exists, the lecture
+ * belongs to a classroom, the actor is a member of that classroom, and an
+ * unpublished lecture is invisible to anyone who is not teaching staff.
+ */
+async function loadReadableLecture(
+  actor: Actor,
+  lectureId: string,
+): Promise<{ classroomId: string; membership: MaybeMembership }> {
+  const lecture = await repo.findLecture(actor.userId, lectureId);
+  if (!lecture || !lecture.classroom_id) throw errors.notFound('lecture');
+  const classroomId = lecture.classroom_id;
+  const { membership } = await loadReadable(actor, classroomId);
+  if (!lecture.published_at && !canTeachInClassroom(actor, membership).allowed) {
+    throw errors.notFound('lecture');
+  }
+  return { classroomId, membership };
+}
+
+/**
+ * The discussion attached to one lecture.
+ *
+ * Deliberately not a new system. These are `content_items` in the classroom
+ * container, pointed at a lecture — so they inherit the feed's permission
+ * predicate, the knowledge classification, the reactions and the comment
+ * threads that already exist, rather than growing a parallel social graph
+ * that would need all of it re-implemented and re-secured.
+ *
+ * The read delegates to `content.listFeed`, which is where the permission SQL
+ * lives. `lectureId` is a filter on top of that predicate and never a
+ * substitute for it: a lecture id from another classroom narrows to rows the
+ * reader still cannot see, which is nothing.
+ */
+export async function listLectureDiscussion(
+  actor: Actor,
+  lectureId: string,
+  query: { cursor?: string | undefined; limit: number },
+  locale: Locale,
+): Promise<FeedPage> {
+  const { classroomId } = await loadReadableLecture(actor, lectureId);
+  return content.listFeed(
+    actor,
+    { scope: 'recent', classroomId, lectureId, cursor: query.cursor, limit: query.limit },
+    locale,
+  );
+}
+
+/**
+ * Posts into a lecture's discussion.
+ *
+ * Any active member may speak, students included — a classroom where only
+ * staff may post is a broadcast channel, and this is a learning network.
+ *
+ * The placement is resolved here and passed down, so `content.createPost`
+ * never has to know a classroom rule. Visibility is forced to `classroom`
+ * rather than taken from the request: a post made inside a room must not be
+ * publishable to the whole stage by a client that sends its own value.
+ */
+export async function createLectureDiscussionPost(
+  actor: Actor,
+  lectureId: string,
+  input: CreatePostRequest,
+  locale: Locale,
+): Promise<ContentItem> {
+  const { classroomId, membership } = await loadReadableLecture(actor, lectureId);
+  const decision = canPostInClassroom(actor, membership);
+  if (!decision.allowed) throw errors.forbidden(decision.reason);
+
+  return content.createPost(
+    actor,
+    {
+      ...input,
+      visibility: 'classroom',
+      // A container is decided by the placement below, never by the payload.
+      communityId: undefined,
+      groupId: undefined,
+    },
+    locale,
+    { classroomId, lectureId },
+  );
 }

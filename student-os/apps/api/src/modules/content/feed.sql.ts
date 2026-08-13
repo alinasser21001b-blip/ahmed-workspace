@@ -44,6 +44,8 @@ export interface FeedQueryOptions {
     topicId?: string | undefined;
     communityId?: string | undefined;
     groupId?: string | undefined;
+    classroomId?: string | undefined;
+    lectureId?: string | undefined;
     bookmarkedBy?: string | undefined;
     /*
      * Knowledge filters — deterministic equality on classified columns. There
@@ -292,6 +294,15 @@ export function buildFeedQuery(options: FeedQueryOptions): BuiltQuery {
   if (filters.courseId) conditions.push(`ci.course_id = ${push(filters.courseId)}::uuid`);
   if (filters.communityId) conditions.push(`ci.community_id = ${push(filters.communityId)}::uuid`);
   if (filters.groupId) conditions.push(`ci.group_id = ${push(filters.groupId)}::uuid`);
+  if (filters.classroomId) {
+    conditions.push(`ci.classroom_id = ${push(filters.classroomId)}::uuid`);
+  }
+  /*
+   * Narrows to one lecture's discussion. This is a filter, never a grant: the
+   * permission predicate above still decides what the reader may see, so a
+   * lecture id from another classroom returns nothing rather than its posts.
+   */
+  if (filters.lectureId) conditions.push(`ci.lecture_id = ${push(filters.lectureId)}::uuid`);
   if (filters.topicId) {
     conditions.push(
       `EXISTS (SELECT 1 FROM content_topics ct WHERE ct.content_id = ci.id AND ct.topic_id = ${push(

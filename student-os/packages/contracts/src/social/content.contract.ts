@@ -191,6 +191,9 @@ export const feedQuerySchema = z.object({
   topicId: uuidSchema.optional(),
   communityId: uuidSchema.optional(),
   groupId: uuidSchema.optional(),
+  classroomId: uuidSchema.optional(),
+  /** Narrows to one lecture's discussion. A filter, never a grant. */
+  lectureId: uuidSchema.optional(),
   /** Deterministic knowledge filters. No relevance model involved. */
   knowledgeType: knowledgeTypeSchema.optional(),
   difficulty: difficultySchema.optional(),

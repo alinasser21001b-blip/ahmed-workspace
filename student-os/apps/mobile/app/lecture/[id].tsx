@@ -1,10 +1,13 @@
-import type { LectureDetail } from '@sos/contracts';
+import type { ContentItem, FeedPage, FileRef, LectureDetail } from '@sos/contracts';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, View } from 'react-native';
+import { Linking, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { DirectionalIcon } from '../../src/components/DirectionalIcon';
+import { Input } from '../../src/components/Input';
+import { PostCard } from '../../src/components/PostCard';
 import { Badge, Card, SectionHeader } from '../../src/components/surfaces';
 import { Text } from '../../src/components/Text';
 import { ErrorState, LoadingState } from '../../src/components/states';
@@ -23,6 +26,12 @@ import { useTheme } from '../../src/theme/ThemeProvider';
  *
  * Material URLs arrive already signed, minted for this reader after the server
  * checked their classroom membership. The client never constructs one.
+ *
+ * Two affordances below the lecture are permission-shaped rather than decorative.
+ * The discussion is open to every member, because a classroom where only staff
+ * may write is a broadcast channel and the questions are half the value. Adding
+ * a material is not: it is drawn only when the server has said `viewer.canTeach`,
+ * and the server refuses it regardless of what this screen chose to draw.
  */
 export default function LectureScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,10 +43,27 @@ export default function LectureScreen(): React.JSX.Element {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [marking, setMarking] = useState(false);
 
+  const [discussion, setDiscussion] = useState<ContentItem[]>([]);
+  const [draft, setDraft] = useState('');
+  const [posting, setPosting] = useState(false);
+
+  const [materialTitle, setMaterialTitle] = useState('');
+  const [materialFile, setMaterialFile] = useState<FileRef | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+
   const load = useCallback(async (): Promise<void> => {
     setStatus('loading');
     try {
       setLecture(await api.get<LectureDetail>(`/v1/lectures/${id}`));
+      /*
+       * The thread is scoped by the server to this lecture inside this
+       * classroom. A lecture id from another room returns an empty page rather
+       * than its posts, because `lectureId` narrows the feed's permission
+       * predicate and never widens it.
+       */
+      const page = await api.get<FeedPage>(`/v1/lectures/${id}/discussion?limit=30`);
+      setDiscussion(page.items);
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -60,6 +86,80 @@ export default function LectureScreen(): React.JSX.Element {
       setStatus('error');
     } finally {
       setMarking(false);
+    }
+  };
+
+  const askQuestion = async (): Promise<void> => {
+    const text = draft.trim();
+    if (text.length === 0) return;
+    setPosting(true);
+    try {
+      /*
+       * No visibility is sent. The server forces `classroom`, so a client
+       * cannot use this route to publish a post made inside a room to the
+       * whole stage.
+       */
+      const created = await api.post<ContentItem>(`/v1/lectures/${id}/discussion`, { body: text });
+      setDiscussion((current) => [created, ...current]);
+      setDraft('');
+    } catch {
+      setStatus('error');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  /*
+   * The same picker and the same `/v1/files` upload the composer has used since
+   * Phase 2. A material is an ordinary uploaded file that `addMaterial` then
+   * places into the classroom — there is no second storage path for teaching
+   * content, and adding one is how a file ends up outside the permission model.
+   */
+  const pickMaterialFile = async (): Promise<void> => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.85,
+      allowsEditing: false,
+    });
+    if (result.canceled || !result.assets[0]) return;
+
+    const asset = result.assets[0];
+    setUploading(true);
+    try {
+      const form = new FormData();
+      // React Native and web disagree on what a file looks like in FormData.
+      if (asset.file) {
+        form.append('file', asset.file);
+      } else {
+        form.append('file', {
+          uri: asset.uri,
+          name: asset.fileName ?? 'material.jpg',
+          type: asset.mimeType ?? 'image/jpeg',
+        } as unknown as Blob);
+      }
+      setMaterialFile(await api.upload<FileRef>('/v1/files', form));
+    } catch {
+      setStatus('error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const attachMaterial = async (): Promise<void> => {
+    if (!materialFile || materialTitle.trim().length === 0) return;
+    setAttaching(true);
+    try {
+      await api.post(`/v1/lectures/${id}/materials`, {
+        title: materialTitle.trim(),
+        fileId: materialFile.id,
+      });
+      setMaterialTitle('');
+      setMaterialFile(null);
+      await load();
+    } catch {
+      setStatus('error');
+    } finally {
+      setAttaching(false);
     }
   };
 
@@ -194,6 +294,97 @@ export default function LectureScreen(): React.JSX.Element {
                   </Card>
                 );
               })}
+            </View>
+          )}
+
+          {lecture.viewer.canTeach ? (
+            <View style={{ gap: theme.spacing.sm, marginTop: theme.spacing.md }}>
+              <Text variant="label" tone="muted">
+                {t('lecture.material.add')}
+              </Text>
+              <Input
+                label={t('lecture.material.title')}
+                placeholder={t('lecture.material.title.placeholder')}
+                value={materialTitle}
+                onChangeText={setMaterialTitle}
+              />
+              <Button
+                label={
+                  uploading
+                    ? t('lecture.material.uploading')
+                    : materialFile
+                      ? t('lecture.material.picked')
+                      : t('lecture.material.pick')
+                }
+                variant="secondary"
+                loading={uploading}
+                onPress={() => void pickMaterialFile()}
+                fullWidth
+              />
+              <Button
+                label={t('lecture.material.attach')}
+                variant="learning"
+                loading={attaching}
+                disabled={!materialFile || materialTitle.trim().length === 0}
+                onPress={() => void attachMaterial()}
+                fullWidth
+              />
+            </View>
+          ) : null}
+        </View>
+
+        <View>
+          <SectionHeader title={t('lecture.discussion')} />
+          <Text variant="micro" tone="muted">
+            {t('lecture.discussion.scope')}
+          </Text>
+
+          <View style={{ gap: theme.spacing.sm, marginTop: theme.spacing.md }}>
+            <TextInput
+              accessibilityLabel={t('lecture.discussion.placeholder')}
+              placeholder={t('lecture.discussion.placeholder')}
+              placeholderTextColor={theme.colors.textMuted}
+              value={draft}
+              onChangeText={setDraft}
+              multiline
+              style={{
+                minHeight: 80,
+                borderRadius: theme.radius.md,
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+                backgroundColor: theme.colors.surface,
+                color: theme.colors.text,
+                padding: theme.spacing.md,
+                fontSize: 16,
+                lineHeight: 26,
+                textAlign: theme.isRTL ? 'right' : 'left',
+                textAlignVertical: 'top',
+                writingDirection: theme.isRTL ? 'rtl' : 'ltr',
+              }}
+            />
+            <Button
+              label={t('lecture.discussion.send')}
+              variant="secondary"
+              loading={posting}
+              disabled={draft.trim().length === 0}
+              onPress={() => void askQuestion()}
+              fullWidth
+            />
+          </View>
+
+          {discussion.length === 0 ? (
+            <Text variant="caption" tone="muted" style={{ marginTop: theme.spacing.md }}>
+              {t('lecture.discussion.empty')}
+            </Text>
+          ) : (
+            <View style={{ gap: theme.spacing.md, marginTop: theme.spacing.md }}>
+              {discussion.map((item) => (
+                <PostCard
+                  key={item.id}
+                  item={item}
+                  onPress={() => router.push(`/post/${item.id}`)}
+                />
+              ))}
             </View>
           )}
         </View>

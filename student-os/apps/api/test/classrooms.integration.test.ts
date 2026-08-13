@@ -1,4 +1,11 @@
-import type { ClassroomDetail, ClassroomSummary, LectureDetail, LectureSummary } from '@sos/contracts';
+import type {
+  ClassroomDetail,
+  ClassroomSummary,
+  ContentItem,
+  FeedPage,
+  LectureDetail,
+  LectureSummary,
+} from '@sos/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   auth,
@@ -6,6 +13,7 @@ import {
   ensureCohort,
   getApp,
   onboardedUser,
+  readFeed,
   signupUser,
   TINY_PNG,
   uploadImage,
@@ -512,5 +520,246 @@ describe('membership and persistence', () => {
     });
     // Completion survives the later, lower report.
     expect((detail.json() as LectureDetail).viewer.completedAt).not.toBeNull();
+  });
+});
+
+describe('lecture discussion', () => {
+  /*
+   * The chain that has to hold on every call:
+   *   authenticated → member of the classroom → lecture belongs to that
+   *   classroom → discussion belongs to that lecture.
+   *
+   * It is not a new social system. These are `content_items` in the classroom
+   * container pointed at a lecture, so they inherit the feed's permission
+   * predicate rather than getting a second one that would need securing again.
+   */
+  it('lets a member read and post, and keeps each lecture’s thread separate', async () => {
+    const app = await getApp();
+    const instructor = await onboardedUser();
+    const student = await onboardedUser();
+    const classroom = await createClassroom(instructor.session);
+    const lectureA = await publishLecture(instructor.session, classroom.id, { title: 'Lecture A' });
+    const lectureB = await publishLecture(instructor.session, classroom.id, { title: 'Lecture B' });
+
+    await app.inject({
+      method: 'PUT',
+      url: `/v1/classrooms/${classroom.id}/membership`,
+      headers: auth(student.session),
+      payload: { joinCode: null },
+    });
+
+    // A student may speak — a classroom where only staff post is a broadcast.
+    const posted = await app.inject({
+      method: 'POST',
+      url: `/v1/lectures/${lectureA.id}/discussion`,
+      headers: auth(student.session),
+      payload: { body: 'سؤال عن آلية الوذمة في هذه المحاضرة تحديداً.', mediaFileIds: [] },
+    });
+    expect(posted.statusCode).toBe(201);
+    const created = posted.json() as ContentItem;
+    // Forced server-side: a post made inside a room must not be publishable to
+    // the whole stage by a client that sends its own visibility.
+    expect(created.visibility).toBe('classroom');
+
+    const threadA = await app.inject({
+      method: 'GET',
+      url: `/v1/lectures/${lectureA.id}/discussion`,
+      headers: auth(instructor.session),
+    });
+    expect(threadA.statusCode).toBe(200);
+    expect((threadA.json() as FeedPage).items.some((item) => item.id === created.id)).toBe(true);
+
+    // The post must not bleed into the sibling lecture.
+    const threadB = await app.inject({
+      method: 'GET',
+      url: `/v1/lectures/${lectureB.id}/discussion`,
+      headers: auth(instructor.session),
+    });
+    expect((threadB.json() as FeedPage).items.some((item) => item.id === created.id)).toBe(false);
+  });
+
+  it('refuses a non-member both reading and posting', async () => {
+    const app = await getApp();
+    const instructor = await onboardedUser();
+    const outsider = await onboardedUser();
+    const classroom = await createClassroom(instructor.session);
+    const lecture = await publishLecture(instructor.session, classroom.id);
+
+    await app.inject({
+      method: 'POST',
+      url: `/v1/lectures/${lecture.id}/discussion`,
+      headers: auth(instructor.session),
+      payload: { body: 'A staff note that an outsider must not read.', mediaFileIds: [] },
+    });
+
+    const reading = await app.inject({
+      method: 'GET',
+      url: `/v1/lectures/${lecture.id}/discussion`,
+      headers: auth(outsider.session),
+    });
+    expect(reading.statusCode).toBe(404);
+
+    const posting = await app.inject({
+      method: 'POST',
+      url: `/v1/lectures/${lecture.id}/discussion`,
+      headers: auth(outsider.session),
+      payload: { body: 'An outsider should not be able to write this.', mediaFileIds: [] },
+    });
+    expect(posting.statusCode).toBe(404);
+  });
+
+  it('refuses an unauthenticated caller', async () => {
+    const app = await getApp();
+    const instructor = await onboardedUser();
+    const classroom = await createClassroom(instructor.session);
+    const lecture = await publishLecture(instructor.session, classroom.id);
+
+    for (const method of ['GET', 'POST'] as const) {
+      const response = await app.inject({
+        method,
+        url: `/v1/lectures/${lecture.id}/discussion`,
+        ...(method === 'POST' ? { payload: { body: 'no token', mediaFileIds: [] } } : {}),
+      });
+      expect(response.statusCode, `${method} must require authentication`).toBe(401);
+    }
+  });
+
+  it('does not leak a classroom post into the ordinary cohort feed', async () => {
+    const app = await getApp();
+    const instructor = await onboardedUser();
+    const peer = await onboardedUser();
+    const classroom = await createClassroom(instructor.session);
+    const lecture = await publishLecture(instructor.session, classroom.id);
+
+    const posted = await app.inject({
+      method: 'POST',
+      url: `/v1/lectures/${lecture.id}/discussion`,
+      headers: auth(instructor.session),
+      payload: { body: 'Classroom-only discussion that must stay in the room.', mediaFileIds: [] },
+    });
+    const created = posted.json() as ContentItem;
+
+    // `peer` is a cohort-mate enrolled in the same course but not in the room.
+    const feed = await readFeed(peer.session);
+    expect(feed.items.some((item) => item.id === created.id)).toBe(false);
+  });
+
+  it('persists: the discussion is still there on a fresh read', async () => {
+    const app = await getApp();
+    const instructor = await onboardedUser();
+    const classroom = await createClassroom(instructor.session);
+    const lecture = await publishLecture(instructor.session, classroom.id);
+
+    const posted = await app.inject({
+      method: 'POST',
+      url: `/v1/lectures/${lecture.id}/discussion`,
+      headers: auth(instructor.session),
+      payload: { body: 'This must survive a completely separate request.', mediaFileIds: [] },
+    });
+    const created = posted.json() as ContentItem;
+
+    const reread = await app.inject({
+      method: 'GET',
+      url: `/v1/lectures/${lecture.id}/discussion`,
+      headers: auth(instructor.session),
+    });
+    expect((reread.json() as FeedPage).items.some((item) => item.id === created.id)).toBe(true);
+  });
+});
+
+describe('instructor authority is derived server-side', () => {
+  /*
+   * The invariant: authority comes from `classroom_members.role`, read from the
+   * database on every call. It is never taken from the request body, from
+   * `users.verification_level`, or from anything the client can set — so there
+   * is no payload that turns a student into teaching staff.
+   */
+  const instructorOnly = (classroomId: string, lectureId: string) =>
+    [
+      {
+        name: 'publish a lecture',
+        method: 'POST' as const,
+        url: `/v1/classrooms/${classroomId}/lectures`,
+        payload: { title: 'An instructor-only operation' },
+      },
+      {
+        name: 'attach a material',
+        method: 'POST' as const,
+        url: `/v1/lectures/${lectureId}/materials`,
+        payload: { title: 'Slides', externalUrl: 'https://example.org/x.pdf' },
+      },
+    ];
+
+  it('allows the owner', async () => {
+    const app = await getApp();
+    const owner = await onboardedUser();
+    const classroom = await createClassroom(owner.session);
+    const lecture = await publishLecture(owner.session, classroom.id);
+
+    for (const op of instructorOnly(classroom.id, lecture.id)) {
+      const response = await app.inject({
+        method: op.method,
+        url: op.url,
+        headers: auth(owner.session),
+        payload: op.payload,
+      });
+      expect(response.statusCode, `owner must be able to ${op.name}`).toBe(201);
+    }
+  });
+
+  it('refuses a member, even one who claims a role in the payload', async () => {
+    const app = await getApp();
+    const owner = await onboardedUser();
+    const member = await onboardedUser();
+    const classroom = await createClassroom(owner.session);
+    const lecture = await publishLecture(owner.session, classroom.id);
+    await app.inject({
+      method: 'PUT',
+      url: `/v1/classrooms/${classroom.id}/membership`,
+      headers: auth(member.session),
+      payload: { joinCode: null },
+    });
+
+    for (const op of instructorOnly(classroom.id, lecture.id)) {
+      const response = await app.inject({
+        method: op.method,
+        url: op.url,
+        headers: auth(member.session),
+        // A role asserted by the client must change nothing.
+        payload: { ...op.payload, role: 'owner', verificationLevel: 'instructor' },
+      });
+      expect(response.statusCode, `a member must not be able to ${op.name}`).toBe(403);
+    }
+  });
+
+  it('refuses a non-member', async () => {
+    const app = await getApp();
+    const owner = await onboardedUser();
+    const outsider = await onboardedUser();
+    const classroom = await createClassroom(owner.session);
+    const lecture = await publishLecture(owner.session, classroom.id);
+
+    for (const op of instructorOnly(classroom.id, lecture.id)) {
+      const response = await app.inject({
+        method: op.method,
+        url: op.url,
+        headers: auth(outsider.session),
+        payload: op.payload,
+      });
+      // 404, not 403: a non-member is not told the room exists.
+      expect(response.statusCode, `a non-member must not be able to ${op.name}`).toBe(404);
+    }
+  });
+
+  it('refuses an unauthenticated caller', async () => {
+    const app = await getApp();
+    const owner = await onboardedUser();
+    const classroom = await createClassroom(owner.session);
+    const lecture = await publishLecture(owner.session, classroom.id);
+
+    for (const op of instructorOnly(classroom.id, lecture.id)) {
+      const response = await app.inject({ method: op.method, url: op.url, payload: op.payload });
+      expect(response.statusCode, `${op.name} must require authentication`).toBe(401);
+    }
   });
 });
