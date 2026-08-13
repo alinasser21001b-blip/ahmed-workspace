@@ -13,6 +13,7 @@ import multipart from '@fastify/multipart';
 import websocket from '@fastify/websocket';
 import { academicRoutes } from '../modules/academic/academic.routes.js';
 import { authRoutes } from '../modules/auth/auth.routes.js';
+import { classroomRoutes } from '../modules/classrooms/classrooms.routes.js';
 import { contentRoutes } from '../modules/content/content.routes.js';
 import { filesRoutes } from '../modules/files/files.routes.js';
 import { groupsRoutes } from '../modules/groups/groups.routes.js';
@@ -131,6 +132,7 @@ export async function buildApp() {
   await app.register(groupsRoutes, { prefix: '/v1' });
   await app.register(messagingRoutes, { prefix: '/v1' });
   await app.register(knowledgeRoutes, { prefix: '/v1' });
+  await app.register(classroomRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes, { prefix: '/v1' });
 
   return app;

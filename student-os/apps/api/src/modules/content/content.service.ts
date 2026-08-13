@@ -189,10 +189,25 @@ async function withKnowledge(
  * cohort they do not belong to — and copying rather than joining is what makes
  * the post keep its context after the author moves up a stage (§10).
  */
+/**
+ * A classroom placement resolved and authorised by the caller.
+ *
+ * The classrooms module owns the "may this actor post in this room" question,
+ * so it answers it and hands the answer down rather than re-encoding classroom
+ * rules here. Passing a placement is therefore an assertion that the gate has
+ * already run — which is why it is a separate parameter and not a field on the
+ * request body a client controls.
+ */
+export interface ClassroomPlacement {
+  classroomId: string;
+  lectureId: string | null;
+}
+
 export async function createPost(
   actor: Actor,
   input: CreatePostRequest,
   locale: Locale,
+  placement?: ClassroomPlacement,
 ): Promise<ContentItem> {
   const gate = canCreateContent(actor);
   if (!gate.allowed) throw errors.forbidden(gate.reason);
@@ -271,6 +286,8 @@ export async function createPost(
         subjectId: input.subjectId ?? null,
         communityId: input.communityId ?? null,
         groupId: input.groupId ?? null,
+        classroomId: placement?.classroomId ?? null,
+        lectureId: placement?.lectureId ?? null,
       },
       client,
     );
@@ -445,6 +462,8 @@ export async function listFeed(
       topicId: query.topicId,
       communityId: query.communityId,
       groupId: query.groupId,
+      classroomId: query.classroomId,
+      lectureId: query.lectureId,
       bookmarkedBy: query.scope === 'saved' ? actor.userId : undefined,
       knowledgeType: query.knowledgeType,
       difficulty: query.difficulty,

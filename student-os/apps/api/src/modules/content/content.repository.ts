@@ -74,6 +74,14 @@ export interface InsertContentInput {
   subjectId: string | null;
   communityId: string | null;
   groupId: string | null;
+  /**
+   * Classroom is a CONTAINER — it decides who may read the post.
+   * Lecture is a POINTER — it says which lecture the post is about, and grants
+   * nothing. Keeping them distinct is why `lecture_id` is not part of the
+   * single-container CHECK (migration 0012).
+   */
+  classroomId: string | null;
+  lectureId: string | null;
 }
 
 export async function insertContent(
@@ -85,9 +93,10 @@ export async function insertContent(
        kind, author_id, body, visibility,
        university_id, college_id, program_id, stage_id,
        course_id, subject_id, community_id, group_id,
+       classroom_id, lecture_id,
        knowledge_type, difficulty, language
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-               $13::knowledge_type, $14::difficulty_level, $15)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+               $15::knowledge_type, $16::difficulty_level, $17)
      RETURNING id`,
     [
       input.kind,
@@ -102,6 +111,8 @@ export async function insertContent(
       input.subjectId,
       input.communityId,
       input.groupId,
+      input.classroomId,
+      input.lectureId,
       input.knowledgeType,
       input.difficulty,
       input.language,

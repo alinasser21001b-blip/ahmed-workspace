@@ -266,6 +266,45 @@ await api(`/v1/content/${classified.id}/corrections`, {
   },
 });
 
+
+/*
+ * A classroom with a published lecture and a material (Phase 5b). Both new
+ * screens are dense chip rows over mixed-direction text with a long external
+ * URL — the shape that wraps badly in one direction and looks fine in the
+ * other.
+ */
+const classroom = await api('/v1/classrooms', {
+  method: 'POST',
+  token,
+  body: {
+    courseId: courses[0].id,
+    title: 'قاعة طب الأطفال — المجموعة ب',
+    description: 'محاضرات أسبوعية وشرائح ومصادر للمراجعة قبل الامتحان النهائي.',
+    visibility: 'course',
+  },
+});
+const auditLecture = await api(`/v1/classrooms/${classroom.id}/lectures`, {
+  method: 'POST',
+  token,
+  body: {
+    title: 'المتلازمة الكلوية — الآلية والعلاج Nephrotic Syndrome',
+    description: 'الوذمة والبروتين في البول وطرق العلاج الحديثة.',
+    learningObjectives: ['شرح آلية الوذمة في المتلازمة الكلوية بالتفصيل الكامل'],
+    keyConcepts: ['الألبومين', 'oncotic pressure'],
+    durationMinutes: 50,
+    topicIds: topics.slice(0, 2).map((t) => t.id),
+  },
+});
+await api(`/v1/lectures/${auditLecture.id}/materials`, {
+  method: 'POST',
+  token,
+  body: {
+    title: 'شرائح المحاضرة Lecture slides',
+    description: 'Nelson Textbook of Pediatrics, 22nd edition — chapter 545.',
+    externalUrl: 'https://example.org/a/very/long/link/that/should/not/overflow/its/card.pdf',
+  },
+});
+
 console.log(`  cohort ready — @${handle}, group ${group.id}, conversation ${directConversation.id}\n`);
 
 // --- the audit --------------------------------------------------------------
@@ -292,6 +331,11 @@ const SCREENS = [
   // shape that wraps badly in one direction and looks fine in the other.
   { name: 'post-knowledge', path: `/post/${classified.id}` },
   { name: 'topic', path: `/topic/${topics[0].id}` },
+  // Phase 5b.
+  { name: 'classrooms', path: '/classrooms' },
+  { name: 'classroom-detail', path: `/classrooms/${classroom.id}` },
+  { name: 'classroom-new', path: '/classrooms/new' },
+  { name: 'lecture', path: `/lecture/${auditLecture.id}` },
 ];
 
 for (const viewport of VIEWPORTS) {

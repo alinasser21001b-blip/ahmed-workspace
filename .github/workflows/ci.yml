@@ -1,21 +1,65 @@
-name: CI
+name: student-os CI
+
+# ---------------------------------------------------------------------------
+# This file lives at the REPOSITORY root, and that is the whole point of it.
+#
+# It used to live at `student-os/.github/workflows/ci.yml`. GitHub Actions only
+# discovers workflows in `.github/workflows/` at the root of the repository, so
+# a workflow nested inside a project directory is never registered and never
+# runs. The repository reported zero workflows and every pull request showed
+# zero checks — which reads like "nothing to report" and actually meant
+# "nothing was ever run". Phases 0 through 5 all merged without CI.
+#
+# The repository root is a workspace holding several unrelated projects
+# (student-os, furniture-os, medmind and a static site). This workflow belongs
+# to student-os alone:
+#
+#   * `paths` keeps it from running when only another project changed.
+#   * `defaults.run.working-directory` puts every step inside student-os, so no
+#     command can reach a sibling project by accident.
+#
+# The consequence of the paths filter is worth stating plainly: a pull request
+# that touches only furniture-os or medmind will show no checks from this
+# workflow, and that is correct rather than a repeat of the old failure. When
+# student-os changes, checks appear.
+# ---------------------------------------------------------------------------
 
 on:
   push:
     branches: ['**']
+    paths:
+      - 'student-os/**'
+      - '.github/workflows/ci.yml'
   pull_request:
+    paths:
+      - 'student-os/**'
+      - '.github/workflows/ci.yml'
+  # So the pipeline can be run by hand against any branch, including to confirm
+  # it is discoverable at all.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    working-directory: student-os
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # Static checks, unit tests, integration tests against a real Postgres, and
+  # proof that the migrations build the schema from nothing.
+  # ---------------------------------------------------------------------------
   verify:
+    name: Typecheck, lint, tests, migrations
     runs-on: ubuntu-latest
 
-    # Integration tests run against a real Postgres. Mocking the database here
-    # would mean the permission tests assert only that the code agrees with
-    # itself.
+    # A disposable Postgres for this job only. It starts empty, it is migrated
+    # from empty, and it is destroyed with the runner. Nothing here can reach a
+    # developer's database: there is no credential in this repository that
+    # points anywhere else, and the test suite refuses any database not named
+    # `*_test` on a private host.
     services:
       postgres:
         image: postgres:16
@@ -31,21 +75,30 @@ jobs:
 
     env:
       NODE_ENV: test
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/studentos_test
+      # The ONLY database variable this job sets. `DATABASE_URL` is deliberately
+      # absent: the integration suite resolves its own target from
+      # TEST_DATABASE_URL and refuses to run if an ambient DATABASE_URL
+      # disagrees, so leaving it unset is what exercises the real path.
+      # These are throwaway credentials for a container that lives minutes.
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/studentos_test
       JWT_SECRET: ci-only-secret-value-that-is-long-enough-0123456789
 
     steps:
       - uses: actions/checkout@v4
 
+      # No `version` input on purpose. student-os/package.json declares
+      # `packageManager: pnpm@10.33.0`, and the action refuses to run when a
+      # version is specified in both places. Reading it from the manifest keeps
+      # one source of truth, so bumping pnpm is a single edit that CI follows.
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          package_json_file: student-os/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: student-os/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
 
@@ -60,8 +113,28 @@ jobs:
 
       - run: pnpm test:integration
 
-      - name: Verify migrations apply from empty
-        run: pnpm db:reset
+      # ---------------------------------------------------------------------
+      # Migrations from empty.
+      #
+      # The integration suite already drops and re-migrates before it runs, so
+      # this is a second, explicit proof with an assertion rather than an exit
+      # code: every .sql file on disk must have a corresponding applied row.
+      # A migration that stops applying cleanly fails the build here instead of
+      # failing a deploy.
+      # ---------------------------------------------------------------------
+      - name: Verify migrations apply from an empty database
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/studentos_test
+        run: |
+          pnpm db:reset
+          on_disk=$(ls apps/api/migrations/*.sql | wc -l)
+          applied=$(psql "$DATABASE_URL" -tAc 'SELECT count(*) FROM schema_migrations')
+          echo "migrations on disk: $on_disk, applied: $applied"
+          if [ "$on_disk" -ne "$applied" ]; then
+            echo "::error::migration mismatch — $on_disk file(s) on disk but $applied applied"
+            exit 1
+          fi
+          echo "$applied/$on_disk migrations applied from empty"
 
       - name: Verify the API builds
         run: pnpm --filter @sos/api build
@@ -70,18 +143,16 @@ jobs:
         run: pnpm --filter @sos/mobile exec expo export --platform web --output-dir dist
 
   # ---------------------------------------------------------------------------
-  # The browser journey, in Arabic, against a real API and a real bundle.
+  # The API smoke suite and the browser journeys, against a real server and a
+  # real bundle.
   #
   # A separate job because it needs a running server and a browser, and because
-  # a red E2E should be legible as "the journey broke" rather than buried in the
-  # unit-test log. It runs the whole pipeline the Constitution asks for:
+  # a red journey should be legible as "the journey broke" rather than buried in
+  # a unit-test log. It runs the whole pipeline the Constitution asks for:
   # install → migrate → seed → build → serve → run.
-  #
-  # The seed is idempotent by construction — every insert upserts on a natural
-  # key and nothing derives from the clock — so the run does not depend on any
-  # local developer state, and re-running it cannot produce a second cohort.
   # ---------------------------------------------------------------------------
   journey:
+    name: Smoke suite and browser journeys
     runs-on: ubuntu-latest
 
     services:
@@ -98,6 +169,9 @@ jobs:
           --health-retries 5
 
     env:
+      # This job runs the real server against its own disposable database, so
+      # DATABASE_URL is set here on purpose — it is not running the integration
+      # suite, which is the thing that must never inherit one.
       NODE_ENV: development
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/studentos_e2e
       JWT_SECRET: ci-only-secret-value-that-is-long-enough-0123456789
@@ -117,14 +191,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version` input on purpose. student-os/package.json declares
+      # `packageManager: pnpm@10.33.0`, and the action refuses to run when a
+      # version is specified in both places. Reading it from the manifest keeps
+      # one source of truth, so bumping pnpm is a single edit that CI follows.
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          package_json_file: student-os/package.json
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: student-os/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
 
@@ -195,6 +274,16 @@ jobs:
           E2E_SHOT_DIR: ${{ runner.temp }}/e2e-shots
           PLAYWRIGHT_CHROMIUM: ''
         run: pnpm test:messaging
+
+      # The Phase 5b vertical slice: open a classroom, publish a lecture, join,
+      # read it, reload, and confirm an outsider is refused every surface.
+      - name: Run the classroom journey
+        env:
+          E2E_WEB_URL: http://localhost:8081
+          E2E_API_URL: http://localhost:4000
+          E2E_SHOT_DIR: ${{ runner.temp }}/e2e-shots
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:classrooms
 
       - name: Audit RTL and layout — Arabic and English, phone and desktop
         env:

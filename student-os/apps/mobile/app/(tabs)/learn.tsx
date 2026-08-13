@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { Text } from '../../src/components/Text';
 import { Badge, Card, SectionHeader } from '../../src/components/surfaces';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
@@ -99,6 +100,38 @@ export default function Learn(): React.JSX.Element {
         }
       >
         <Text variant="display">{t('learn.title')}</Text>
+
+        {/*
+         * Classrooms are always reachable, even for a student with no signals
+         * yet — this is the one section that is a destination rather than a
+         * report, so hiding it when the rest of the tab is empty would strand
+         * a new student on a screen that says "nothing yet" and offers no way
+         * to change that.
+         */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('classrooms.title')}
+          onPress={() => router.push('/classrooms')}
+        >
+          <Card>
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: theme.spacing.md,
+              }}
+            >
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="bodyStrong">{t('classrooms.title')}</Text>
+                <Text variant="micro" tone="muted">
+                  {t('classrooms.empty.body')}
+                </Text>
+              </View>
+              <DirectionalIcon direction="forward" size={20} color={theme.colors.textMuted} />
+            </View>
+          </Card>
+        </Pressable>
 
         {!hasAnything ? (
           <View style={{ minHeight: 260 }}>

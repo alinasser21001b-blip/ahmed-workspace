@@ -325,3 +325,39 @@ export async function loadTargetUserRef(
     followsActor: row.follows_actor,
   };
 }
+
+/**
+ * Enrols a student in every active course of their stage.
+ *
+ * `course_enrollments` has existed since 0002 and, until now, had no producer
+ * at all: `actor.courseIds` was hydrated from a table nothing ever wrote to, so
+ * it was empty for every user who ever signed in. Everything gated on course
+ * membership — course-scoped content, course-scoped groups, and from Phase 5b
+ * the ability to open or discover a classroom — was therefore unreachable in
+ * practice while looking correct in code.
+ *
+ * The rule is the one the hierarchy already encodes: `courses.stage_id` says
+ * which stage a course belongs to, and a student in that stage takes it. This
+ * derives the rows rather than asking the student to pick, because a student
+ * does not choose whether Stage 5 Pediatrics applies to them.
+ *
+ * Idempotent, and safe to re-run when a student's placement changes: the
+ * `UNIQUE (user_id, course_id)` constraint absorbs the repeat, and a row that
+ * already exists is reactivated rather than duplicated. Enrolments from a
+ * previous stage are left alone — history, not an error.
+ */
+export async function enrolInStageCourses(
+  userId: string,
+  stageId: string,
+  client?: Sql,
+): Promise<void> {
+  await queryOne(
+    `INSERT INTO course_enrollments (user_id, course_id, role, status)
+     SELECT $1, c.id, 'member', 'active'
+     FROM courses c
+     WHERE c.stage_id = $2 AND c.is_active
+     ON CONFLICT (user_id, course_id) DO UPDATE SET status = 'active'`,
+    [userId, stageId],
+    client,
+  );
+}
