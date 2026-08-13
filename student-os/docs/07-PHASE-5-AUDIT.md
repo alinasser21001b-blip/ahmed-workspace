@@ -535,3 +535,38 @@ caller is a guard the next caller can skip.
 Proven by a deliberate negative test, not by inspection: pointing
 `DATABASE_URL` at `studentos_dev` fails the run before a connection is opened,
 and the development database is byte-identical afterwards.
+
+### 10.3 What CI found on its first complete run
+
+The point of Phase 5.1 is not the workflow file; it is that the workflow now
+reports things. It reported three on its first three runs, and none of them had
+ever been visible before:
+
+1. **`pnpm/action-setup` refused two pnpm versions.** The workflow passed
+   `version: 10` while `student-os/package.json` has declared
+   `packageManager: pnpm@10.33.0` since Phase 0. The action rejects that rather
+   than guessing, correctly — a mismatch is how a build starts using a pnpm the
+   lockfile was not written by. The old nested workflow carried the same input
+   and never hit it, because it never ran. Fixed by deleting the input and
+   letting the manifest be the single source of truth.
+
+2. **A latent flake in `feed pagination`.** The test published 7 posts and
+   walked at most 5 pages of 3, silently assuming the whole cohort feed was at
+   most 15 items. The integration suites share one database and each publishes
+   into it, so the assumption held only while that file ran early enough. CI
+   runs everything on a freshly migrated database in one process, and the
+   author's posts ranked past the fifteenth item.
+
+   Nothing was wrong with pagination, and nothing was wrong with the assertion —
+   the walk was. It now pages to exhaustion and asserts that it exhausted, which
+   proves the invariant across the entire feed instead of its first three pages.
+
+3. Nothing else. The `journey` job — demo seed, 78-check API smoke suite, the
+   Arabic first journey, the two-browser messaging journey and the 272-check
+   layout audit — passed on GitHub's runners on its first attempt.
+
+Finding (2) is the one worth keeping in mind for later phases: it is an
+ordering assumption that a local run cannot expose, because a developer's
+database is never in the state a from-empty full-suite run produces. That class
+of defect has presumably been available to find since Phase 2, and was not
+found, because nothing ran the whole suite from empty on a clean machine.
