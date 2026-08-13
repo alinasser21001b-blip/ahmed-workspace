@@ -1,0 +1,22 @@
+{
+  /*
+   * The build config, separate from the typecheck config.
+   *
+   * `tsconfig.json` deliberately includes `test/` and `scripts/` so that
+   * `pnpm typecheck` covers them. But including them in the *build* pushes
+   * `rootDir` up to the package root, so the emitted entry point lands at
+   * `dist/src/index.js` while `package.json`'s start script says
+   * `dist/index.js` — a build that succeeds and a binary that cannot start.
+   *
+   * That went unnoticed because CI compiled the API and never ran it. The
+   * journey job now starts the built output, which is what turns "it compiles"
+   * into "it runs".
+   */
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node"]
+  },
+  "include": ["src/**/*"]
+}

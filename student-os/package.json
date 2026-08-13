@@ -1,0 +1,41 @@
+{
+  "name": "student-social-learning-os",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "argon2"
+    ]
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" build && pnpm --filter @sos/api build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "test": "pnpm -r test",
+    "test:unit": "pnpm -r test:unit",
+    "test:integration": "pnpm --filter @sos/api test:integration",
+    "db:migrate": "pnpm --filter @sos/api db:migrate",
+    "db:seed": "pnpm --filter @sos/api db:seed",
+    "db:reset": "pnpm --filter @sos/api db:reset",
+    "dev:api": "pnpm --filter @sos/api dev",
+    "dev:mobile": "pnpm --filter @sos/mobile start",
+    "test:e2e": "node apps/mobile/e2e/first-journey.mjs",
+    "test:rtl": "node apps/mobile/e2e/rtl-audit.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^22.20.0",
+    "eslint": "^9.39.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "playwright": "^1.62.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^3.2.4"
+  }
+}

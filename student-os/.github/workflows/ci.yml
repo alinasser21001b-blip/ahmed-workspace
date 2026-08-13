@@ -1,0 +1,194 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    # Integration tests run against a real Postgres. Mocking the database here
+    # would mean the permission tests assert only that the code agrees with
+    # itself.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: studentos_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/studentos_test
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/studentos_test
+      JWT_SECRET: ci-only-secret-value-that-is-long-enough-0123456789
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Shared packages must be built before anything type-checks against them.
+      - run: pnpm --filter @sos/contracts --filter @sos/core build
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      - run: pnpm test:unit
+
+      - run: pnpm test:integration
+
+      - name: Verify migrations apply from empty
+        run: pnpm db:reset
+
+      - name: Verify the API builds
+        run: pnpm --filter @sos/api build
+
+      - name: Verify the client bundles
+        run: pnpm --filter @sos/mobile exec expo export --platform web --output-dir dist
+
+  # ---------------------------------------------------------------------------
+  # The browser journey, in Arabic, against a real API and a real bundle.
+  #
+  # A separate job because it needs a running server and a browser, and because
+  # a red E2E should be legible as "the journey broke" rather than buried in the
+  # unit-test log. It runs the whole pipeline the Constitution asks for:
+  # install → migrate → seed → build → serve → run.
+  #
+  # The seed is idempotent by construction — every insert upserts on a natural
+  # key and nothing derives from the clock — so the run does not depend on any
+  # local developer state, and re-running it cannot produce a second cohort.
+  # ---------------------------------------------------------------------------
+  journey:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: studentos_e2e
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: development
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/studentos_e2e
+      JWT_SECRET: ci-only-secret-value-that-is-long-enough-0123456789
+      PORT: '4000'
+      LOG_LEVEL: warn
+      # The client is bundled against this, so it must be baked in before the
+      # export rather than set at runtime — a web bundle has no environment.
+      EXPO_PUBLIC_API_URL: http://localhost:4000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @sos/contracts --filter @sos/core build
+
+      - name: Database — migrate from empty, then seed
+        run: |
+          pnpm db:reset
+          pnpm db:seed
+
+      - name: Build the API and the web bundle
+        run: |
+          pnpm --filter @sos/api build
+          pnpm --filter @sos/mobile exec expo export --platform web --output-dir dist
+
+      - name: Start the API
+        run: |
+          node apps/api/dist/index.js > /tmp/api.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4000/health/ready > /dev/null; then
+              echo "API ready after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "API never became ready"; cat /tmp/api.log; exit 1
+
+      - name: Serve the web bundle
+        run: |
+          npx --yes serve apps/mobile/dist -l 8081 --single > /tmp/web.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8081 > /dev/null; then
+              echo "Bundle served after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Bundle never served"; cat /tmp/web.log; exit 1
+
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Order matters: the journey asserts that a brand-new student sees a real
+      # empty state, which is only true before the layout audit publishes its
+      # fixtures into the same cohort. Running the audit first would make the
+      # journey fail for a reason that has nothing to do with the journey.
+      - name: Run the first journey, in Arabic
+        env:
+          E2E_WEB_URL: http://localhost:8081
+          E2E_SHOT_DIR: ${{ runner.temp }}/e2e-shots
+          # Let Playwright resolve its own download rather than the image path
+          # this repository uses locally.
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:e2e
+
+      - name: Audit RTL and layout — Arabic and English, phone and desktop
+        env:
+          E2E_WEB_URL: http://localhost:8081
+          E2E_API_URL: http://localhost:4000
+          E2E_SHOT_DIR: ${{ runner.temp }}/e2e-shots
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:rtl
+
+      # Screenshots are the artefact worth keeping: an RTL layout failure is
+      # visible in one and invisible in a log line.
+      - name: Upload journey screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-screenshots
+          path: ${{ runner.temp }}/e2e-shots
+          if-no-files-found: ignore
+
+      - name: API log on failure
+        if: failure()
+        run: cat /tmp/api.log
