@@ -219,15 +219,40 @@ describe('feed pagination', () => {
       ids.push(created.body.id);
     }
 
+    /*
+     * Walk to exhaustion, not for a fixed number of pages.
+     *
+     * This used to stop after 5 pages of 3, which silently assumed the whole
+     * cohort feed was at most 15 items. The suites share one database and each
+     * one publishes into it, so the assumption held only while this file
+     * happened to run early — and CI, which runs everything on a fresh
+     * database in one process, is where it finally stopped holding.
+     *
+     * Paging until the cursor is exhausted is also the stronger claim: it
+     * proves the invariant across the ENTIRE feed rather than its first three
+     * pages. The bound below is a runaway guard, and hitting it fails the test
+     * rather than quietly ending the walk with a partial result.
+     */
+    const MAX_PAGES = 500;
     const seen: string[] = [];
     let cursor: string | null = null;
-    for (let page = 0; page < 5; page += 1) {
+    let pages = 0;
+    let exhausted = false;
+    while (pages < MAX_PAGES) {
       const query: string = `?limit=3${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
       const result = await readFeed(reader.session, query);
       seen.push(...result.items.map((i) => i.id));
+      pages += 1;
       cursor = result.nextCursor;
-      if (!cursor) break;
+      if (!cursor) {
+        exhausted = true;
+        break;
+      }
     }
+
+    expect(exhausted, `feed did not end after ${MAX_PAGES} pages — cursor is not advancing`).toBe(
+      true,
+    );
 
     const mine = seen.filter((id) => ids.includes(id));
     expect(new Set(mine).size).toBe(mine.length); // no duplicates across pages
