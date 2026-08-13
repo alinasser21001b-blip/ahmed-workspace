@@ -86,9 +86,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version` input on purpose. student-os/package.json declares
+      # `packageManager: pnpm@10.33.0`, and the action refuses to run when a
+      # version is specified in both places. Reading it from the manifest keeps
+      # one source of truth, so bumping pnpm is a single edit that CI follows.
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
           package_json_file: student-os/package.json
 
       - uses: actions/setup-node@v4
@@ -188,9 +191,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No `version` input on purpose. student-os/package.json declares
+      # `packageManager: pnpm@10.33.0`, and the action refuses to run when a
+      # version is specified in both places. Reading it from the manifest keeps
+      # one source of truth, so bumping pnpm is a single edit that CI follows.
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
           package_json_file: student-os/package.json
 
       - uses: actions/setup-node@v4
