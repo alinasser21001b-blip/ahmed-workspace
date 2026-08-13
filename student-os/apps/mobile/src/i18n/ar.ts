@@ -1,0 +1,129 @@
+/**
+ * Arabic catalogue — the primary language of the product.
+ *
+ * This file is the key set of record: `en.ts` is typed against it, so adding a
+ * key here without translating it there fails the build.
+ */
+export const ar = {
+  // --- app-wide
+  'app.name': 'منصة الطالب',
+  'app.tagline': 'مجتمعك الأكاديمي ودراستك في مكان واحد',
+
+  // --- generic actions
+  'action.continue': 'متابعة',
+  'action.back': 'رجوع',
+  'action.next': 'التالي',
+  'action.save': 'حفظ',
+  'action.cancel': 'إلغاء',
+  'action.retry': 'إعادة المحاولة',
+  'action.done': 'تم',
+  'action.skip': 'تخطّي',
+
+  // --- states
+  'state.loading': 'جارٍ التحميل…',
+  'state.error.title': 'حدث خطأ',
+  'state.error.body': 'تعذّر إكمال العملية. تحقّق من اتصالك ثم أعد المحاولة.',
+  'state.offline': 'لا يوجد اتصال بالإنترنت',
+
+  // --- auth
+  'auth.signIn.title': 'تسجيل الدخول',
+  'auth.signIn.subtitle': 'أهلاً بعودتك',
+  'auth.signUp.title': 'إنشاء حساب',
+  'auth.signUp.subtitle': 'ابدأ رحلتك الأكاديمية',
+  'auth.email': 'البريد الإلكتروني',
+  'auth.email.placeholder': 'name@uob.edu.iq',
+  'auth.password': 'كلمة المرور',
+  'auth.password.hint': '١٠ أحرف على الأقل',
+  'auth.haveAccount': 'لديك حساب؟ سجّل الدخول',
+  'auth.noAccount': 'ليس لديك حساب؟ أنشئ حساباً',
+  'auth.error.invalidCredentials': 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
+  'auth.error.emailTaken': 'هذا البريد الإلكتروني مستخدم بالفعل',
+  'auth.error.suspended': 'هذا الحساب موقوف',
+
+  // --- onboarding
+  'onboarding.university.title': 'اختر جامعتك',
+  'onboarding.college.title': 'اختر كليتك',
+  'onboarding.program.title': 'اختر القسم',
+  'onboarding.stage.title': 'اختر مرحلتك',
+  'onboarding.profile.title': 'أكمل ملفك',
+  'onboarding.profile.subtitle': 'هكذا سيراك زملاؤك',
+  'onboarding.handle': 'المعرّف',
+  'onboarding.handle.hint': 'أحرف إنجليزية صغيرة وأرقام و_ فقط',
+  'onboarding.handle.taken': 'هذا المعرّف مستخدم',
+  'onboarding.handle.available': 'المعرّف متاح',
+  'onboarding.displayName': 'الاسم',
+  'onboarding.bio': 'نبذة',
+  'onboarding.interests.title': 'ما الذي يهمّك؟',
+  'onboarding.interests.subtitle': 'اختر مواضيع لتخصيص ما تراه',
+  'onboarding.finish': 'ابدأ',
+
+  // --- navigation
+  'nav.home': 'الرئيسية',
+  'nav.groups': 'المجموعات',
+  'nav.create': 'إنشاء',
+  'nav.learn': 'التعلّم',
+  'nav.chat': 'المحادثات',
+  'nav.profile': 'الملف الشخصي',
+  'nav.notifications': 'الإشعارات',
+  'nav.search': 'بحث',
+  'nav.settings': 'الإعدادات',
+
+  // --- home
+  'home.title': 'الرئيسية',
+  'home.greeting': 'أهلاً {name}',
+  'home.section.liveNow': 'مباشر الآن',
+  'home.section.upcoming': 'محاضرات قادمة',
+  'home.section.continue': 'أكمل التعلّم',
+  'home.section.feed': 'آخر المستجدات',
+  'home.empty.title': 'لا يوجد جديد بعد',
+  'home.empty.body': 'انضم إلى مجتمع دفعتك لتبدأ برؤية محتوى زملائك.',
+  'home.empty.action': 'استكشف المجتمعات',
+
+  // --- groups
+  'groups.title': 'المجموعات',
+  'groups.empty.title': 'لا توجد مجموعات دراسية بعد',
+  'groups.empty.body': 'أنشئ مجموعة مع زملائك للمذاكرة ومشاركة الملفات.',
+  'groups.empty.action': 'إنشاء مجموعة دراسية',
+
+  // --- learn
+  'learn.title': 'التعلّم',
+  'learn.myCourses': 'مقرراتي',
+  'learn.continue': 'أكمل من حيث توقفت',
+  'learn.weakTopics': 'مواضيع تحتاج مراجعة',
+  'learn.saved': 'المحفوظات',
+  'learn.quizzes': 'الاختبارات',
+  'learn.flashcards': 'البطاقات',
+  'learn.aiTutor': 'المعلّم الذكي',
+  'learn.empty.title': 'لم تنضم إلى أي مقرر بعد',
+  'learn.empty.body': 'انضم إلى مقرراتك لتظهر محاضراتك واختباراتك هنا.',
+  'learn.empty.action': 'تصفّح المقررات',
+  'learn.signalsDisclaimer': 'هذه مؤشرات نشاط دراسي، وليست تقييماً لمستواك.',
+
+  // --- chat
+  'chat.title': 'المحادثات',
+  'chat.empty.title': 'لا توجد محادثات',
+  'chat.empty.body': 'ابدأ محادثة مع زميل أو مجموعة دراسية.',
+  'chat.empty.action': 'محادثة جديدة',
+  'chat.status.sending': 'جارٍ الإرسال',
+  'chat.status.failed': 'فشل الإرسال',
+  'chat.status.retry': 'إعادة الإرسال',
+
+  // --- create
+  'create.title': 'إنشاء',
+  'create.post': 'منشور',
+  'create.reel': 'مقطع تعليمي',
+  'create.question': 'سؤال',
+  'create.poll': 'استطلاع',
+  'create.resource': 'ملف أو مصدر',
+  'create.studySession': 'جلسة مذاكرة',
+
+  // --- profile
+  'profile.contributionScore': 'نقاط المساهمة',
+  'profile.courses': 'المقررات',
+  'profile.groups': 'المجموعات',
+  'profile.interests': 'الاهتمامات',
+
+  // --- phase status
+  'phase.comingSoon.title': 'قيد الإنشاء',
+  'phase.comingSoon.body': 'هذه المرحلة قادمة في التحديث القادم.',
+} as const;
