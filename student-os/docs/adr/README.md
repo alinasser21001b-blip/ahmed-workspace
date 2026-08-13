@@ -15,3 +15,4 @@ future us) can tell the difference between a considered choice and an accident.
 | [0008](0008-trigram-search.md) | Trigram search rather than `tsvector`, because the corpus is bilingual |
 | [0009](0009-arabic-normalisation.md) | Normalise Arabic for search — in the column and in the query, and only where it is meaning-preserving |
 | [0010](0010-domain-events-outbox.md) | One domain-event vocabulary, delivered through a transactional outbox |
+| [0011](0011-realtime-notifies-database-decides.md) | The realtime socket notifies; the database decides |

@@ -2,7 +2,7 @@
 
 > Constitution §89.C. The **migrations are the source of truth**
 > (`apps/api/migrations/*.sql`); this document explains the decisions behind
-> them. 80 tables across nine migrations.
+> them. 80 tables across ten migrations.
 
 ## 1. Conventions
 
@@ -100,6 +100,22 @@ Three columns carry the entire delivery contract:
 
 `conversations.last_seq` is the row locked to allocate the next `seq`, which
 also serialises concurrent writes to one conversation.
+
+### 3.5.1 Delivery is a position, not a row per message per recipient
+
+Revised in `0010`. `0004` created `message_receipts (message_id, user_id)` for
+delivery state — one row per message per recipient, which in a 200-member group
+chat is 200 rows per message, to answer a question worth two ticks in a bubble.
+
+Read state had already avoided this, and delivery has the same shape, so it got
+the same treatment: `conversation_members.last_delivered_seq`, one integer per
+member, beside `last_read_seq`. A CHECK enforces `delivered >= read`, so an
+out-of-order receipt cannot rewind a position and resurrect a cleared badge.
+
+`message_receipts` is left in place and unused. Per-message delivery is a real
+requirement for a later feature — *which of my devices has this?* — and dropping
+a table to re-add it is worse than leaving an empty one. It is recorded as
+reserved rather than quietly carried as though it were live.
 
 ### 3.6 Question-level quiz results
 

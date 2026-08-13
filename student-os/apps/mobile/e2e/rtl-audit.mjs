@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
@@ -186,7 +187,47 @@ await api('/v1/content', {
   },
 });
 
-console.log(`  cohort ready — @${handle}, group ${group.id}\n`);
+/*
+ * A conversation with real content, so the thread screen is audited with
+ * bubbles, a date separator and a composer rather than as an empty state.
+ */
+const partner = await api('/v1/auth/signup', {
+  method: 'POST',
+  body: { email: `rtl-partner-${stamp}@uob.edu.iq`, password: PASSWORD },
+});
+await api('/v1/me/onboarding', {
+  method: 'POST',
+  token: partner.tokens.accessToken,
+  body: {
+    handle: `rtlp_${stamp.toString(36)}`.slice(0, 30),
+    displayName: 'زينب الحسيني',
+    universityId: university.id,
+    collegeId: college.id,
+    programId: program.id,
+    stageId: stage.id,
+    academicYearId: year.id,
+    interestTopicIds: topics.slice(0, 1).map((t) => t.id),
+  },
+});
+
+const directConversation = await api('/v1/conversations', {
+  method: 'POST',
+  token,
+  body: { recipientHandle: `rtlp_${stamp.toString(36)}`.slice(0, 30) },
+});
+for (const [sender, body] of [
+  [token, 'سؤال سريع عن المحاضرة الأخيرة، هل عندك الملخص؟'],
+  [partner.tokens.accessToken, 'Yes — I uploaded it earlier. Check the group files.'],
+  [token, 'شكراً جزيلاً، سأراجعه الليلة قبل الامتحان النهائي إن شاء الله.'],
+]) {
+  await api(`/v1/conversations/${directConversation.id}/messages`, {
+    method: 'POST',
+    token: sender,
+    body: { clientMessageId: randomUUID(), body },
+  });
+}
+
+console.log(`  cohort ready — @${handle}, group ${group.id}, conversation ${directConversation.id}\n`);
 
 // --- the audit --------------------------------------------------------------
 
@@ -198,6 +239,8 @@ if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
 const SCREENS = [
   { name: 'feed', path: '/' },
+  { name: 'chat-list', path: '/(tabs)/chat' },
+  { name: 'chat-thread', path: `/chat/${directConversation.id}` },
   { name: 'groups', path: '/(tabs)/groups' },
   { name: 'group-detail', path: `/group/${group.id}` },
   { name: 'group-new', path: '/group/new' },

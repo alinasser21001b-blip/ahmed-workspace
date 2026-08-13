@@ -176,6 +176,45 @@ export async function attachFilesToContent(
   return rows.map((r) => r.id);
 }
 
+/**
+ * Claims uploads as a message's attachments.
+ *
+ * Atomic, like the content path: the same `attached_at IS NULL` predicate means
+ * a file cannot be claimed twice, and the caller compares the returned count
+ * rather than checking first and hoping.
+ *
+ * Placement is `private`, which looks wrong until you follow how a recipient
+ * actually reaches the bytes. Attachments are served through signed URLs minted
+ * **at message-read time, for a reader who has already passed the conversation
+ * gate** — the capability model files have used since Phase 2. `private` is
+ * therefore the correct placement for the *other* path, `GET /files/:id`, which
+ * mints a URL from the file's own visibility: a conversation is not a scope in
+ * the visibility vocabulary, and inventing one that `canAccessFile` could not
+ * resolve would be a lie in the schema.
+ *
+ * The consequence, stated so it is not discovered later: a recipient re-mints an
+ * expired attachment URL by re-reading the message, not by asking the file
+ * endpoint. That is what the client does anyway.
+ */
+export async function attachFilesToMessage(
+  fileIds: readonly string[],
+  ownerId: string,
+  client?: Sql,
+): Promise<string[]> {
+  if (fileIds.length === 0) return [];
+  const rows = await queryRows<{ id: string }>(
+    `UPDATE files SET attached_at = now(), visibility = 'private'
+     WHERE id = ANY($1::uuid[])
+       AND owner_id = $2
+       AND deleted_at IS NULL
+       AND attached_at IS NULL
+     RETURNING id`,
+    [fileIds, ownerId],
+    client,
+  );
+  return rows.map((r) => r.id);
+}
+
 export async function softDeleteFile(id: string, ownerId: string, client?: Sql): Promise<boolean> {
   const row = await queryOne<{ id: string }>(
     `UPDATE files SET deleted_at = now()

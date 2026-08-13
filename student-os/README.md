@@ -5,9 +5,11 @@ communities, study groups, messaging, classrooms, lectures, quizzes and an AI
 layer — built as **one academic graph**, not as separate products stapled
 together.
 
-> Status: **Phases 0–3 complete and closed** — Foundation, Identity, Social
-> core, and Community. 272 tests passing, plus a browser journey and a layout
-> audit that runs every screen in Arabic and English, on phone and desktop.
+> Status: **Phases 0–4 complete** — Foundation, Identity, Social core,
+> Community, and Messaging. 325 tests passing, plus three browser suites: the
+> first journey, a layout audit over every screen in Arabic and English on
+> phone and desktop, and a two-user messaging journey that drops a real
+> connection mid-conversation.
 > The full journey — sign up, publish, comment, like, save, create a study
 > group, post inside it, and find it by search — runs end-to-end in a real
 > browser, in Arabic.
@@ -29,6 +31,13 @@ together.
 | [UX Architecture](docs/04-UX-ARCHITECTURE.md) | Screens, navigation, design rules |
 | [Roadmap](docs/05-ROADMAP.md) | Phases and exit criteria |
 | [Phase 3 Closure Audit](docs/06-PHASE-3-AUDIT.md) | What was actually true at the end of Phase 3, and what was done about it |
+
+**Knowledge is the social object.** This is an academic social learning network,
+not a social network with course material on it. What that rules in and out —
+no entertainment feed, no virality model, no engagement-for-its-own-sake
+mechanics, and knowledge that stays discoverable instead of disappearing into
+chats — is [§1.1 of the product architecture](docs/00-PRODUCT-ARCHITECTURE.md),
+and it constrains every phase from here.
 | [ADRs](docs/adr/) | Decisions that were not obvious |
 
 ## Layout
@@ -66,8 +75,8 @@ pnpm dev:mobile                             # Expo dev server
 
 ```bash
 pnpm typecheck          # all four packages
-pnpm test:unit          # 156 unit tests (@sos/core)
-pnpm test:integration   # 116 integration tests against real Postgres
+pnpm test:unit          # 182 unit tests (@sos/core)
+pnpm test:integration   # 143 integration tests against real Postgres
 ```
 
 Integration tests run against a **real database**, not a mock. Permission bugs
@@ -85,8 +94,9 @@ pnpm dev:api &
 pnpm --filter @sos/mobile export:web
 npx serve apps/mobile/dist -l 8081 --single &
 
-pnpm test:e2e     # the first journey, in Arabic
-pnpm test:rtl     # every screen, ar/en × phone/desktop
+pnpm test:e2e        # the first journey, in Arabic
+pnpm test:messaging  # two students, two browsers, one dropped connection
+pnpm test:rtl        # every screen, ar/en × phone/desktop
 ```
 
 The journey runs **in Arabic**, because Arabic is the primary language and RTL
@@ -112,7 +122,9 @@ Both run in CI, against a real API and a real bundle.
 | No hardcoded UI strings | English catalogue typed against Arabic — a missing translation is a compile error |
 | Every async surface has loading / empty / error / retry | `states.tsx` primitives |
 | Learning signals are not claims about learning | Named `learning signals` in schema, API and UI, with a visible disclaimer |
-| Messages survive bad networks | Server-assigned `seq`, client-minted idempotency key, unit-tested state machine |
+| Messages survive bad networks | Server-assigned `seq`, client-minted idempotency key, and a two-browser E2E that drops a real connection and checks the gap replays once, in order ([ADR-0011](docs/adr/0011-realtime-notifies-database-decides.md)) |
+| A realtime frame never outruns the database | Every write is HTTP and committed before it is announced; the socket is an optimisation over a plain `afterSeq` read, so a dropped connection is late data, never lost data |
+| Nobody reads a conversation they are not in | No admin bypass exists for messaging, deliberately — a post was published to an audience, a message was not |
 | The feed cannot leak across cohorts | The permission filter is pushed into the SQL `WHERE`, never applied after the fetch ([ADR-0003](docs/adr/0003-single-authorization-layer.md)) |
 | Ranking matches its documented formula | SQL and TypeScript implementations compared by a parity test ([ADR-0007](docs/adr/0007-ranking-in-sql-with-parity-test.md)) |
 | An upload is what it claims to be | Format read from magic bytes; the declared MIME type is discarded |

@@ -171,6 +171,17 @@ jobs:
           PLAYWRIGHT_CHROMIUM: ''
         run: pnpm test:e2e
 
+      # Two browsers, one conversation, a real network interruption. This is the
+      # Phase 4 exit criterion, and it is the only test that can observe a
+      # message surviving a dropped socket.
+      - name: Run the two-user messaging journey
+        env:
+          E2E_WEB_URL: http://localhost:8081
+          E2E_API_URL: http://localhost:4000
+          E2E_SHOT_DIR: ${{ runner.temp }}/e2e-shots
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:messaging
+
       - name: Audit RTL and layout — Arabic and English, phone and desktop
         env:
           E2E_WEB_URL: http://localhost:8081

@@ -4,6 +4,7 @@ import { getLocales } from 'expo-localization';
 import { useMemo } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { applyDirection, I18nProvider, type Locale } from '../src/i18n/index';
+import { RealtimeProvider } from '../src/state/realtime';
 import { SessionProvider } from '../src/state/session';
 import { ThemeProvider } from '../src/theme/ThemeProvider';
 
@@ -27,6 +28,7 @@ export default function RootLayout(): React.JSX.Element {
       <I18nProvider initialLocale={initialLocale}>
         <ThemeProvider>
           <SessionProvider>
+            <RealtimeProvider>
             <StatusBar style="auto" />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
@@ -39,8 +41,10 @@ export default function RootLayout(): React.JSX.Element {
               <Stack.Screen name="group/new" options={{ presentation: 'modal' }} />
               <Stack.Screen name="group/[id]" />
               <Stack.Screen name="search" />
+              <Stack.Screen name="chat/[id]" />
               <Stack.Screen name="profile/[handle]" />
             </Stack>
+            </RealtimeProvider>
           </SessionProvider>
         </ThemeProvider>
       </I18nProvider>

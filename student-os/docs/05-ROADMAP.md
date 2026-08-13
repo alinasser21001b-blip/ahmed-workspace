@@ -12,8 +12,8 @@
 | **1 — Identity** | signup/login, profile, academic placement, interests, privacy | ✅ **Done** |
 | **2 — Social core** | feed, posts, image upload, comments, reactions, bookmarks, reports, follow/block/mute | ✅ **Done** |
 | **3 — Community** | communities, groups, membership, join requests, group posts, search | ✅ **Done and closed** |
-| 4 — Messaging | 1:1 + group chat, realtime, presence, typing, receipts, attachments | Next |
-| 5 — Learning | courses, classrooms, lectures, resources, PDF viewing, discussion | |
+| **4 — Messaging** | 1:1 + group chat, realtime, presence, typing, receipts, attachments | ✅ **Done** |
+| 5 — Learning | courses, classrooms, lectures, resources, PDF viewing, discussion | Next |
 | 6 — AI v1 | lecture summary, ask-AI, MCQ generation — all source-grounded | |
 | 7 — Quizzes | authoring, taking, attempts, scoring, explanations, topic performance | |
 | 8 — Reels | upload, transcoding pipeline, playback, academic metadata | |
@@ -88,9 +88,23 @@ after the original ones.
 - domain events exist with one vocabulary and a transactional outbox, so
   Phase 4's message events extend it rather than introducing a second one
 
-**Phase 4.** A message survives: app backgrounded mid-send, connection dropped,
-duplicate retry, out-of-order receipt, reconnect with a gap. No duplicates, no
-losses, correct ordering.
+**Phase 4 — met.**
+- `seq` is dense and gapless under concurrent senders, and a retry does not burn
+  one — proven by test, because a gap makes a reconnecting client wait forever
+- a retry with the same `clientMessageId` returns the stored message, same id
+  and same seq, and emits no second event: exactly-once, observable
+- ordering is the server's `seq`; dragging a message's wall-clock ten days
+  backwards does not move it
+- a read position is one integer per member, monotonic, clamped to the head:
+  a late receipt cannot rewind it and a client cannot silence what it has not
+  seen. Zero rows in `message_receipts`
+- a non-participant is refused every operation by direct API manipulation —
+  read, list, send, mark read, edit, delete — with 404, never 403
+- a platform admin has no way into a private conversation, by design
+- the realtime layer only ever announces committed state ([ADR-0011](adr/0011-realtime-notifies-database-decides.md))
+- **two browsers, one conversation, a real dropped connection**: messages sent
+  during the outage arrive on reconnect, in order, exactly once; a double-tap on
+  Send produces one message ([`e2e/messaging.mjs`](../apps/mobile/e2e/messaging.mjs))
 
 **Phase 5.** A student opens a classroom, reads a lecture, and downloads a
 resource through a signed URL that a non-member cannot use.
@@ -105,6 +119,24 @@ performance.
 
 **Phases 8–12.** Defined at entry; the exit criterion for each is written
 before implementation starts.
+
+## What the next phases must not build
+
+Added after §1.1 of the product architecture was written down, because the
+cheapest time to refuse a feature is before it has a schema.
+
+| Phase | Build | Do **not** build |
+| --- | --- | --- |
+| 5 — Learning | Classrooms, lectures, materials, discussion attached to a topic | A file locker. A resource with no academic placement is not discoverable, and undiscoverable knowledge is the problem this product exists to solve |
+| 6 — AI v1 | Tutor and summariser reading the platform's own structured knowledge, source-grounded, behind the same authorization layer as a human | A chatbot beside the product. An AI with its own retrieval path is an AI with its own permission model |
+| 7 — Quizzes | Question-level results rolling up into topic performance | Scores as a leaderboard. Comparing students is a popularity mechanic wearing an academic hat |
+| 8 — Reels | **Reconsider entirely.** If it ships, micro-learning bound to a topic, a course and a lecture | A scrolling feed of clips. This is the single feature most able to turn the product into the thing it is defined against |
+| 9 — Study system | Groups growing discussions, resources, questions and sessions — the learning space §1.1 describes | Chat with more tabs |
+| 11 — Intelligence | Ranking on academic relevance, personal context, usefulness and quality | Ranking on likes and views. Popularity is an input, never the objective |
+
+The Knowledge Feed — "what is academically useful to me right now?" — is the
+Phase 11 target, and the reason `learning_events` and `content_links` have been
+in the schema since Phase 0.
 
 ## Sequencing rationale
 

@@ -182,33 +182,75 @@ tool that makes someone unfindable, and it applies everywhere.
 `PUT`, `PATCH` and `DELETE`, which leaves reads working and every mutation from
 a browser failing at preflight — a failure that looks like a client bug.
 
+### Messaging — `/v1`
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| GET | `/conversations` | required | The chat list, by recent activity. Membership is an inner join, so a conversation you are not in cannot appear. Carries `totalUnread`. |
+| POST | `/conversations` | required | 60/min. Opens a direct conversation or a group's. **Idempotent** — per unordered pair, and per group. |
+| GET | `/conversations/:id` | required | 404 when not a member. |
+| GET | `/conversations/:id/messages` | required | Paginated by `seq`. `beforeSeq` scrolls back, `afterSeq` replays a reconnect gap oldest-first. |
+| POST | `/conversations/:id/messages` | required | 300/min. **Idempotent on `clientMessageId`**; a retry returns the stored message with `deduplicated: true`, same id and seq. |
+| PUT | `/conversations/:id/read` | required | 300/min. Advances **your own** position. Monotonic, clamped to the head. |
+| PATCH | `/messages/:id` | required | Sender only. |
+| DELETE | `/messages/:id` | required | Sender, or a conversation moderator. Soft — the row keeps its `seq`. |
+| WS | `/realtime?token=…` | handshake | Notifications only. No frame writes to the database. |
+
+**Ordering is `seq`, never a timestamp.** Two messages can share a millisecond;
+none can share a sequence number. A page boundary on a non-total ordering drops
+or repeats rows, and on a chat that is a lost message.
+
+**Idempotency is required, not optional.** `clientMessageId` is a required
+field. Making it optional would give callers who forgot it at-least-once
+delivery with duplicates and callers who remembered exactly-once — a difference
+no test catches until a user sees the same message twice.
+
+**Read state is one integer per member.** `last_read_seq` serves receipts *and*
+unread counts, so the two cannot disagree, and neither costs a row per message
+per user.
+
+**There is no admin bypass.** A platform admin can open a reported *post*,
+because a post was published to an audience. A private conversation was not.
+Reported messages reach moderation through the report, which carries the copy.
+
+**Attachments** are uploaded first and referenced by id; bytes never travel
+through this API. Their URLs are signed at message-read time for a caller who
+has already passed the conversation gate.
+
 ## 3. Contracted for later phases
 
 Shapes are settled; implementation follows the roadmap.
 
 | Phase | Surface |
 | --- | --- |
-| 4 — Messaging | `/v1/conversations`, `/messages` (cursor by `seq`), `WS /v1/realtime` |
 | 5 — Learning | `/v1/classrooms`, `/lectures`, `/materials`, `/v1/files` (signed URLs) |
 | 6 — AI | `POST /v1/ai/sessions`, `/messages`, `/lectures/:id/summary`, `/lectures/:id/generate-quiz` |
 | 7 — Quizzes | `/v1/quizzes`, `/attempts`, `/answers` |
 | 11 — Intelligence | `/v1/learning/progress`, `/weak-topics`, `/recommendations`, `/v1/search` |
 | 12 — Admin | `/v1/admin/*`, `/v1/reports`, `/v1/moderation/*` |
 
-## 4. Realtime (Phase 4)
+## 4. Realtime
 
-WebSocket at `/v1/realtime`, authenticated with the access token at handshake.
-Subscriptions are authorised through the same policy layer as REST.
+WebSocket at `/v1/realtime?token=<accessToken>`. The token is in the query
+string because a browser's `WebSocket` constructor cannot set headers; the
+handshake re-checks the session against the database exactly as REST does.
 
-| Direction | Event | Payload |
+**The socket notifies; it never commands.** There is deliberately no
+`message.send` frame — sending is `POST /messages`, which is what makes retries
+idempotent, offline queues ordinary, and a message impossible to lose between
+an ack and a write ([ADR-0011](adr/0011-realtime-notifies-database-decides.md)).
+
+| Direction | Frame | Payload |
 | --- | --- | --- |
-| → | `subscribe` | `{ topic: "conversation:<id>" }` |
-| → | `message.send` | `{ conversationId, clientMessageId, kind, body }` |
-| ← | `message.new` | full message including server `seq` |
-| ← | `message.ack` | `{ clientMessageId, id, seq }` |
-| → | `read` | `{ conversationId, seq }` |
-| ↔ | `typing`, `presence` | ephemeral, never persisted |
-| → | `resync` | `{ conversationId, lastSeq }` → server replays the gap |
+| → | `subscribe` / `unsubscribe` | `{ conversationId }`. Gated by the same policy as the REST read |
+| → | `resync` | `{ conversationId, lastSeq }` → the server replays the gap, oldest-first |
+| → | `typing` | `{ conversationId, typing }`. Ephemeral, expires server-side, never persisted |
+| → | `ping` | → `pong` |
+| ← | `ready`, `subscribed` | connection and subscription acknowledgement |
+| ← | `message.new` / `message.updated` | the full message, including its server `seq` |
+| ← | `message.read` | `{ conversationId, userId, seq }` |
+| ← | `typing`, `presence` | ephemeral |
+| ← | `resync` | the gap, in one frame, ordered by `seq` |
 
 ## 5. Rate limits
 

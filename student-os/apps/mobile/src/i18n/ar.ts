@@ -11,6 +11,7 @@ export const ar = {
 
   // --- generic actions
   'action.continue': 'متابعة',
+  'action.loadMore': 'تحميل المزيد',
   'action.back': 'رجوع',
   'action.next': 'التالي',
   'action.save': 'حفظ',
@@ -100,6 +101,24 @@ export const ar = {
   'learn.signalsDisclaimer': 'هذه مؤشرات نشاط دراسي، وليست تقييماً لمستواك.',
 
   // --- chat
+  'chat.today': 'اليوم',
+  'chat.yesterday': 'أمس',
+  'chat.connecting': 'جارٍ الاتصال…',
+  'chat.offline': 'غير متصل — ستُرسل رسائلك عند عودة الاتصال',
+  'chat.noMessages': 'لا رسائل بعد',
+  'chat.composer.placeholder': 'اكتب رسالة…',
+  'chat.send': 'إرسال',
+  'chat.typing': 'يكتب الآن…',
+  'chat.unreadDivider': 'رسائل جديدة',
+  'chat.failed': 'تعذّر الإرسال',
+  'chat.retry': 'إعادة المحاولة',
+  'chat.state.sending': 'جارٍ الإرسال',
+  'chat.state.sent': 'أُرسلت',
+  'chat.state.read': 'تمت القراءة',
+  'chat.deleted': 'حُذفت هذه الرسالة',
+  'chat.empty.thread.title': 'ابدأ المحادثة',
+  'chat.empty.thread.body': 'اكتب أول رسالة لبدء الحديث.',
+  'chat.readOnly': 'لا يمكنك الإرسال في هذه المحادثة.',
   'chat.title': 'المحادثات',
   'chat.empty.title': 'لا توجد محادثات',
   'chat.empty.body': 'ابدأ محادثة مع زميل أو مجموعة دراسية.',

@@ -51,6 +51,18 @@ interface SessionValue {
   status: 'loading' | 'signedOut' | 'signedIn';
   user: AuthUser | null;
   api: ApiClient;
+  /**
+   * Reads the current access token.
+   *
+   * A getter, not a value: the token rotates on refresh without any state
+   * change, so a captured copy goes stale and the realtime handshake that used
+   * it would 401 into a reconnect loop.
+   *
+   * Exposed for exactly one caller — the realtime handshake, where a browser's
+   * WebSocket constructor cannot set an `Authorization` header. Everything else
+   * goes through `api`, which attaches and refreshes the token itself.
+   */
+  getAccessToken: () => string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -169,6 +181,7 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
       status,
       user,
       api,
+      getAccessToken: () => accessToken.current,
       signIn: async (email, password) => {
         const session = await api.post<AuthSession>(
           '/v1/auth/login',
