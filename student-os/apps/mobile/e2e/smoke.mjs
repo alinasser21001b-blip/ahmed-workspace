@@ -150,6 +150,20 @@ check(
   'media is served through a signed URL, not a raw path',
 );
 
+/*
+ * The web bundle always runs on a different origin from the API, so the bytes
+ * must be embeddable cross-origin. A `same-origin` policy here does not fail a
+ * request — it blocks the <img> after a 200, so every image silently vanishes
+ * with nothing in the network tab to point at. Asserted on the real response
+ * because that is the only place the header is observable.
+ */
+const mediaResponse = await fetch(`${API}${withImage.media[0].url}`);
+check(mediaResponse.status === 200, 'a signed media URL resolves');
+check(
+  mediaResponse.headers.get('cross-origin-resource-policy') === 'cross-origin',
+  'media may be embedded by the web client on another origin',
+);
+
 const created = await call('/v1/content', {
   method: 'POST',
   token: A,

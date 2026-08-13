@@ -62,6 +62,21 @@ export async function buildApp() {
     // The API serves JSON to a native client and a web build; a CSP here would
     // apply to nothing it serves.
     contentSecurityPolicy: false,
+    /*
+     * Media is served to a client on a different origin, always.
+     *
+     * The web bundle is built against `EXPO_PUBLIC_API_URL` and the native app
+     * has no origin at all, so every `<Image>` in the product is a cross-origin
+     * request. Helmet's default `same-origin` policy blocks exactly those with
+     * `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` — the images simply never appear,
+     * with no failed API request to point at.
+     *
+     * This is not a hole. CORP is not an access control: file bytes are reached
+     * only through a signed, expiring URL minted for a caller who has already
+     * passed `canAccessFile`. Relaxing the embedding rule does not relax that
+     * gate, and the header was only ever preventing the product from working.
+     */
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   });
 
   await app.register(cors, {
