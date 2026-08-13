@@ -42,9 +42,14 @@ function check(condition, description) {
   }
 }
 
-const browser = await chromium.launch({
-  executablePath: process.env.PLAYWRIGHT_CHROMIUM ?? '/opt/pw-browsers/chromium',
-});
+/*
+ * A pre-installed Chromium is used when one is present — this sandbox ships one
+ * at a fixed path, and re-downloading it per run would be minutes of nothing.
+ * When the variable is unset or empty, Playwright resolves its own browser,
+ * which is what CI does after `playwright install`.
+ */
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM || undefined;
+const browser = await chromium.launch(executablePath ? { executablePath } : {});
 const page = await browser.newPage({
   viewport: { width: 420, height: 900 },
   locale: 'ar-IQ',

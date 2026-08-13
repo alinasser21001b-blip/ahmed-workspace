@@ -6,3 +6,5 @@ export * from './messaging/message-state.js';
 export * from './learning/weakness.js';
 export * from './ranking/feed-ranking.js';
 export * from './pagination/cursor.js';
+export * from './text/arabic.js';
+export * from './events/domain-events.js';

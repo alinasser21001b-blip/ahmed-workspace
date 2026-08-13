@@ -175,6 +175,10 @@ interface ActorRow {
   following_ids: string[] | null;
   blocked_user_ids: string[] | null;
   blocked_by_user_ids: string[] | null;
+  muted_user_ids: string[] | null;
+  muted_group_ids: string[] | null;
+  muted_community_ids: string[] | null;
+  muted_topic_ids: string[] | null;
 }
 
 /**
@@ -207,7 +211,22 @@ export async function loadActor(userId: string, client?: Sql): Promise<Actor | n
        (SELECT array_agg(b.blocked_id) FROM blocks b
           WHERE b.blocker_id = u.id)                                   AS blocked_user_ids,
        (SELECT array_agg(b.blocker_id) FROM blocks b
-          WHERE b.blocked_id = u.id)                                   AS blocked_by_user_ids
+          WHERE b.blocked_id = u.id)                                   AS blocked_by_user_ids,
+       -- Mutes are loaded with the same round trip as blocks, and kept in
+       -- separate sets. They are a read preference, not a permission, and the
+       -- expiry is applied here so no caller has to remember it.
+       (SELECT array_agg(m.target_id) FROM mutes m
+          WHERE m.user_id = u.id AND m.target_type = 'user'
+            AND (m.expires_at IS NULL OR m.expires_at > now()))        AS muted_user_ids,
+       (SELECT array_agg(m.target_id) FROM mutes m
+          WHERE m.user_id = u.id AND m.target_type = 'group'
+            AND (m.expires_at IS NULL OR m.expires_at > now()))        AS muted_group_ids,
+       (SELECT array_agg(m.target_id) FROM mutes m
+          WHERE m.user_id = u.id AND m.target_type = 'community'
+            AND (m.expires_at IS NULL OR m.expires_at > now()))        AS muted_community_ids,
+       (SELECT array_agg(m.target_id) FROM mutes m
+          WHERE m.user_id = u.id AND m.target_type = 'topic'
+            AND (m.expires_at IS NULL OR m.expires_at > now()))        AS muted_topic_ids
      FROM users u
      LEFT JOIN profiles p ON p.user_id = u.id
      WHERE u.id = $1 AND u.deleted_at IS NULL`,
@@ -233,6 +252,10 @@ export async function loadActor(userId: string, client?: Sql): Promise<Actor | n
     followingIds: new Set(row.following_ids ?? []),
     blockedUserIds: new Set(row.blocked_user_ids ?? []),
     blockedByUserIds: new Set(row.blocked_by_user_ids ?? []),
+    mutedUserIds: new Set(row.muted_user_ids ?? []),
+    mutedGroupIds: new Set(row.muted_group_ids ?? []),
+    mutedCommunityIds: new Set(row.muted_community_ids ?? []),
+    mutedTopicIds: new Set(row.muted_topic_ids ?? []),
   };
 }
 

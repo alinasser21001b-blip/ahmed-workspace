@@ -158,14 +158,48 @@ describe('feed isolation', () => {
     expect((await readFeed(author.session)).items.map((i) => i.id)).not.toContain(created.body.id);
   });
 
-  it('excludes content from a suspended author', async () => {
+  /*
+   * This test used to be named for `suspended` and set `banned`, so nothing
+   * covered suspension at all — and suspension was in fact NOT excluded, in the
+   * feed or anywhere else. Both statuses are asserted separately now, and
+   * `restricted` is asserted to behave differently on purpose.
+   */
+  it.each(['suspended', 'banned'] as const)(
+    'withdraws content from a %s author, in the feed and in the single-item read',
+    async (status) => {
+      const app = await getApp();
+      const author = await onboardedUser();
+      const mate = await onboardedUser();
+      const created = await createPost(author.session, { body: `from a soon-to-be-${status} user` });
+
+      await queryOne(`UPDATE users SET status = $2 WHERE id = $1`, [
+        author.session.user.id,
+        status,
+      ]);
+
+      expect((await readFeed(mate.session)).items.map((i) => i.id)).not.toContain(created.body.id);
+
+      const item = await app.inject({
+        method: 'GET',
+        url: `/v1/content/${created.body.id}`,
+        headers: auth(mate.session),
+      });
+      expect(item.statusCode).toBe(404);
+    },
+  );
+
+  it('keeps a restricted author’s existing content visible', async () => {
+    // Restriction removes the ability to write. It does not retract what was
+    // already written — that is what separates it from a suspension.
     const author = await onboardedUser();
     const mate = await onboardedUser();
-    const created = await createPost(author.session, { body: 'from a soon-to-be-suspended user' });
+    const created = await createPost(author.session, { body: 'written before the restriction' });
 
-    await queryOne(`UPDATE users SET status = 'banned' WHERE id = $1`, [author.session.user.id]);
+    await queryOne(`UPDATE users SET status = 'restricted' WHERE id = $1`, [
+      author.session.user.id,
+    ]);
 
-    expect((await readFeed(mate.session)).items.map((i) => i.id)).not.toContain(created.body.id);
+    expect((await readFeed(mate.session)).items.map((i) => i.id)).toContain(created.body.id);
   });
 });
 

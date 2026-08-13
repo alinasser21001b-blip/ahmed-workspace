@@ -5,10 +5,18 @@ communities, study groups, messaging, classrooms, lectures, quizzes and an AI
 layer — built as **one academic graph**, not as separate products stapled
 together.
 
-> Status: **Phases 0–3 complete** — Foundation, Identity, Social core, and
-> Community. 209 tests passing. The full journey — sign up, publish, comment,
-> like, save, create a study group, post inside it, and find it by search —
-> runs end-to-end in a real browser, in Arabic.
+> Status: **Phases 0–3 complete and closed** — Foundation, Identity, Social
+> core, and Community. 272 tests passing, plus a browser journey and a layout
+> audit that runs every screen in Arabic and English, on phone and desktop.
+> The full journey — sign up, publish, comment, like, save, create a study
+> group, post inside it, and find it by search — runs end-to-end in a real
+> browser, in Arabic.
+>
+> Phase 3 was closed by an audit rather than by a green test run
+> ([docs/06-PHASE-3-AUDIT.md](docs/06-PHASE-3-AUDIT.md)), which found twelve
+> issues including a group that could be permanently stranded without an owner,
+> mutes that changed nothing, a CI step that had been red since Phase 0, and
+> Arabic search that returned nothing for diacritised text.
 
 ## Read this first
 
@@ -16,10 +24,11 @@ together.
 | --- | --- |
 | [Product Architecture](docs/00-PRODUCT-ARCHITECTURE.md) | What this is, and what makes it one system |
 | [Technical Architecture](docs/01-TECHNICAL-ARCHITECTURE.md) | Stack, module contract, request lifecycle, AI pipeline |
-| [Data Model](docs/02-DATA-MODEL.md) | 77 tables and the decisions behind them |
+| [Data Model](docs/02-DATA-MODEL.md) | 80 tables and the decisions behind them |
 | [API Contract](docs/03-API-CONTRACT.md) | Endpoints, auth, errors, pagination |
 | [UX Architecture](docs/04-UX-ARCHITECTURE.md) | Screens, navigation, design rules |
 | [Roadmap](docs/05-ROADMAP.md) | Phases and exit criteria |
+| [Phase 3 Closure Audit](docs/06-PHASE-3-AUDIT.md) | What was actually true at the end of Phase 3, and what was done about it |
 | [ADRs](docs/adr/) | Decisions that were not obvious |
 
 ## Layout
@@ -57,8 +66,8 @@ pnpm dev:mobile                             # Expo dev server
 
 ```bash
 pnpm typecheck          # all four packages
-pnpm test:unit          # 115 unit tests (@sos/core)
-pnpm test:integration   # 94 integration tests against real Postgres
+pnpm test:unit          # 156 unit tests (@sos/core)
+pnpm test:integration   # 116 integration tests against real Postgres
 ```
 
 Integration tests run against a **real database**, not a mock. Permission bugs
@@ -75,11 +84,22 @@ pnpm --filter @sos/api db:reset && pnpm --filter @sos/api db:seed
 pnpm dev:api &
 pnpm --filter @sos/mobile export:web
 npx serve apps/mobile/dist -l 8081 --single &
-node apps/mobile/e2e/first-journey.mjs
+
+pnpm test:e2e     # the first journey, in Arabic
+pnpm test:rtl     # every screen, ar/en × phone/desktop
 ```
 
-It runs **in Arabic**, because Arabic is the primary language and RTL is where
-layout bugs actually appear.
+The journey runs **in Arabic**, because Arabic is the primary language and RTL
+is where layout bugs actually appear. Run it before `test:rtl`: it asserts that
+a brand-new student sees a real empty state, which stops being true once the
+layout audit publishes its fixtures into the same cohort.
+
+`test:rtl` checks direction, horizontal overflow, clipped text, hit areas,
+directional-icon geometry, the console and the network on every Phase 3 screen —
+192 checks. It exists because the three worst RTL defects in this repository
+were all invisible to code review and to a single screenshot.
+
+Both run in CI, against a real API and a real bundle.
 
 ## Principles that are enforced, not aspirational
 
@@ -98,6 +118,13 @@ layout bugs actually appear.
 | An upload is what it claims to be | Format read from magic bytes; the declared MIME type is discarded |
 | A private group leaks nowhere | The same predicate gates the feed, the item read and search — tested across all three ([ADR-0008](docs/adr/0008-trigram-search.md)) |
 | A restriction is not a suspension | `canRead` and `isActive` are separate gates: restricted accounts read, they do not write |
+| Access is not one boolean | `canView`, `canRead`, `canWrite`, `canPost`, `canComment`, `canJoin`, `canLeave`, `canInvite`, `canModerate`, `canManage` are separate decisions with separate reason codes, resolved together by `groupCapabilities` and projected — never re-derived — by the client |
+| A group cannot be stranded | The owner's exit rule lives in `canLeaveGroup`, and both routes out of a group go through it ([audit F1](docs/06-PHASE-3-AUDIT.md)) |
+| A mute changes what you see | Filtered in the feed's SQL, on ambient surfaces only — a mute is a volume control, not a lockout |
+| Arabic search finds Arabic | Meaning-preserving normalisation on both the column and the query, with a TypeScript/SQL agreement test ([ADR-0009](docs/adr/0009-arabic-normalisation.md)) |
+| Arabic counts read like Arabic | CLDR's six plural categories, not an English rule with a suffix |
+| The Arabic UI is designed, not mirrored | Navigation icons flip; play buttons, clocks and checkmarks do not ([`DirectionalIcon`](apps/mobile/src/components/DirectionalIcon.tsx)) |
+| Every event has one delivery path | A transactional outbox, written in the same transaction as the change ([ADR-0010](docs/adr/0010-domain-events-outbox.md)) |
 
 ## Deliberately not built yet
 

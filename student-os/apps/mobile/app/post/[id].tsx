@@ -1,8 +1,8 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import type { Comment, CommentPage, ContentItem } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PostCard, formatRelative } from '../../src/components/PostCard';
 import { Text } from '../../src/components/Text';
@@ -146,11 +146,7 @@ export default function PostDetail(): React.JSX.Element {
             onPress={() => router.back()}
             hitSlop={8}
           >
-            <Ionicons
-              name={theme.isRTL ? 'arrow-forward' : 'arrow-back'}
-              size={24}
-              color={theme.colors.text}
-            />
+            <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
           </Pressable>
           <Text variant="heading">{t('post.comments.title')}</Text>
         </View>
@@ -249,11 +245,7 @@ export default function PostDetail(): React.JSX.Element {
               opacity: sending || draft.trim().length === 0 ? 0.4 : pressed ? 0.85 : 1,
             })}
           >
-            <Ionicons
-              name={theme.isRTL ? 'arrow-back' : 'arrow-forward'}
-              size={20}
-              color={theme.colors.onPrimary}
-            />
+            <DirectionalIcon direction="forward" size={20} color={theme.colors.onPrimary} />
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -273,11 +265,11 @@ function CommentRow({
     <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
       <Avatar name={comment.author.displayName} size={32} />
       <View style={{ flex: 1, gap: 2 }}>
-        <Text variant="label">{comment.author.displayName}</Text>
+        <Text variant="label" bidi="auto">{comment.author.displayName}</Text>
         <Text variant="micro" tone="muted">
           {formatRelative(comment.createdAt, locale)}
         </Text>
-        <Text variant="body" style={{ marginTop: theme.spacing.xs }}>
+        <Text variant="body" style={{ marginTop: theme.spacing.xs }} bidi="auto">
           {comment.body}
         </Text>
       </View>

@@ -2,7 +2,7 @@
 
 > Constitution §89.C. The **migrations are the source of truth**
 > (`apps/api/migrations/*.sql`); this document explains the decisions behind
-> them. 79 tables across eight migrations.
+> them. 80 tables across nine migrations.
 
 ## 1. Conventions
 
@@ -39,7 +39,7 @@ AI              ai_sessions · ai_messages · ai_sources · ai_usage_daily
 
 PLATFORM        files · notifications · notification_preferences · push_tokens
                 reports · moderation_actions · audit_log · analytics_events
-                sessions · privacy_settings · user_presence
+                domain_events · sessions · privacy_settings · user_presence
 ```
 
 ## 3. The decisions worth defending
@@ -159,7 +159,33 @@ everyone except members and invitees, whatever their cohort. It is excluded in
 the query, not filtered afterwards, so a secret group never occupies a slot in
 a page and its existence is not inferable from a short result.
 
-### 3.13 Sessions store hashes, never tokens
+### 3.13 Normalised search columns are generated, not maintained
+
+Added in `0009`. `body_norm`, `display_name_norm`, `name_norm`,
+`name_ar_norm` and `name_en_norm` are `GENERATED ALWAYS … STORED` from
+`sos_normalize_arabic()`, and the trigram indexes moved onto them.
+
+Generated rather than written by the application for the obvious reason: a
+denormalised copy that any write path can forget to update is a copy that will
+be wrong, and a search index that is wrong returns nothing rather than erroring.
+The measured justification for the fold itself is in
+[ADR-0009](adr/0009-arabic-normalisation.md); the short version is that
+diacritised Arabic scored 0.07 against its undiacritised form, well under the
+0.15 floor, so it was not a ranking problem but a missing result.
+
+Handles keep their index on the raw column: they are ASCII by constraint, so
+normalising them would cost storage and change nothing.
+
+### 3.14 `domain_events` is an outbox, not a log
+
+Added in `0009`. Appended inside the transaction that made the change it
+describes, so an event cannot survive a rollback and a commit cannot lose its
+event. `kind` is `text` rather than an enum so that adding an event type is a
+deploy rather than a migration locking the hottest write path; the vocabulary is
+closed in `@sos/core` where the compiler checks it.
+[ADR-0010](adr/0010-domain-events-outbox.md).
+
+### 3.15 Sessions store hashes, never tokens
 
 `sessions.token_hash` holds SHA-256 of an opaque refresh token.
 `rotated_to_id` makes reuse of a rotated token detectable, which is the
@@ -179,6 +205,8 @@ Indexes are added for a named query, not by reflex. The load-bearing ones:
 | `learning_progress_weak_idx (user_id, weakness_score DESC NULLS LAST)` | the weak-topics surface |
 | `quiz_attempts_one_active … WHERE status = 'in_progress'` | enforces one live attempt per quiz per user |
 | `academic_years_one_current … WHERE is_current` | enforces one current year per university |
+| `domain_events_pending_idx (occurred_at, id) WHERE processed_at IS NULL` | the outbox relay's only query; drained history costs nothing to skip |
+| `content_items_body_norm_trgm_idx` and the other `*_norm` trigram indexes | bilingual search, against normalised text ([ADR-0009](adr/0009-arabic-normalisation.md)) |
 
 Partial indexes (`WHERE deleted_at IS NULL`) are used throughout: the vast
 majority of reads exclude deleted rows, and there is no reason to index them.

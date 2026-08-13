@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
@@ -13,7 +13,7 @@
     "db:reset": "tsx src/platform/migrate-cli.ts --reset",
     "db:seed": "tsx scripts/seed.ts",
     "test": "vitest run",
-    "test:unit": "vitest run --dir src",
+    "test:unit": "vitest run --dir src --passWithNoTests",
     "test:integration": "vitest run --dir test"
   },
   "dependencies": {

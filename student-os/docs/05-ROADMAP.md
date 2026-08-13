@@ -11,7 +11,7 @@
 | **0 — Foundation** | repo, architecture, database, auth, config, design system, navigation, error handling, logging, tests, CI | ✅ **Done** |
 | **1 — Identity** | signup/login, profile, academic placement, interests, privacy | ✅ **Done** |
 | **2 — Social core** | feed, posts, image upload, comments, reactions, bookmarks, reports, follow/block/mute | ✅ **Done** |
-| **3 — Community** | communities, groups, membership, join requests, group posts, search | ✅ **Done** |
+| **3 — Community** | communities, groups, membership, join requests, group posts, search | ✅ **Done and closed** |
 | 4 — Messaging | 1:1 + group chat, realtime, presence, typing, receipts, attachments | Next |
 | 5 — Learning | courses, classrooms, lectures, resources, PDF viewing, discussion | |
 | 6 — AI v1 | lecture summary, ask-AI, MCQ generation — all source-grounded | |
@@ -48,7 +48,16 @@
 - SQL and TypeScript ranking agree to six decimal places (parity test)
 - the browser journey now runs through publish → comment → like → save
 
-**Phase 3 — met.**
+**Phase 3 — met, then closed.**
+
+The exit criteria below were met at the end of implementation. They were not
+sufficient: a closure audit ([06-PHASE-3-AUDIT.md](06-PHASE-3-AUDIT.md)) found
+twelve issues that a green test run did not, including an unrecoverable
+ownerless-group state, mutes that affected no read surface, a CI step red since
+Phase 0, and Arabic search that returned nothing for diacritised text. All
+twelve are closed or deferred in writing. The additional criteria are listed
+after the original ones.
+
 - an unlisted group's posts are invisible to non-members through the feed, the
   single-item read, and search — proven by one test across all three surfaces
 - the group itself is unfindable: neither browsable nor searchable by name
@@ -58,6 +67,26 @@
   moderators; an owner cannot strand a group by leaving it
 - `member_count` stays accurate across join, leave and rejoin
 - search honours the searchable opt-out and both block directions
+
+**Phase 3 closure — met.**
+- the API, the feed and search agree on one permission matrix, asserted as a
+  single table over owner / member / outsider / removed / banned
+- no group can be left without an owner, through either exit
+- a mute changes the feed, and stops at surfaces the reader asked for
+- every container gate is named and separate: `canView`, `canRead`, `canWrite`,
+  `canPost`, `canComment`, `canJoin`, `canLeave`, `canInvite`, `canModerate`,
+  `canManage`
+- a suspended author's content is withheld by the policy and by the SQL, and a
+  restricted author's is not — each with a test that asserts what its name says
+- Arabic search finds diacritised, tatweel'd and alef-variant text, with the
+  TypeScript and SQL normalisation proven identical
+- Arabic counts use CLDR's six plural categories
+- every Phase 3 screen passes a layout audit in Arabic and English, on phone and
+  desktop: 192 checks, clean console, no failed requests
+- CI runs install → migrate → deterministic seed → build → serve → journey →
+  layout audit, and `pnpm test:unit` is green for the first time since Phase 0
+- domain events exist with one vocabulary and a transactional outbox, so
+  Phase 4's message events extend it rather than introducing a second one
 
 **Phase 4.** A message survives: app backgrounded mid-send, connection dropped,
 duplicate retry, out-of-order receipt, reconnect with a gap. No duplicates, no

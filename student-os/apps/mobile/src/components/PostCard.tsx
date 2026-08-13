@@ -90,7 +90,7 @@ export function PostCard({
             <Avatar name={item.author.displayName} size={36} />
           </Pressable>
           <View style={{ flex: 1, gap: 1 }}>
-            <Text variant="label">{item.author.displayName}</Text>
+            <Text variant="label" bidi="auto">{item.author.displayName}</Text>
             <Text variant="micro" tone="muted">
               {[item.author.stageName, formatRelative(item.createdAt, locale)]
                 .filter(Boolean)
@@ -104,7 +104,7 @@ export function PostCard({
           ) : null}
         </View>
 
-        {item.body ? <Text variant="body">{item.body}</Text> : null}
+        {item.body ? <Text variant="body" bidi="auto">{item.body}</Text> : null}
 
         {firstImage ? (
           <Image

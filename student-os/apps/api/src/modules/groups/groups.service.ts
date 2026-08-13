@@ -4,18 +4,21 @@ import type {
   Group,
   GroupMember,
   Locale,
+  MembershipRole,
   MembershipStatus,
 } from '@sos/contracts';
 import {
   canDiscoverGroup,
+  canInviteToGroup,
   canJoinGroup,
+  canLeaveGroup,
   canManageGroup,
   canModerateGroup,
-  canPostInGroup,
   canRemoveMember,
   canTransferOwnership,
   canViewGroup,
   decodeCursor,
+  groupCapabilities,
   encodeCursor,
   InvalidCursorError,
   visibilityScopesFor,
@@ -24,6 +27,7 @@ import {
 import { withTransaction } from '../../platform/db.js';
 import { errors } from '../../platform/errors.js';
 import { recordAnalytics } from '../analytics/events.service.js';
+import { emit } from '../events/events.service.js';
 import * as users from '../users/users.repository.js';
 import * as repo from './groups.repository.js';
 
@@ -39,18 +43,30 @@ function localised(ar: string | null, en: string | null, locale: Locale): string
   return (locale === 'ar' ? ar : en) ?? en ?? ar;
 }
 
+/**
+ * Projects the policy's capability set onto the wire.
+ *
+ * A projection, not a second computation: every field comes from
+ * `groupCapabilities`, so the client and the server cannot hold different
+ * beliefs about what this reader may do.
+ */
 function toViewerState(actor: Actor, row: repo.GroupRow): ContainerViewerState {
   const membership = repo.toMembership(row);
-  const join = canJoinGroup(actor, repo.toGroupRef(row), membership);
+  const caps = groupCapabilities(actor, repo.toGroupRef(row), membership);
 
   return {
     membershipStatus: membership?.status ?? null,
     role: membership?.role ?? null,
-    joinOutcome: join.outcome,
-    canJoin: join.allowed,
-    canPost: canPostInGroup(actor, membership).allowed,
-    canModerate: canModerateGroup(actor, membership).allowed,
-    canManage: canManageGroup(actor, membership).allowed,
+    joinOutcome: caps.canJoin.outcome,
+    canJoin: caps.canJoin.allowed,
+    canRead: caps.canRead.allowed,
+    canWrite: caps.canWrite.allowed,
+    canPost: caps.canPost.allowed,
+    canComment: caps.canComment.allowed,
+    canLeave: caps.canLeave.allowed,
+    canInvite: caps.canInvite.allowed,
+    canModerate: caps.canModerate.allowed,
+    canManage: caps.canManage.allowed,
   };
 }
 
@@ -226,6 +242,22 @@ export async function joinGroup(
       { groupId, userId: actor.userId, role: 'member', status, message },
       client,
     );
+    /*
+     * A join request has no single subject: it notifies whoever moderates the
+     * group, and the event does not enumerate them. Resolving the audience is
+     * the consumer's job — writing one row per moderator inside the joiner's
+     * transaction would make a 200-member group's requests expensive for the
+     * wrong party.
+     */
+    if (status === 'pending') {
+      await emit(client, {
+        kind: 'group.membership.requested',
+        actorId: actor.userId,
+        targetType: 'group',
+        targetId: groupId,
+        payload: { groupName: row.name, message },
+      });
+    }
     await recordAnalytics(
       status === 'active' ? 'group_joined' : 'group_join_requested',
       actor.userId,
@@ -242,20 +274,47 @@ export async function leaveGroup(actor: Actor, groupId: string): Promise<void> {
   const membership = repo.toMembership(row);
   if (!membership) throw errors.conflict('You are not a member of this group.');
 
-  // An owner leaving would strand the group with no one able to manage it.
-  if (membership.role === 'owner' && row.member_count > 1) {
-    throw errors.preconditionFailed(
+  // The strand rule lives in the policy, not here, because there are two routes
+  // out of a group and a guard written on only one of them is not a guard.
+  const decision = canLeaveGroup(actor, membership, { memberCount: row.member_count });
+  if (!decision.allowed) throw leaveFailure(decision.reason);
+
+  await performLeave(actor, groupId, membership.role);
+}
+
+/** Shared by both exits: `DELETE /membership` and `DELETE /members/:ownHandle`. */
+async function performLeave(
+  actor: Actor,
+  groupId: string,
+  role: MembershipRole,
+): Promise<void> {
+  await withTransaction(async (client) => {
+    await repo.removeMembership(groupId, actor.userId, 'left', client);
+    // A departing sole owner leaves nothing behind worth keeping open.
+    if (role === 'owner') await repo.archiveGroup(groupId, client);
+    await emit(client, {
+      kind: 'group.membership.removed',
+      actorId: actor.userId,
+      subjectId: actor.userId,
+      targetType: 'group',
+      targetId: groupId,
+      payload: { reason: 'left' },
+    });
+    await recordAnalytics('group_left', actor.userId, { groupId }, client);
+  });
+}
+
+function leaveFailure(reason: string): Error {
+  if (reason === 'owner_must_transfer_first') {
+    return errors.preconditionFailed(
       'Transfer ownership before leaving, or archive the group.',
       { field: 'role' },
     );
   }
-
-  await withTransaction(async (client) => {
-    await repo.removeMembership(groupId, actor.userId, 'left', client);
-    // A departing sole owner leaves nothing behind worth keeping open.
-    if (membership.role === 'owner') await repo.archiveGroup(groupId, client);
-    await recordAnalytics('group_left', actor.userId, { groupId }, client);
-  });
+  if (reason === 'not_group_member') {
+    return errors.conflict('You are not a member of this group.');
+  }
+  return errors.forbidden(reason);
 }
 
 // --- membership management --------------------------------------------------
@@ -346,19 +405,40 @@ export async function updateMember(
     const decision = canTransferOwnership(actor, actorMembership, targetMembership);
     if (!decision.allowed) throw errors.forbidden(decision.reason);
 
-    await withTransaction((client) =>
-      repo.transferOwnership(groupId, actor.userId, target.user_id, client),
-    );
+    await withTransaction(async (client) => {
+      await repo.transferOwnership(groupId, actor.userId, target.user_id, client);
+      await emit(client, {
+        kind: 'group.ownership.transferred',
+        actorId: actor.userId,
+        subjectId: target.user_id,
+        targetType: 'group',
+        targetId: groupId,
+        payload: { groupName: row.name },
+      });
+    });
     return;
   }
 
   if (input.status === 'banned') {
-    const decision = canRemoveMember(actor, actorMembership, targetMembership, target.user_id);
+    const decision = canRemoveMember(actor, actorMembership, targetMembership, target.user_id, {
+      memberCount: row.member_count,
+    });
     if (!decision.allowed) throw errors.forbidden(decision.reason);
+    // Banning oneself is not a coherent action, and the self-branch of
+    // `canRemoveMember` would otherwise wave it through as a leave.
+    if (target.user_id === actor.userId) throw errors.forbidden('cannot_ban_self');
 
-    await withTransaction((client) =>
-      repo.removeMembership(groupId, target.user_id, 'banned', client),
-    );
+    await withTransaction(async (client) => {
+      await repo.removeMembership(groupId, target.user_id, 'banned', client);
+      await emit(client, {
+        kind: 'group.membership.removed',
+        actorId: actor.userId,
+        subjectId: target.user_id,
+        targetType: 'group',
+        targetId: groupId,
+        payload: { reason: 'banned', groupName: row.name },
+      });
+    });
     return;
   }
 
@@ -372,8 +452,10 @@ export async function updateMember(
     if (!manage.allowed) throw errors.forbidden(manage.reason);
   }
 
-  await withTransaction((client) =>
-    repo.upsertMembership(
+  const approving = input.status === 'active' && targetMembership.status === 'pending';
+
+  await withTransaction(async (client) => {
+    await repo.upsertMembership(
       {
         groupId,
         userId: target.user_id,
@@ -381,10 +463,32 @@ export async function updateMember(
         status: input.status ?? targetMembership.status,
       },
       client,
-    ),
-  );
+    );
+    if (approving) {
+      await emit(client, {
+        kind: 'group.membership.approved',
+        actorId: actor.userId,
+        subjectId: target.user_id,
+        targetType: 'group',
+        targetId: groupId,
+        payload: { groupName: row.name },
+      });
+    }
+  });
 }
 
+/**
+ * Removes a member — or oneself.
+ *
+ * Self-removal is leaving, and is held to the same rule: an owner with members
+ * behind them must transfer first. Before this shared path existed, the guard
+ * lived only in `leaveGroup`, and `DELETE /members/<own handle>` walked straight
+ * past it — leaving a group with zero active owners, unmanageable and
+ * unrecoverable through any product action.
+ *
+ * This also serves the moderator's *reject* on a pending request, which is the
+ * same operation from the other side of the queue.
+ */
 export async function removeMember(
   actor: Actor,
   groupId: string,
@@ -399,10 +503,32 @@ export async function removeMember(
   const targetMembership = await repo.findMembership(groupId, target.user_id);
   if (!targetMembership) throw errors.notFound('membership');
 
-  const decision = canRemoveMember(actor, actorMembership, targetMembership, target.user_id);
-  if (!decision.allowed) throw errors.forbidden(decision.reason);
+  const decision = canRemoveMember(actor, actorMembership, targetMembership, target.user_id, {
+    memberCount: row.member_count,
+  });
+  if (!decision.allowed) {
+    throw target.user_id === actor.userId
+      ? leaveFailure(decision.reason)
+      : errors.forbidden(decision.reason);
+  }
 
-  await withTransaction((client) => repo.removeMembership(groupId, target.user_id, 'left', client));
+  if (target.user_id === actor.userId) {
+    await performLeave(actor, groupId, targetMembership.role);
+    return;
+  }
+
+  const wasPending = targetMembership.status === 'pending';
+  await withTransaction(async (client) => {
+    await repo.removeMembership(groupId, target.user_id, 'left', client);
+    await emit(client, {
+      kind: wasPending ? 'group.membership.rejected' : 'group.membership.removed',
+      actorId: actor.userId,
+      subjectId: target.user_id,
+      targetType: 'group',
+      targetId: groupId,
+      payload: { groupName: row.name },
+    });
+  });
 }
 
 export async function inviteMember(
@@ -411,7 +537,7 @@ export async function inviteMember(
   handle: string,
 ): Promise<void> {
   const row = await loadVisibleGroup(actor, groupId);
-  const decision = canManageGroup(actor, repo.toMembership(row));
+  const decision = canInviteToGroup(actor, repo.toMembership(row));
   if (!decision.allowed) throw errors.forbidden(decision.reason);
 
   const target = await users.findProfileByHandle(handle);
@@ -432,6 +558,14 @@ export async function inviteMember(
       },
       client,
     );
+    await emit(client, {
+      kind: 'group.membership.invited',
+      actorId: actor.userId,
+      subjectId: target.user_id,
+      targetType: 'group',
+      targetId: groupId,
+      payload: { groupName: row.name },
+    });
     await recordAnalytics('group_invite_sent', actor.userId, { groupId }, client);
   });
 }

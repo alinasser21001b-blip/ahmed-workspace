@@ -14,12 +14,32 @@ export interface TextProps extends RNTextProps {
   variant?: TypographyVariant;
   tone?: 'default' | 'muted' | 'inverse' | 'primary' | 'learning' | 'danger';
   align?: 'start' | 'center' | 'end';
+  /**
+   * Which direction this text is written in.
+   *
+   * `'locale'` — our own copy, from the translation catalogue. Its direction is
+   * known at build time and is the interface's direction.
+   *
+   * `'auto'` — text a student typed. The direction is a property of the content
+   * and cannot be known in advance: a cohort writes Arabic notes, English drug
+   * names, and posts that are half of each. The platform resolves it per
+   * paragraph from the first strong character, which is the Unicode rule and
+   * the only one that gets a mixed corpus right.
+   *
+   * This matters more than it sounds. Forcing RTL onto an English sentence does
+   * not merely align it differently — it moves the full stop to the left-hand
+   * end, so «Short English post.» renders as «.Short English post». That was the
+   * state of every English post in the Arabic UI, and it is the difference
+   * between an interface that was translated and one that was designed.
+   */
+  bidi?: 'locale' | 'auto';
 }
 
 export function Text({
   variant = 'body',
   tone = 'default',
   align = 'start',
+  bidi = 'locale',
   style,
   ...rest
 }: TextProps): React.JSX.Element {
@@ -40,13 +60,20 @@ export function Text({
   const textAlign: TextStyle['textAlign'] =
     align === 'center' ? 'center' : align === 'end' ? 'right' : 'left';
 
+  /*
+   * `writingDirection` is omitted entirely for auto text rather than set to
+   * 'auto'. On web, react-native-web already renders a root-level Text with
+   * `dir="auto"`; supplying `writingDirection` compiles to a CSS `direction`
+   * rule, and an explicit CSS direction overrides the `dir` attribute — which
+   * is precisely how the automatic resolution was being defeated. On native,
+   * absent `writingDirection` already means 'auto'.
+   */
+  const direction: TextStyle =
+    bidi === 'auto' ? {} : { writingDirection: theme.isRTL ? 'rtl' : 'ltr' };
+
   return (
     <RNText
-      style={[
-        theme.typography[variant] as TextStyle,
-        { color, textAlign, writingDirection: theme.isRTL ? 'rtl' : 'ltr' },
-        style,
-      ]}
+      style={[theme.typography[variant] as TextStyle, { color, textAlign }, direction, style]}
       {...rest}
     />
   );

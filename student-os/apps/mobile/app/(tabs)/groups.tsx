@@ -132,7 +132,7 @@ export default function Groups(): React.JSX.Element {
           <Card onPress={() => router.push(`/group/${item.id}`)} accessibilityLabel={item.name}>
             <View style={{ gap: theme.spacing.sm }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-                <Text variant="bodyStrong" style={{ flex: 1 }}>
+                <Text variant="bodyStrong" style={{ flex: 1 }} bidi="auto">
                   {item.name}
                 </Text>
                 {/* An unlisted group is worth marking: its members should know
@@ -146,7 +146,7 @@ export default function Groups(): React.JSX.Element {
               </View>
 
               {item.description ? (
-                <Text variant="caption" tone="muted" numberOfLines={2}>
+                <Text variant="caption" tone="muted" numberOfLines={2} bidi="auto">
                   {item.description}
                 </Text>
               ) : null}

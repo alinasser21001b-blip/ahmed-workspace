@@ -39,6 +39,20 @@ export interface TokenStore {
   getRefreshToken: () => string | null;
   onTokensRefreshed: (tokens: { accessToken: string; refreshToken: string }) => void;
   onSessionExpired: () => void;
+  /**
+   * Resolves once the stored session has been read from the keystore.
+   *
+   * Authenticated requests await it. Without this, every data screen's mount
+   * effect races the session restore and loses: on a cold start the app fired
+   * a burst of requests with no `Authorization` header, each 401'd, and each
+   * screen's `catch` painted an error state over a perfectly good session. The
+   * layout audit counted six of them on every single load.
+   *
+   * The gate lives here rather than in the screens because "wait for the
+   * session" is not a thing nine screens should each remember — and the tenth
+   * screen, written later, would be the one that forgot.
+   */
+  whenReady?: () => Promise<void>;
 }
 
 export interface ApiClientOptions {
@@ -56,6 +70,10 @@ export class ApiClient {
     init: { method?: string; body?: unknown; auth?: boolean; signal?: AbortSignal } = {},
   ): Promise<T> {
     const { method = 'GET', body, auth = true, signal } = init;
+
+    // Unauthenticated calls (login, signup, the academic hierarchy) must NOT
+    // wait: the sign-in screen is reachable precisely when there is no session.
+    if (auth && this.options.tokens?.whenReady) await this.options.tokens.whenReady();
 
     const send = async (): Promise<Response> => {
       const headers: Record<string, string> = { accept: 'application/json' };
@@ -155,6 +173,8 @@ export class ApiClient {
    * than shared, since replaying an upload means re-reading a stream.
    */
   async upload<T>(path: string, form: FormData): Promise<T> {
+    if (this.options.tokens?.whenReady) await this.options.tokens.whenReady();
+
     const send = async (): Promise<Response> => {
       const token = this.options.tokens?.getAccessToken();
       try {

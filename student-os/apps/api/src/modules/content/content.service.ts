@@ -11,8 +11,11 @@ import {
   canCreateContent,
   canDeleteContent,
   canEditContent,
+  canPostInCommunity,
+  canPostInGroup,
   canViewContent,
   decodeCursor,
+  impliedMembership,
   encodeCursor,
   InvalidCursorError,
   pinnedClock,
@@ -134,14 +137,27 @@ export async function createPost(
   const privacy = await profiles.getPrivacySettings(actor.userId);
   const visibility = input.visibility ?? privacy.defaultPostVisibility;
 
-  // Container membership is checked here, not trusted from the request. Posting
-  // into a group you are not in would put your content behind a boundary you
-  // cannot see past.
-  if (input.groupId && !actor.groupIds.has(input.groupId)) {
-    throw errors.forbidden('not_group_member');
+  /*
+   * Container membership is checked here, not trusted from the request: posting
+   * into a group you are not in would put your content behind a boundary you
+   * cannot see past.
+   *
+   * It goes through the policy rather than reading `actor.groupIds` directly.
+   * The two agreed, but a second implementation of a permission question is
+   * exactly what ADR-0003 exists to forbid — and when group posting gains a
+   * per-group rule, the version that is not the policy is the one that will be
+   * missed.
+   */
+  if (input.groupId) {
+    const decision = canPostInGroup(actor, impliedMembership(actor, input.groupId, 'group'));
+    if (!decision.allowed) throw errors.forbidden(decision.reason);
   }
-  if (input.communityId && !actor.communityIds.has(input.communityId)) {
-    throw errors.forbidden('not_community_member');
+  if (input.communityId) {
+    const decision = canPostInCommunity(
+      actor,
+      impliedMembership(actor, input.communityId, 'community'),
+    );
+    if (!decision.allowed) throw errors.forbidden(decision.reason);
   }
   if (input.courseId && !actor.courseIds.has(input.courseId)) {
     throw errors.forbidden('not_enrolled');
@@ -318,6 +334,18 @@ export async function listFeed(
           ? { createdAt: cursor.t, id: cursor.id }
           : null,
     ordering,
+    /*
+     * Mutes apply to the ambient feed and not to a feed the reader has narrowed
+     * themselves. Opening a muted group's page, or a muted author's profile, is
+     * an explicit request — honouring the mute there would render the screen
+     * empty with no explanation, which reads as a bug rather than as a setting.
+     * Saved items are the reader's own shelf and are never filtered.
+     */
+    applyMutes:
+      query.scope !== 'saved' &&
+      query.scope !== 'author' &&
+      query.groupId === undefined &&
+      query.communityId === undefined,
     filters: {
       authorId,
       courseId: query.courseId,

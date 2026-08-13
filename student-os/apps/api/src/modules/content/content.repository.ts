@@ -1,4 +1,4 @@
-import type { ContentKind, ReactionKind, Visibility } from '@sos/contracts';
+import type { AccountStatus, ContentKind, ReactionKind, Visibility } from '@sos/contracts';
 import type { ContentRef, VisibilityScopes } from '@sos/core';
 import { queryOne, queryRows, type Sql } from '../../platform/db.js';
 import { buildContentByIdQuery, buildFeedQuery, type FeedQueryOptions } from './feed.sql.js';
@@ -139,10 +139,18 @@ export async function loadContentRef(id: string, client?: Sql): Promise<ContentR
     group_id: string | null;
     classroom_id: string | null;
     deleted_at: Date | null;
+    author_status: AccountStatus;
   }>(
-    `SELECT id, author_id, visibility, university_id, college_id, stage_id,
-            course_id, community_id, group_id, classroom_id, deleted_at
-     FROM content_items WHERE id = $1`,
+    // The author's standing is joined in rather than checked separately: it is
+    // an input to `canViewContent`, and a second query is a second chance to
+    // forget it.
+    `SELECT ci.id, ci.author_id, ci.visibility, ci.university_id, ci.college_id,
+            ci.stage_id, ci.course_id, ci.community_id, ci.group_id,
+            ci.classroom_id, ci.deleted_at,
+            au.status AS author_status
+     FROM content_items ci
+     JOIN users au ON au.id = ci.author_id
+     WHERE ci.id = $1`,
     [id],
     client,
   );
@@ -159,6 +167,7 @@ export async function loadContentRef(id: string, client?: Sql): Promise<ContentR
     groupId: row.group_id,
     classroomId: row.classroom_id,
     deletedAt: row.deleted_at,
+    authorStatus: row.author_status,
   };
 }
 
@@ -367,7 +376,9 @@ export async function scoreForParity(
   client?: Sql,
 ): Promise<{ id: string; score: number }[]> {
   const { rows } = await listFeed(
-    { scopes, pinnedNow, limit: 100, cursor: null, ordering: 'rank', filters: {} },
+    // Mutes off: the parity test compares scoring arithmetic, and a filtered
+    // row would look like a scoring disagreement.
+    { scopes, pinnedNow, limit: 100, cursor: null, ordering: 'rank', applyMutes: false, filters: {} },
     client,
   );
   return rows.map((r) => ({ id: r.id, score: Number(r.score) }));

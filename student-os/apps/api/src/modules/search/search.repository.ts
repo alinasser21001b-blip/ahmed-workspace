@@ -1,4 +1,4 @@
-import type { VisibilityScopes } from '@sos/core';
+import { normalizeArabic, type VisibilityScopes } from '@sos/core';
 import { queryRows, type Sql } from '../../platform/db.js';
 import type { CommunityRow } from '../communities/communities.repository.js';
 import type { GroupRow } from '../groups/groups.repository.js';
@@ -17,10 +17,40 @@ import type { GroupRow } from '../groups/groups.repository.js';
  * nobody can explain is worse than an obvious one. Semantic search over
  * embeddings is Phase 11 and will be a different endpoint, not a silent change
  * to this one.
+ *
+ * Every comparison runs against a `*_norm` column and a normalised term. The
+ * fold is documented, with its measured justification, in
+ * `@sos/core/text/arabic` and mirrored by `sos_normalize_arabic()` in migration
+ * 0009. Normalising one side only would match nothing; normalising the column
+ * inline would discard the index.
  */
 
 /** Below this, a trigram match is noise rather than a result. */
 const SIMILARITY_FLOOR = 0.15;
+
+/**
+ * What every query below actually compares.
+ *
+ * Built once per search so the term cannot be normalised on one branch and not
+ * another — the failure mode being that people search works in Arabic and
+ * content search silently does not.
+ */
+export interface SearchTerm {
+  /** Normalised, for both similarity and substring matching. */
+  norm: string;
+  /** `%term%` — substring, since trigrams alone miss very short queries. */
+  contains: string;
+  /** `term%` — prefix, used where a substring match would be too loose. */
+  prefix: string;
+}
+
+export function prepareTerm(raw: string): SearchTerm {
+  const norm = normalizeArabic(raw);
+  // ILIKE metacharacters in a user-supplied term would otherwise turn a search
+  // for "50%" into a match on everything.
+  const escaped = norm.replace(/([\\%_])/gu, '\\$1');
+  return { norm, contains: `%${escaped}%`, prefix: `${escaped}%` };
+}
 
 export interface PersonHit {
   user_id: string;
@@ -41,7 +71,7 @@ export interface PersonHit {
  * who has opted out of discovery must not be findable by typing their name.
  */
 export async function searchPeople(
-  term: string,
+  term: SearchTerm,
   scopes: VisibilityScopes,
   limit: number,
   client?: Sql,
@@ -56,11 +86,11 @@ export async function searchPeople(
      LEFT JOIN stages st ON st.id = p.stage_id
      LEFT JOIN colleges co ON co.id = p.college_id
      WHERE u.deleted_at IS NULL
-       AND u.status NOT IN ('banned', 'deleted')
+       AND u.status NOT IN ('suspended', 'banned', 'deleted')
        AND COALESCE(ps.searchable, true)
        AND NOT (p.user_id = ANY($3::uuid[]))
        AND (
-         GREATEST(similarity(p.display_name, $1), similarity(p.handle, $1)) >= $5
+         GREATEST(similarity(p.display_name_norm, $1), similarity(p.handle, $1)) >= $5
          OR p.handle ILIKE $2
        )
        AND (
@@ -73,12 +103,12 @@ export async function searchPeople(
          OR COALESCE(ps.profile_visibility, 'stage') NOT IN ('public', 'university', 'college', 'private')
             AND p.college_id = $7::uuid AND p.stage_id = $8::uuid
        )
-     ORDER BY GREATEST(similarity(p.display_name, $1), similarity(p.handle, $1)) DESC,
+     ORDER BY GREATEST(similarity(p.display_name_norm, $1), similarity(p.handle, $1)) DESC,
               p.display_name
      LIMIT $9`,
     [
-      term,
-      `${term}%`,
+      term.norm,
+      term.prefix,
       scopes.excludedUserIds,
       scopes.userId,
       SIMILARITY_FLOOR,
@@ -115,7 +145,7 @@ export interface ContentHit {
  * the two agree, which is what stops them drifting.
  */
 export async function searchContent(
-  term: string,
+  term: SearchTerm,
   scopes: VisibilityScopes,
   limit: number,
   client?: Sql,
@@ -132,10 +162,10 @@ export async function searchContent(
      LEFT JOIN colleges co ON co.id = p.college_id
      WHERE ci.deleted_at IS NULL
        AND u.deleted_at IS NULL
-       AND u.status NOT IN ('banned', 'deleted')
+       AND u.status NOT IN ('suspended', 'banned', 'deleted')
        AND NOT (ci.author_id = ANY($10::uuid[]))
        AND ci.body IS NOT NULL
-       AND (ci.body ILIKE $2 OR similarity(ci.body, $1) >= $3)
+       AND (ci.body_norm ILIKE $2 OR similarity(ci.body_norm, $1) >= $3)
        AND (
          ci.author_id = $4::uuid
          OR (
@@ -156,11 +186,11 @@ export async function searchContent(
            )
          )
        )
-     ORDER BY similarity(ci.body, $1) DESC, ci.created_at DESC
+     ORDER BY similarity(ci.body_norm, $1) DESC, ci.created_at DESC
      LIMIT $14`,
     [
-      term,
-      `%${term}%`,
+      term.norm,
+      term.contains,
       SIMILARITY_FLOOR,
       scopes.userId,
       scopes.courseIds,
@@ -185,7 +215,7 @@ export async function searchContent(
  * cannot be browsed to must not be reachable by guessing its name.
  */
 export async function searchGroups(
-  term: string,
+  term: SearchTerm,
   scopes: VisibilityScopes,
   limit: number,
   client?: Sql,
@@ -203,7 +233,7 @@ export async function searchGroups(
      LEFT JOIN courses c ON c.id = g.course_id
      LEFT JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = $2::uuid
      WHERE g.archived_at IS NULL
-       AND (g.name ILIKE $6 OR similarity(g.name, $1) >= $7)
+       AND (g.name_norm ILIKE $6 OR similarity(g.name_norm, $1) >= $7)
        AND (
          gm.status = 'active'
          OR (
@@ -219,15 +249,15 @@ export async function searchGroups(
            )
          )
        )
-     ORDER BY similarity(g.name, $1) DESC, g.member_count DESC
+     ORDER BY similarity(g.name_norm, $1) DESC, g.member_count DESC
      LIMIT $10`,
     [
-      term,
+      term.norm,
       scopes.userId,
       scopes.universityId,
       scopes.collegeId,
       scopes.stageId,
-      `%${term}%`,
+      term.contains,
       SIMILARITY_FLOOR,
       scopes.courseIds,
       scopes.communityIds,
@@ -238,7 +268,7 @@ export async function searchGroups(
 }
 
 export async function searchCommunities(
-  term: string,
+  term: SearchTerm,
   scopes: VisibilityScopes,
   limit: number,
   client?: Sql,
@@ -254,8 +284,9 @@ export async function searchCommunities(
      LEFT JOIN courses c ON c.id = cm.course_id
      LEFT JOIN community_members mem ON mem.community_id = cm.id AND mem.user_id = $2::uuid
      WHERE cm.archived_at IS NULL
-       AND (cm.name_ar ILIKE $6 OR cm.name_en ILIKE $6
-            OR GREATEST(similarity(cm.name_ar, $1), similarity(cm.name_en, $1)) >= $7)
+       AND (cm.name_ar_norm ILIKE $6 OR cm.name_en_norm ILIKE $6
+            OR GREATEST(similarity(cm.name_ar_norm, $1),
+                        similarity(cm.name_en_norm, $1)) >= $7)
        AND (
          cm.visibility = 'public'
          OR cm.visibility = 'university' AND cm.university_id = $3::uuid
@@ -263,16 +294,17 @@ export async function searchCommunities(
          OR cm.visibility = 'stage'      AND cm.college_id = $4::uuid AND cm.stage_id = $5::uuid
          OR cm.visibility = 'course'     AND cm.course_id = ANY($8::uuid[])
        )
-     ORDER BY GREATEST(similarity(cm.name_ar, $1), similarity(cm.name_en, $1)) DESC,
+     ORDER BY GREATEST(similarity(cm.name_ar_norm, $1),
+                       similarity(cm.name_en_norm, $1)) DESC,
               cm.is_official DESC
      LIMIT $9`,
     [
-      term,
+      term.norm,
       scopes.userId,
       scopes.universityId,
       scopes.collegeId,
       scopes.stageId,
-      `%${term}%`,
+      term.contains,
       SIMILARITY_FLOOR,
       scopes.courseIds,
       limit,

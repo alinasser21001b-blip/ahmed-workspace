@@ -3,6 +3,7 @@ import type { ContentItem, FeedPage, Group, GroupMember } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
+import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { PostCard } from '../../src/components/PostCard';
@@ -31,6 +32,8 @@ export default function GroupDetail(): React.JSX.Element {
   const [group, setGroup] = useState<Group | null>(null);
   const [posts, setPosts] = useState<ContentItem[]>([]);
   const [requests, setRequests] = useState<GroupMember[]>([]);
+  const [members, setMembers] = useState<GroupMember[]>([]);
+  const [showMembers, setShowMembers] = useState(false);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [acting, setActing] = useState(false);
 
@@ -43,11 +46,21 @@ export default function GroupDetail(): React.JSX.Element {
       // Posts and the approval queue are only fetched when the viewer is
       // entitled to them, so a non-member's screen never issues a request it
       // knows will 403.
-      if (detail.viewer.membershipStatus === 'active') {
+      /*
+       * Both reads are gated on the server's own answer, not on a guess. The
+       * screen never issues a request it has been told will be refused, and
+       * never renders a control for one either.
+       */
+      if (detail.viewer.canRead) {
         const page = await api.get<FeedPage>(`/v1/feed?scope=recent&groupId=${id}&limit=30`);
         setPosts(page.items);
+        const roster = await api.get<{ items: GroupMember[] }>(
+          `/v1/groups/${id}/members?status=active&limit=50`,
+        );
+        setMembers(roster.items);
       } else {
         setPosts([]);
+        setMembers([]);
       }
 
       if (detail.viewer.canModerate && (detail.pendingRequestCount ?? 0) > 0) {
@@ -90,12 +103,24 @@ export default function GroupDetail(): React.JSX.Element {
     }
   };
 
+  /**
+   * Approve or reject.
+   *
+   * Both branches were written when the queue was built; only approve was ever
+   * reachable, which left a moderator's only way to clear an unwanted request
+   * as leaving it pending forever.
+   */
   const decideRequest = async (handle: string, approve: boolean): Promise<void> => {
-    await api.request(`/v1/groups/${id}/members/${handle}`, {
-      method: approve ? 'PATCH' : 'DELETE',
-      ...(approve ? { body: { status: 'active' } } : {}),
-    });
-    await load();
+    setActing(true);
+    try {
+      await api.request(`/v1/groups/${id}/members/${handle}`, {
+        method: approve ? 'PATCH' : 'DELETE',
+        ...(approve ? { body: { status: 'active' } } : {}),
+      });
+      await load();
+    } finally {
+      setActing(false);
+    }
   };
 
   if (status === 'loading') {
@@ -125,13 +150,9 @@ export default function GroupDetail(): React.JSX.Element {
           onPress={() => router.back()}
           hitSlop={8}
         >
-          <Ionicons
-            name={theme.isRTL ? 'arrow-forward' : 'arrow-back'}
-            size={24}
-            color={theme.colors.text}
-          />
+          <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
         </Pressable>
-        <Text variant="heading" style={{ flex: 1 }} numberOfLines={1}>
+        <Text variant="heading" style={{ flex: 1 }} numberOfLines={1} bidi="auto">
           {group.name}
         </Text>
         {group.visibility === 'group' ? (
@@ -141,20 +162,39 @@ export default function GroupDetail(): React.JSX.Element {
 
       <Card>
         <View style={{ gap: theme.spacing.md }}>
-          {group.description ? <Text variant="body">{group.description}</Text> : null}
+          {group.description ? <Text variant="body" bidi="auto">{group.description}</Text> : null}
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-            <Text variant="caption" tone="muted">
-              {t('groups.members.count', { count: group.memberCount })}
-            </Text>
+            {group.viewer.canRead ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('groups.members')}
+                onPress={() => setShowMembers((open) => !open)}
+                hitSlop={8}
+              >
+                <Text variant="caption" tone="muted">
+                  {t('groups.members.count', { count: group.memberCount })}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text variant="caption" tone="muted">
+                {t('groups.members.count', { count: group.memberCount })}
+              </Text>
+            )}
             {group.courseName ? <Badge label={group.courseName} tone="learning" /> : null}
             {group.communityName ? <Badge label={group.communityName} tone="primary" /> : null}
           </View>
 
           {/* The label follows the server's decision rather than guessing, so
               "Join" never silently files a request. */}
-          {isMember ? (
+          {/* An owner who would strand the group has `canLeave: false`, and the
+              button is absent rather than present-and-failing. */}
+          {isMember && group.viewer.canLeave ? (
             <Button label={t('groups.leave')} variant="secondary" onPress={() => void leave()} loading={acting} />
+          ) : isMember && group.viewer.role === 'owner' ? (
+            <Text variant="micro" tone="muted">
+              {t('groups.leave.ownerBlocked')}
+            </Text>
           ) : group.viewer.membershipStatus === 'pending' ? (
             <Badge label={t('groups.join.pending')} tone="warning" />
           ) : group.viewer.canJoin ? (
@@ -177,19 +217,56 @@ export default function GroupDetail(): React.JSX.Element {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
                 <Avatar name={request.profile.displayName} size={36} />
                 <View style={{ flex: 1, gap: 2 }}>
-                  <Text variant="label">{request.profile.displayName}</Text>
+                  <Text variant="label" bidi="auto">{request.profile.displayName}</Text>
                   {request.message ? (
                     <Text variant="micro" tone="muted" numberOfLines={2}>
                       {request.message}
                     </Text>
                   ) : null}
                 </View>
-                <Button
-                  label={t('groups.requests.approve')}
-                  size="md"
-                  onPress={() => void decideRequest(request.profile.handle, true)}
-                />
+                <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+                  <Button
+                    label={t('groups.requests.approve')}
+                    size="md"
+                    onPress={() => void decideRequest(request.profile.handle, true)}
+                    loading={acting}
+                  />
+                  <Button
+                    label={t('groups.requests.reject')}
+                    size="md"
+                    variant="secondary"
+                    onPress={() => void decideRequest(request.profile.handle, false)}
+                    loading={acting}
+                  />
+                </View>
               </View>
+            </Card>
+          ))}
+        </View>
+      ) : null}
+
+      {showMembers && members.length > 0 ? (
+        <View style={{ gap: theme.spacing.sm }}>
+          <Text variant="heading">{t('groups.members')}</Text>
+          {members.map((member) => (
+            <Card key={member.profile.userId}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push(`/profile/${member.profile.handle}`)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}
+              >
+                <Avatar name={member.profile.displayName} size={36} />
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text variant="label" bidi="auto">{member.profile.displayName}</Text>
+                  <Text variant="micro" tone="muted">
+                    @{member.profile.handle}
+                  </Text>
+                </View>
+                {member.role !== 'member' ? (
+                  <Badge label={t(`groups.role.${member.role}`)} tone="primary" />
+                ) : null}
+                <DirectionalIcon direction="disclosure" size={18} color={theme.colors.textMuted} />
+              </Pressable>
             </Card>
           ))}
         </View>

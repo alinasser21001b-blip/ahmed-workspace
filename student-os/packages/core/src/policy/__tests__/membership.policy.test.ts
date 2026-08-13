@@ -2,16 +2,23 @@ import { describe, expect, it } from 'vitest';
 import type { Actor } from '../actor.js';
 import {
   canDiscoverGroup,
+  canCommentInGroup,
+  canInviteToGroup,
   canJoinCommunity,
   canJoinGroup,
+  canLeaveGroup,
   canManageGroup,
   canModerateGroup,
   canPostInCommunity,
   canPostInGroup,
   canRemoveMember,
   canTransferOwnership,
+  canReadInGroup,
   canViewCommunity,
   canViewGroup,
+  canWriteInGroup,
+  groupCapabilities,
+  impliedMembership,
   type CommunityRef,
   type GroupRef,
   type Membership,
@@ -43,6 +50,10 @@ function actor(overrides: Partial<Actor> = {}): Actor {
     followingIds: new Set(),
     blockedUserIds: new Set(),
     blockedByUserIds: new Set(),
+    mutedUserIds: new Set(),
+    mutedGroupIds: new Set(),
+    mutedCommunityIds: new Set(),
+    mutedTopicIds: new Set(),
     ...overrides,
   };
 }
@@ -223,42 +234,93 @@ describe('group management', () => {
   });
 });
 
-describe('canRemoveMember', () => {
-  it('always lets a member remove themselves', () => {
-    expect(canRemoveMember(actor(), member(), member(), 'alice')).toMatchObject({
+describe('canLeaveGroup', () => {
+  it('lets an ordinary member leave', () => {
+    expect(canLeaveGroup(actor(), member(), { memberCount: 5 })).toMatchObject({
       allowed: true,
       reason: 'self_leave',
     });
+  });
+
+  it('refuses to let an owner strand a populated group', () => {
+    expect(canLeaveGroup(actor(), member({ role: 'owner' }), { memberCount: 2 })).toMatchObject({
+      allowed: false,
+      reason: 'owner_must_transfer_first',
+    });
+  });
+
+  it('lets a sole owner leave, because there is nothing left to strand', () => {
+    expect(canLeaveGroup(actor(), member({ role: 'owner' }), { memberCount: 1 }).allowed).toBe(true);
+  });
+
+  it('refuses someone who is not an active member', () => {
+    expect(canLeaveGroup(actor(), null, { memberCount: 5 }).allowed).toBe(false);
+    expect(canLeaveGroup(actor(), member({ status: 'pending' }), { memberCount: 5 }).allowed).toBe(
+      false,
+    );
+  });
+});
+
+describe('canRemoveMember', () => {
+  const group = { memberCount: 5 };
+
+  it('lets a member remove themselves — which is leaving', () => {
+    expect(canRemoveMember(actor(), member(), member(), 'alice', group)).toMatchObject({
+      allowed: true,
+      reason: 'self_leave',
+    });
+  });
+
+  /*
+   * The bug this pins down: the strand rule used to live only in the service
+   * method behind `DELETE /membership`, so removing yourself through
+   * `DELETE /members/<own handle>` walked past it and left the group with zero
+   * owners — unmanageable, and unrecoverable through any product action.
+   */
+  it('holds an owner removing themselves to the same rule as leaving', () => {
+    expect(
+      canRemoveMember(actor(), member({ role: 'owner' }), member({ role: 'owner' }), 'alice', {
+        memberCount: 2,
+      }),
+    ).toMatchObject({ allowed: false, reason: 'owner_must_transfer_first' });
   });
 
   it('refuses to let a moderator remove an admin', () => {
     // Otherwise promoting someone to moderator hands them the power to remove
     // the people who promoted them.
     expect(
-      canRemoveMember(actor(), member({ role: 'moderator' }), member({ role: 'admin' }), 'bob'),
+      canRemoveMember(
+        actor(),
+        member({ role: 'moderator' }),
+        member({ role: 'admin' }),
+        'bob',
+        group,
+      ),
     ).toMatchObject({ allowed: false, reason: 'target_outranks_actor' });
   });
 
   it('refuses to let an admin remove the owner', () => {
     expect(
-      canRemoveMember(actor(), member({ role: 'admin' }), member({ role: 'owner' }), 'bob').allowed,
+      canRemoveMember(actor(), member({ role: 'admin' }), member({ role: 'owner' }), 'bob', group)
+        .allowed,
     ).toBe(false);
   });
 
   it('refuses to let peers remove each other', () => {
     expect(
-      canRemoveMember(actor(), member({ role: 'admin' }), member({ role: 'admin' }), 'bob').allowed,
+      canRemoveMember(actor(), member({ role: 'admin' }), member({ role: 'admin' }), 'bob', group)
+        .allowed,
     ).toBe(false);
   });
 
   it('lets an admin remove a plain member', () => {
     expect(
-      canRemoveMember(actor(), member({ role: 'admin' }), member(), 'bob').allowed,
+      canRemoveMember(actor(), member({ role: 'admin' }), member(), 'bob', group).allowed,
     ).toBe(true);
   });
 
   it('refuses a plain member removing anyone else', () => {
-    expect(canRemoveMember(actor(), member(), member(), 'bob').allowed).toBe(false);
+    expect(canRemoveMember(actor(), member(), member(), 'bob', group).allowed).toBe(false);
   });
 });
 
@@ -307,5 +369,94 @@ describe('communities', () => {
   it('requires membership to post, even in a visible community', () => {
     expect(canPostInCommunity(actor(), null).allowed).toBe(false);
     expect(canPostInCommunity(actor(), member()).allowed).toBe(true);
+  });
+});
+
+/*
+ * The gate vocabulary, named and kept apart.
+ *
+ * These exist as separate functions rather than as one `hasAccess` boolean
+ * because they answer different questions, and the tests below are what stop
+ * someone helpfully collapsing them later.
+ */
+describe('the named gates', () => {
+  it('separates seeing a group from reading inside it', () => {
+    const g = group({ visibility: 'stage' });
+
+    // An in-scope non-member sees the group and not its contents.
+    expect(canViewGroup(actor(), g, null).allowed).toBe(true);
+    expect(canReadInGroup(actor(), null).allowed).toBe(false);
+
+    // An invitee sees it and a way in — not the conversation they have not
+    // accepted yet.
+    expect(canViewGroup(actor(), g, member({ status: 'invited' })).allowed).toBe(true);
+    expect(canReadInGroup(actor(), member({ status: 'invited' })).allowed).toBe(false);
+
+    expect(canReadInGroup(actor(), member()).allowed).toBe(true);
+  });
+
+  it('separates reading from writing for a restricted account', () => {
+    // The distinction restriction exists to make: they keep reading, they stop
+    // producing. Collapsing read and write into one gate erases it.
+    const restricted = actor({ status: 'restricted' });
+    expect(canReadInGroup(restricted, member()).allowed).toBe(true);
+    expect(canWriteInGroup(restricted, member()).allowed).toBe(false);
+    expect(canPostInGroup(restricted, member()).allowed).toBe(false);
+    expect(canCommentInGroup(restricted, member()).allowed).toBe(false);
+  });
+
+  it('separates inviting from moderating', () => {
+    // A moderator approves the people who asked; they do not get to choose the
+    // membership. Otherwise promoting a moderator hands them an audience.
+    const moderator = member({ role: 'moderator' });
+    expect(canModerateGroup(actor(), moderator).allowed).toBe(true);
+    expect(canInviteToGroup(actor(), moderator).allowed).toBe(false);
+    expect(canInviteToGroup(actor(), member({ role: 'admin' })).allowed).toBe(true);
+  });
+
+  it('closes every gate for a banned member, including the ones membership implies', () => {
+    const banned = member({ status: 'banned' });
+    const caps = groupCapabilities(actor(), group({ visibility: 'public' }), banned);
+    for (const [name, decision] of Object.entries(caps)) {
+      expect(decision.allowed, name).toBe(false);
+    }
+  });
+
+  it('reports each gate separately rather than as one verdict', () => {
+    const caps = groupCapabilities(actor(), group({ visibility: 'stage' }), null);
+    expect(caps.canView.allowed).toBe(true);
+    expect(caps.canJoin.allowed).toBe(true);
+    expect(caps.canRead.allowed).toBe(false);
+    expect(caps.canWrite.allowed).toBe(false);
+    expect(caps.canManage.allowed).toBe(false);
+  });
+});
+
+describe('impliedMembership', () => {
+  /*
+   * The Actor carries only active memberships, so presence in the set is an
+   * exact answer for status and a lower bound for role. It exists so a caller
+   * holding an Actor asks the policy instead of reaching into `actor.groupIds`
+   * and deciding for itself — the duplication ADR-0003 forbids.
+   */
+  it('derives an active membership from the actor\'s sets', () => {
+    const a = actor({ groupIds: new Set(['g1']) });
+    expect(impliedMembership(a, 'g1', 'group')).toEqual({ role: 'member', status: 'active' });
+    expect(impliedMembership(a, 'g2', 'group')).toBeNull();
+  });
+
+  it('is enough for the write gates', () => {
+    const a = actor({ groupIds: new Set(['g1']) });
+    expect(canPostInGroup(a, impliedMembership(a, 'g1', 'group')).allowed).toBe(true);
+    expect(canPostInGroup(a, impliedMembership(a, 'g2', 'group')).allowed).toBe(false);
+  });
+
+  it('never implies a management role, which must load the real row', () => {
+    const a = actor({ groupIds: new Set(['g1']) });
+    expect(canManageGroup(a, impliedMembership(a, 'g1', 'group')).allowed).toBe(false);
+  });
+
+  it('gives an unauthenticated actor nothing', () => {
+    expect(impliedMembership(null, 'g1', 'group')).toBeNull();
   });
 });

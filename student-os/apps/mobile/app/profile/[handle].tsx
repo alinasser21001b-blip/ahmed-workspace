@@ -1,8 +1,8 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ContentItem, FeedPage, Profile, Relationship } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
+import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { PostCard } from '../../src/components/PostCard';
@@ -93,13 +93,9 @@ export default function ProfileScreen(): React.JSX.Element {
           onPress={() => router.back()}
           hitSlop={8}
         >
-          <Ionicons
-            name={theme.isRTL ? 'arrow-forward' : 'arrow-back'}
-            size={24}
-            color={theme.colors.text}
-          />
+          <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
         </Pressable>
-        <Text variant="heading" style={{ flex: 1 }} numberOfLines={1}>
+        <Text variant="heading" style={{ flex: 1 }} numberOfLines={1} bidi="auto">
           {profile.displayName}
         </Text>
       </View>
@@ -109,7 +105,7 @@ export default function ProfileScreen(): React.JSX.Element {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
             <Avatar name={profile.displayName} size={56} />
             <View style={{ flex: 1, gap: 2 }}>
-              <Text variant="bodyStrong">{profile.displayName}</Text>
+              <Text variant="bodyStrong" bidi="auto">{profile.displayName}</Text>
               <Text variant="caption" tone="muted">
                 @{profile.handle}
               </Text>
@@ -121,7 +117,7 @@ export default function ProfileScreen(): React.JSX.Element {
             </View>
           </View>
 
-          {profile.bio ? <Text variant="body">{profile.bio}</Text> : null}
+          {profile.bio ? <Text variant="body" bidi="auto">{profile.bio}</Text> : null}
 
           {profile.interests.length > 0 ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>

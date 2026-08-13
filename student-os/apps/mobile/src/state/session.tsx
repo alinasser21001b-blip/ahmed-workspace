@@ -68,6 +68,23 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
   const accessToken = useRef<string | null>(null);
   const refreshToken = useRef<string | null>(null);
 
+  /*
+   * The readiness gate.
+   *
+   * Created before the first render so that a screen's mount effect — which
+   * runs before this provider's restore effect resolves — has something to
+   * await rather than a null token to send.
+   */
+  const ready = useRef<{ promise: Promise<void>; resolve: () => void } | null>(null);
+  if (ready.current === null) {
+    let resolve = (): void => {};
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    ready.current = { promise, resolve };
+  }
+  const whenReady = useCallback(() => ready.current!.promise, []);
+
   const clearSession = useCallback(async () => {
     accessToken.current = null;
     refreshToken.current = null;
@@ -92,9 +109,10 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
           onSessionExpired: () => {
             void clearSession();
           },
+          whenReady,
         },
       }),
-    [clearSession],
+    [clearSession, whenReady],
   );
 
   const adopt = useCallback(async (session: AuthSession) => {
@@ -120,6 +138,11 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
 
       accessToken.current = stored;
       refreshToken.current = storedRefresh;
+
+      // Opened as soon as the tokens are in place, and before `/auth/me`:
+      // queued requests carry the restored token, and the gate cannot deadlock
+      // on the very call that is meant to open it.
+      ready.current?.resolve();
 
       if (!storedRefresh) {
         setStatus('signedOut');

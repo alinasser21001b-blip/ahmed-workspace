@@ -1,8 +1,10 @@
 import type { Community, ContainerViewerState, Locale } from '@sos/contracts';
 import {
+  canCommentInCommunity,
   canJoinCommunity,
   canPostInCommunity,
   canViewCommunity,
+  canWriteInCommunity,
   decodeCursor,
   encodeCursor,
   InvalidCursorError,
@@ -33,14 +35,25 @@ function toCommunity(row: repo.CommunityRow, actor: Actor, locale: Locale): Comm
   const membership = repo.toMembership(row);
   const join = canJoinCommunity(actor, repo.toRef(row), membership);
 
+  const write = canWriteInCommunity(actor, membership);
+
   const viewer: ContainerViewerState = {
     membershipStatus: membership?.status ?? null,
     role: membership?.role ?? null,
     joinOutcome: join.allowed ? 'joined' : 'blocked',
     canJoin: join.allowed,
+    // A community is a discovery surface, not a container: anyone who can see
+    // it can read it. That asymmetry with groups is the product decision, and
+    // it is why `canRead` here is not membership-gated.
+    canRead: canViewCommunity(actor, repo.toRef(row)).allowed,
+    canWrite: write.allowed,
     canPost: canPostInCommunity(actor, membership).allowed,
-    // No self-service moderation in V1; only platform admins act on a
-    // community, through the admin surface.
+    canComment: canCommentInCommunity(actor, membership).allowed,
+    // Nothing is stranded by leaving a community — there is no owner role.
+    canLeave: membership?.status === 'active',
+    // No self-service moderation or invitation in V1; only platform admins act
+    // on a community, through the admin surface.
+    canInvite: isPlatformAdmin(actor),
     canModerate: isPlatformAdmin(actor),
     canManage: isPlatformAdmin(actor),
   };

@@ -28,6 +28,10 @@ function actor(overrides: Partial<Actor> = {}): Actor {
     followingIds: new Set(),
     blockedUserIds: new Set(),
     blockedByUserIds: new Set(),
+    mutedUserIds: new Set(),
+    mutedGroupIds: new Set(),
+    mutedCommunityIds: new Set(),
+    mutedTopicIds: new Set(),
     ...overrides,
   };
 }

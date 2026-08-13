@@ -45,6 +45,25 @@ export interface Actor {
    */
   blockedUserIds: ReadonlySet<string>;
   blockedByUserIds: ReadonlySet<string>;
+
+  /**
+   * Muted authors, groups, communities and topics — unexpired only.
+   *
+   * Separate from blocking, and it matters that they are separate. A block is a
+   * safety boundary: it is symmetric, it severs follows, and it hides content in
+   * both directions. A mute is a personal volume control: it is one-directional,
+   * invisible to the muted party, and it changes nothing about permission —
+   * only about what this reader is shown.
+   *
+   * They therefore enter queries through different channels. Blocks belong in
+   * the permission predicate; mutes belong in the read filter, and are dropped
+   * on surfaces where the reader asked for the thing explicitly (a profile, a
+   * group's own page, a direct link).
+   */
+  mutedUserIds: ReadonlySet<string>;
+  mutedGroupIds: ReadonlySet<string>;
+  mutedCommunityIds: ReadonlySet<string>;
+  mutedTopicIds: ReadonlySet<string>;
 }
 
 /** An unauthenticated request. */

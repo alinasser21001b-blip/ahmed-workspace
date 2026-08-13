@@ -20,14 +20,34 @@ import { profileSummarySchema } from '../users/users.contract.js';
 export const joinPolicySchema = z.enum(['open', 'request', 'invite']);
 export type JoinPolicy = z.infer<typeof joinPolicySchema>;
 
-/** What the reader may do with this container. */
+/**
+ * What the reader may do with this container.
+ *
+ * Every gate is reported separately, exactly as the policy computes them. They
+ * are deliberately not collapsed into one `hasAccess`: "may see it exists",
+ * "may read inside it", "may write in it" and "may administer it" are four
+ * different questions, and a client given one boolean will draw a screen that
+ * answers the wrong one.
+ *
+ * The client's rule is that it renders these and never re-derives them. A
+ * control whose gate is false is not rendered — not rendered and disabled, and
+ * never rendered and inert.
+ */
 export const containerViewerStateSchema = z.object({
   membershipStatus: membershipStatusSchema.nullable(),
   role: membershipRoleSchema.nullable(),
   /** 'joined' applies immediately; 'requested' files a request for approval. */
   joinOutcome: z.enum(['joined', 'requested', 'blocked']),
   canJoin: z.boolean(),
+  /** Read the content inside. Distinct from being able to see the container. */
+  canRead: z.boolean(),
+  /** Produce anything inside it. `canPost` and `canComment` refine this. */
+  canWrite: z.boolean(),
   canPost: z.boolean(),
+  canComment: z.boolean(),
+  /** Leave without stranding the container — false for an owner who must transfer. */
+  canLeave: z.boolean(),
+  canInvite: z.boolean(),
   canModerate: z.boolean(),
   canManage: z.boolean(),
 });

@@ -180,12 +180,66 @@ export function canJoinGroup(
     : { allowed: true, reason: 'request_required', outcome: 'requested' };
 }
 
-/** Posting requires active membership — not visibility, not an invitation. */
-export function canPostInGroup(actor: MaybeActor, membership: MaybeMembership): Decision {
+/**
+ * Reading the content *inside* a group.
+ *
+ * Distinct from `canViewGroup`, and the distinction is the whole point: seeing
+ * that a study group exists is not seeing what was said in it. Only active
+ * membership opens the container. An invitee sees the shell and a way in; they
+ * do not see the conversation they have not accepted yet.
+ *
+ * `canViewContent`'s container check is the enforcement point for individual
+ * items; this is the same rule stated at the container level, for surfaces that
+ * decide before they query.
+ */
+export function canReadInGroup(actor: MaybeActor, membership: MaybeMembership): Decision {
   if (!canRead(actor)) return deny('unauthenticated');
-  if (actor.status === 'restricted') return deny('account_restricted');
+  if (membership?.status === 'banned') return deny('banned_from_group');
   if (!isActiveMember(membership)) return deny('not_group_member');
   return allow('member');
+}
+
+/**
+ * The base write gate for a container: may this actor produce anything inside
+ * it at all?
+ *
+ * `canPostInGroup` and `canCommentInGroup` are defined in terms of this rather
+ * than being aliases of it, because they are different product questions and
+ * will diverge: an announcements group admits comments from members while
+ * restricting posts to moderators. Collapsing them into one boolean today is
+ * what makes that change a rewrite instead of an edit.
+ *
+ * Until a per-group posting policy exists in the schema, all three agree. That
+ * is a fact about the current product, not about the shape of the policy.
+ */
+export function canWriteInGroup(actor: MaybeActor, membership: MaybeMembership): Decision {
+  if (!canRead(actor)) return deny('unauthenticated');
+  if (actor.status === 'restricted') return deny('account_restricted');
+  if (membership?.status === 'banned') return deny('banned_from_group');
+  if (!isActiveMember(membership)) return deny('not_group_member');
+  return allow('member');
+}
+
+/** Creating top-level content in a group. */
+export function canPostInGroup(actor: MaybeActor, membership: MaybeMembership): Decision {
+  return canWriteInGroup(actor, membership);
+}
+
+/** Replying to content already inside a group. */
+export function canCommentInGroup(actor: MaybeActor, membership: MaybeMembership): Decision {
+  return canWriteInGroup(actor, membership);
+}
+
+/**
+ * Inviting someone in.
+ *
+ * A management action, not a moderation one. A moderator approves the people
+ * who asked; they do not get to choose the membership. Without that split,
+ * promoting a moderator hands them the ability to populate the group with an
+ * audience of their own.
+ */
+export function canInviteToGroup(actor: MaybeActor, membership: MaybeMembership): Decision {
+  return canManageGroup(actor, membership);
 }
 
 /** Settings, invites, promotion, archival. */
@@ -209,7 +263,37 @@ export function canModerateGroup(actor: MaybeActor, membership: MaybeMembership)
 }
 
 /**
- * Removing another member.
+ * Leaving under one's own steam.
+ *
+ * The owner of a populated group may not simply walk out: the group would be
+ * left with nobody able to approve a request, promote a replacement, or archive
+ * it — a permanently unmanageable state that no in-product action can undo.
+ * They transfer ownership first, or archive.
+ *
+ * A sole owner leaving is fine; there is nothing left to strand, and the
+ * service archives the empty group behind them.
+ *
+ * This lives in the policy rather than in one service method because there are
+ * two routes out of a group — `DELETE /membership` and
+ * `DELETE /members/:ownHandle` — and a guard written on only one of them is a
+ * guard that does not exist.
+ */
+export function canLeaveGroup(
+  actor: MaybeActor,
+  membership: MaybeMembership,
+  group: Pick<GroupRef, 'memberCount'>,
+): Decision {
+  if (!isActive(actor)) return deny('unauthenticated');
+  if (!membership) return deny('not_group_member');
+  if (membership.status !== 'active') return deny('not_group_member');
+  if (membership.role === 'owner' && group.memberCount > 1) {
+    return deny('owner_must_transfer_first');
+  }
+  return allow('self_leave');
+}
+
+/**
+ * Removing a member — someone else, or oneself.
  *
  * Rank matters: an admin cannot remove the owner, and a moderator cannot
  * remove an admin. Without this, promoting someone to moderator hands them the
@@ -220,12 +304,13 @@ export function canRemoveMember(
   actorMembership: MaybeMembership,
   targetMembership: Membership,
   targetUserId: string,
+  group: Pick<GroupRef, 'memberCount'>,
 ): Decision {
   if (!isActive(actor)) return deny('unauthenticated');
 
-  // Leaving is always permitted, including for the owner — who must transfer
-  // ownership first, enforced by the service.
-  if (targetUserId === actor.userId) return allow('self_leave');
+  // Removing yourself IS leaving, and is held to the same rule whichever
+  // endpoint it arrives through.
+  if (targetUserId === actor.userId) return canLeaveGroup(actor, actorMembership, group);
 
   const moderate = canModerateGroup(actor, actorMembership);
   if (!moderate.allowed) return moderate;
@@ -253,6 +338,81 @@ export function canTransferOwnership(
 
 function rank(role: MembershipRole): number {
   return { member: 0, moderator: 1, admin: 2, owner: 3 }[role];
+}
+
+/**
+ * Every named gate for one container, resolved once.
+ *
+ * The gates stay **separate Decisions**, each with its own reason code. They are
+ * deliberately not reduced to a single `hasAccess` boolean: "may see it exists",
+ * "may read inside it", "may write in it" and "may administer it" are four
+ * different questions, and every product that has collapsed them has shipped
+ * the bug where being able to find something implied being able to open it.
+ *
+ * This is the object every surface consumes — REST, feed, search, group detail,
+ * the member list, and (Phase 4) conversations. Surfaces project it; they do not
+ * re-derive it.
+ */
+export interface GroupCapabilities {
+  canDiscover: Decision;
+  canView: Decision;
+  canRead: Decision;
+  canWrite: Decision;
+  canPost: Decision;
+  canComment: Decision;
+  canJoin: JoinDecision;
+  canLeave: Decision;
+  canInvite: Decision;
+  canManage: Decision;
+  canModerate: Decision;
+}
+
+export function groupCapabilities(
+  actor: MaybeActor,
+  group: GroupRef,
+  membership: MaybeMembership,
+): GroupCapabilities {
+  return {
+    canDiscover: canDiscoverGroup(actor, group, membership),
+    canView: canViewGroup(actor, group, membership),
+    canRead: canReadInGroup(actor, membership),
+    canWrite: canWriteInGroup(actor, membership),
+    canPost: canPostInGroup(actor, membership),
+    canComment: canCommentInGroup(actor, membership),
+    canJoin: canJoinGroup(actor, group, membership),
+    canLeave: canLeaveGroup(actor, membership, group),
+    canInvite: canInviteToGroup(actor, membership),
+    canManage: canManageGroup(actor, membership),
+    canModerate: canModerateGroup(actor, membership),
+  };
+}
+
+/**
+ * The membership an Actor implies for a container it belongs to.
+ *
+ * `loadActor` populates the membership sets from `status = 'active'` rows only,
+ * so presence in the set is an exact answer for *status* and a lower bound for
+ * *role*. That is sufficient for every read and write gate, and insufficient for
+ * every management gate — which is why those load the real row.
+ *
+ * It exists so that a caller holding only an Actor can still ask the policy
+ * rather than reaching into `actor.groupIds` and re-deciding for itself.
+ */
+export function impliedMembership(
+  actor: MaybeActor,
+  containerId: string,
+  kind: 'group' | 'community' | 'classroom' | 'course',
+): MaybeMembership {
+  if (!canRead(actor)) return null;
+  const set =
+    kind === 'group'
+      ? actor.groupIds
+      : kind === 'community'
+        ? actor.communityIds
+        : kind === 'classroom'
+          ? actor.classroomIds
+          : actor.courseIds;
+  return set.has(containerId) ? { role: 'member', status: 'active' } : null;
 }
 
 // --- communities ------------------------------------------------------------
@@ -309,10 +469,25 @@ export function canJoinCommunity(
   return canViewCommunity(actor, community);
 }
 
-/** Only members post into a community, even one they can see. */
-export function canPostInCommunity(actor: MaybeActor, membership: MaybeMembership): Decision {
+/**
+ * Only members write into a community, even one they can see.
+ *
+ * Reading is not gated here on purpose: a community is a discovery surface, so
+ * an in-scope student reads its non-`community`-visibility content without
+ * joining. That asymmetry with groups is the product decision, stated once.
+ */
+export function canWriteInCommunity(actor: MaybeActor, membership: MaybeMembership): Decision {
   if (!canRead(actor)) return deny('unauthenticated');
   if (actor.status === 'restricted') return deny('account_restricted');
+  if (membership?.status === 'banned') return deny('banned_from_community');
   if (!isActiveMember(membership)) return deny('not_community_member');
   return allow('member');
+}
+
+export function canPostInCommunity(actor: MaybeActor, membership: MaybeMembership): Decision {
+  return canWriteInCommunity(actor, membership);
+}
+
+export function canCommentInCommunity(actor: MaybeActor, membership: MaybeMembership): Decision {
+  return canWriteInCommunity(actor, membership);
 }

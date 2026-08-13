@@ -29,6 +29,15 @@ export interface FeedQueryOptions {
   limit: number;
   cursor: { score: number; id: string } | { createdAt: number; id: string } | null;
   ordering: 'rank' | 'recent';
+  /**
+   * Whether mutes apply to this read.
+   *
+   * They apply to ambient surfaces — the home feed, `recent`, search — and not
+   * to surfaces the reader explicitly asked for: a specific author's posts, a
+   * muted group's own page, their own bookmarks. Muting a group is a request to
+   * stop hearing from it in passing, not a request to be locked out of it.
+   */
+  applyMutes: boolean;
   filters: {
     authorId?: string | undefined;
     courseId?: string | undefined;
@@ -171,7 +180,7 @@ export interface BuiltQuery {
 }
 
 export function buildFeedQuery(options: FeedQueryOptions): BuiltQuery {
-  const { scopes, pinnedNow, limit, cursor, ordering, filters } = options;
+  const { scopes, pinnedNow, limit, cursor, ordering, filters, applyMutes } = options;
 
   const params: unknown[] = [
     scopes.userId,
@@ -204,7 +213,13 @@ export function buildFeedQuery(options: FeedQueryOptions): BuiltQuery {
   const conditions: string[] = [
     'ci.deleted_at IS NULL',
     'u.deleted_at IS NULL',
-    "u.status NOT IN ('banned', 'deleted')",
+    // `suspended` belongs here with `banned` and `deleted`: a suspension that
+    // left the account's posts in every cohort feed would be a suspension in
+    // name only. `restricted` does NOT belong here — restriction removes the
+    // ability to write, it does not retract what was already written. The same
+    // list is in `authorIsWithheld` in @sos/core, which the single-item read
+    // uses, so the two surfaces cannot disagree.
+    "u.status NOT IN ('suspended', 'banned', 'deleted')",
     // Blocking is bidirectional and applied here rather than after the fetch,
     // so a blocked author's posts never occupy a slot in the page.
     'NOT (ci.author_id = ANY($10::uuid[]))',
@@ -215,6 +230,42 @@ export function buildFeedQuery(options: FeedQueryOptions): BuiltQuery {
     params.push(value);
     return `$${params.length}`;
   };
+
+  /*
+   * Mutes, filtered in the query for the same reason blocks are: a mute applied
+   * after the fetch returns short pages and lets the reader infer, from the gap,
+   * exactly what they asked not to see.
+   *
+   * The author's own posts are never muted away — muting someone does not
+   * un-publish yourself — and a topic mute matches if ANY topic on the post is
+   * muted, which is the reading a student expects from "mute this topic".
+   */
+  if (applyMutes) {
+    if (scopes.mutedUserIds.length > 0) {
+      conditions.push(
+        `(ci.author_id = $1::uuid OR NOT (ci.author_id = ANY(${push(scopes.mutedUserIds)}::uuid[])))`,
+      );
+    }
+    if (scopes.mutedGroupIds.length > 0) {
+      conditions.push(
+        `(ci.group_id IS NULL OR NOT (ci.group_id = ANY(${push(scopes.mutedGroupIds)}::uuid[])))`,
+      );
+    }
+    if (scopes.mutedCommunityIds.length > 0) {
+      conditions.push(
+        `(ci.community_id IS NULL OR NOT (ci.community_id = ANY(${push(
+          scopes.mutedCommunityIds,
+        )}::uuid[])))`,
+      );
+    }
+    if (scopes.mutedTopicIds.length > 0) {
+      conditions.push(
+        `NOT EXISTS (SELECT 1 FROM content_topics mt
+                     WHERE mt.content_id = ci.id
+                       AND mt.topic_id = ANY(${push(scopes.mutedTopicIds)}::uuid[]))`,
+      );
+    }
+  }
 
   if (filters.authorId) conditions.push(`ci.author_id = ${push(filters.authorId)}::uuid`);
   if (filters.courseId) conditions.push(`ci.course_id = ${push(filters.courseId)}::uuid`);

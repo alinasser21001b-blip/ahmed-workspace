@@ -1,4 +1,4 @@
-import type { Visibility } from '@sos/contracts';
+import type { AccountStatus, Visibility } from '@sos/contracts';
 import {
   allow,
   canRead,
@@ -30,6 +30,28 @@ export interface ContentRef {
   groupId: string | null;
   classroomId: string | null;
   deletedAt: Date | string | null;
+  /**
+   * The author's account standing.
+   *
+   * Optional only so that callers written before this existed keep compiling;
+   * omitting it means "not withheld", which is the same answer the policy gave
+   * before. Every caller in this repository supplies it.
+   */
+  authorStatus?: AccountStatus | undefined;
+}
+
+/**
+ * Account states that withdraw an author's existing content from circulation.
+ *
+ * `restricted` is deliberately absent: restriction removes the ability to
+ * write, it does not retract what was already written. `suspended` is
+ * deliberately present — a suspension that left the account's posts in every
+ * cohort feed would be a suspension in name only.
+ */
+const WITHHOLDING_AUTHOR_STATUSES: readonly AccountStatus[] = ['suspended', 'banned', 'deleted'];
+
+export function authorIsWithheld(status: AccountStatus | null | undefined): boolean {
+  return status !== null && status !== undefined && WITHHOLDING_AUTHOR_STATUSES.includes(status);
 }
 
 /**
@@ -148,6 +170,14 @@ export function canViewContent(actor: MaybeActor, content: ContentRef): Decision
     return allow('platform_admin');
   }
 
+  // Checked here rather than only in the feed's SQL. Having the rule in the
+  // query and not in the policy meant the two disagreed, and the single-item
+  // read — the one path a moderator follows from a report — served content the
+  // feed had already withdrawn.
+  if (authorIsWithheld(content.authorStatus)) {
+    return deny(`author_${content.authorStatus}`);
+  }
+
   const container = containerAllows(actor, content);
   if (!container.allowed) return container;
 
@@ -208,7 +238,18 @@ export interface VisibilityScopes {
   groupIds: string[];
   classroomIds: string[];
   followingIds: string[];
+  /** Blocked either way. A permission input: these rows must not be reachable. */
   excludedUserIds: string[];
+  /**
+   * Muted. A *preference* input, not a permission one — which is why it is a
+   * separate field rather than being folded into `excludedUserIds`. Surfaces
+   * that represent an explicit request (a profile page, a group's own feed)
+   * ignore it; ambient surfaces (home feed, search) honour it.
+   */
+  mutedUserIds: string[];
+  mutedGroupIds: string[];
+  mutedCommunityIds: string[];
+  mutedTopicIds: string[];
   isAdmin: boolean;
 }
 
@@ -225,6 +266,10 @@ export function visibilityScopesFor(actor: MaybeActor): VisibilityScopes {
       classroomIds: [],
       followingIds: [],
       excludedUserIds: [],
+      mutedUserIds: [],
+      mutedGroupIds: [],
+      mutedCommunityIds: [],
+      mutedTopicIds: [],
       isAdmin: false,
     };
   }
@@ -239,6 +284,10 @@ export function visibilityScopesFor(actor: MaybeActor): VisibilityScopes {
     classroomIds: [...actor.classroomIds],
     followingIds: [...actor.followingIds],
     excludedUserIds: [...new Set([...actor.blockedUserIds, ...actor.blockedByUserIds])],
+    mutedUserIds: [...actor.mutedUserIds],
+    mutedGroupIds: [...actor.mutedGroupIds],
+    mutedCommunityIds: [...actor.mutedCommunityIds],
+    mutedTopicIds: [...actor.mutedTopicIds],
     isAdmin: isPlatformAdmin(actor),
   };
 }

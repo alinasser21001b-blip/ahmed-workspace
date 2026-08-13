@@ -24,7 +24,9 @@
     "db:seed": "pnpm --filter @sos/api db:seed",
     "db:reset": "pnpm --filter @sos/api db:reset",
     "dev:api": "pnpm --filter @sos/api dev",
-    "dev:mobile": "pnpm --filter @sos/mobile start"
+    "dev:mobile": "pnpm --filter @sos/mobile start",
+    "test:e2e": "node apps/mobile/e2e/first-journey.mjs",
+    "test:rtl": "node apps/mobile/e2e/rtl-audit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

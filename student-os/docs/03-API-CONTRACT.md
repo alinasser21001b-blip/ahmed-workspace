@@ -97,6 +97,14 @@ Every node returns both `nameAr` and `nameEn`.
 `Profile.viewer` carries the relationship (`isSelf`, `isFollowing`,
 `isBlocked`, `canMessage`) so the client never has to infer permissions.
 
+**Viewer state is a projection, never a hint.** Container responses carry every
+gate the policy computed — `canJoin`, `canRead`, `canWrite`, `canPost`,
+`canComment`, `canLeave`, `canInvite`, `canModerate`, `canManage` — each a
+separate boolean, because "may see it exists", "may read inside it", "may write
+in it" and "may administer it" are four different questions. The client renders
+these and does not re-derive them; a control whose gate is false is not
+rendered, rather than rendered and inert.
+
 ### Files — `/v1`
 
 | Method | Path | Auth | Notes |
@@ -149,13 +157,26 @@ Every node returns both `nameAr` and `nameEn`.
 | GET | `/groups/:id/members` | required | `status=active` for members, `pending` for moderators only. |
 | POST | `/groups/:id/invites` | required | Owner/admin. |
 | PATCH | `/groups/:id/members/:handle` | required | Approve, promote, demote, ban, transfer ownership. |
-| DELETE | `/groups/:id/members/:handle` | required | Rank-checked: cannot remove an equal or superior. |
+| DELETE | `/groups/:id/members/:handle` | required | Rank-checked: cannot remove an equal or superior. Removing **yourself** is leaving, and is held to the same 412 as the endpoint above — the two routes out of a group share one rule. Also the moderator's *reject* on a pending request. |
 | GET | `/search` | required | 120/min. People, content, groups, communities — all permission-filtered. |
 
 **Search and permissions.** `/search` runs the same visibility predicate as the
-feed, including the hard container boundary. That is the phase's central claim
-and it is covered by a test asserting a private group's post is absent from a
-non-member's results.
+feed, including the hard container boundary. That is the phase's central claim,
+and it is covered by a test that walks one permission matrix — owner, member,
+outsider, removed member, banned member — across the direct read, the feed,
+search, the container itself and its roster, asserting all five agree.
+
+**Search and Arabic.** The query and the indexed text are both normalised, by
+rules that fold only meaning-preserving orthographic variation: diacritics,
+tatweel, alef and yeh variants, ta marbuta, Arabic-Indic digits. The definite
+article is *not* stripped. See [ADR-0009](adr/0009-arabic-normalisation.md) for
+the measurements behind that boundary. Search remains lexical; root-aware and
+semantic retrieval are a later Search phase and a different endpoint.
+
+**Search and mutes.** Mutes are deliberately not applied. A mute silences an
+ambient surface; a search is an explicit request, and hiding a muted person from
+a query for their own name is a behaviour no UI could explain. Blocking is the
+tool that makes someone unfindable, and it applies everywhere.
 
 **CORS.** The allowed-methods list is set explicitly. The library default omits
 `PUT`, `PATCH` and `DELETE`, which leaves reads working and every mutation from

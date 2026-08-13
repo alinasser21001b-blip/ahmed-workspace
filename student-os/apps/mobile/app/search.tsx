@@ -1,8 +1,8 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import type { SearchResults } from '@sos/contracts';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { DirectionalIcon } from '../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '../src/components/Text';
 import { Avatar, Badge, Card, SectionHeader } from '../src/components/surfaces';
@@ -85,11 +85,7 @@ export default function Search(): React.JSX.Element {
           onPress={() => router.back()}
           hitSlop={8}
         >
-          <Ionicons
-            name={theme.isRTL ? 'arrow-forward' : 'arrow-back'}
-            size={24}
-            color={theme.colors.text}
-          />
+          <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
         </Pressable>
         <TextInput
           accessibilityLabel={t('search.placeholder')}
@@ -153,7 +149,7 @@ export default function Search(): React.JSX.Element {
                       >
                         <Avatar name={person.displayName} size={36} />
                         <View style={{ flex: 1, gap: 2 }}>
-                          <Text variant="label">{person.displayName}</Text>
+                          <Text variant="label" bidi="auto">{person.displayName}</Text>
                           <Text variant="micro" tone="muted">
                             @{person.handle}
                             {person.stageName ? ` · ${person.stageName}` : ''}
@@ -177,7 +173,7 @@ export default function Search(): React.JSX.Element {
                       accessibilityLabel={group.name}
                     >
                       <View style={{ gap: theme.spacing.xs }}>
-                        <Text variant="label">{group.name}</Text>
+                        <Text variant="label" bidi="auto">{group.name}</Text>
                         <Text variant="micro" tone="muted">
                           {t('groups.members.count', { count: group.memberCount })}
                         </Text>
@@ -199,10 +195,10 @@ export default function Search(): React.JSX.Element {
                       accessibilityLabel={hit.body ?? ''}
                     >
                       <View style={{ gap: theme.spacing.xs }}>
-                        <Text variant="body" numberOfLines={3}>
+                        <Text variant="body" numberOfLines={3} bidi="auto">
                           {hit.body}
                         </Text>
-                        <Text variant="micro" tone="muted">
+                        <Text variant="micro" tone="muted" bidi="auto">
                           {hit.author.displayName}
                         </Text>
                       </View>

@@ -74,11 +74,26 @@ export default tseslint.config(
     },
   },
   {
-    // Plain Node scripts (E2E driver, tooling) run outside the bundlers and use
-    // Node globals directly.
+    /*
+     * Plain Node scripts (E2E drivers, tooling) run outside the bundlers and
+     * use Node globals directly.
+     *
+     * The browser globals are here too, and legitimately: the bodies of
+     * `page.evaluate(...)` callbacks are serialised and executed inside the
+     * page, so `document` and `window` are exactly right in that scope even
+     * though the surrounding file runs in Node.
+     */
     files: ['**/e2e/**/*.mjs', '**/scripts/**/*.mjs'],
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly' },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        fetch: 'readonly',
+        document: 'readonly',
+        window: 'readonly',
+        localStorage: 'readonly',
+        getComputedStyle: 'readonly',
+      },
     },
   },
 );

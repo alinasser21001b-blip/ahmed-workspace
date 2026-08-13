@@ -30,12 +30,30 @@ export async function search(
   const scopes = visibilityScopesFor(actor);
   const wants = (kind: string): boolean => query.kind === 'all' || query.kind === kind;
 
+  /*
+   * Normalised once, here, and passed to all four searches.
+   *
+   * Doing it per-repository would let one branch drift, and the drift would be
+   * invisible: Arabic search would work for people and quietly not for content.
+   */
+  const term = repo.prepareTerm(query.q);
+
+  /*
+   * Mutes are deliberately NOT applied to search.
+   *
+   * A mute silences an ambient surface — it is a request to stop hearing from
+   * someone in passing. A search is an explicit request for a specific thing,
+   * and hiding a muted person from a query for their own name would be a
+   * feature nobody asked for and no UI could explain. Blocking is the tool that
+   * makes someone unfindable, and it is applied here (via
+   * `scopes.excludedUserIds`).
+   */
   const [people, content, groups, communities] = await Promise.all([
-    wants('people') ? repo.searchPeople(query.q, scopes, query.limit) : Promise.resolve([]),
-    wants('content') ? repo.searchContent(query.q, scopes, query.limit) : Promise.resolve([]),
-    wants('groups') ? repo.searchGroups(query.q, scopes, query.limit) : Promise.resolve([]),
+    wants('people') ? repo.searchPeople(term, scopes, query.limit) : Promise.resolve([]),
+    wants('content') ? repo.searchContent(term, scopes, query.limit) : Promise.resolve([]),
+    wants('groups') ? repo.searchGroups(term, scopes, query.limit) : Promise.resolve([]),
     wants('communities')
-      ? repo.searchCommunities(query.q, scopes, query.limit)
+      ? repo.searchCommunities(term, scopes, query.limit)
       : Promise.resolve([]),
   ]);
 
@@ -94,10 +112,16 @@ export async function search(
           membershipStatus: toMembership(row)?.status ?? null,
           role: toMembership(row)?.role ?? null,
           // Search results are for navigation, not for acting on. The client
-          // opens the group and gets the real affordances from that response.
+          // opens the group and gets the real affordances from that response —
+          // so every gate is reported closed here rather than guessed at.
           joinOutcome: 'blocked' as const,
           canJoin: false,
+          canRead: false,
+          canWrite: false,
           canPost: false,
+          canComment: false,
+          canLeave: false,
+          canInvite: false,
           canModerate: false,
           canManage: false,
         },
@@ -121,7 +145,12 @@ export async function search(
           role: toCommunityMembership(row)?.role ?? null,
           joinOutcome: 'blocked' as const,
           canJoin: false,
+          canRead: false,
+          canWrite: false,
           canPost: false,
+          canComment: false,
+          canLeave: false,
+          canInvite: false,
           canModerate: false,
           canManage: false,
         },

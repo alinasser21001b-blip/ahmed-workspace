@@ -14,6 +14,7 @@
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
     "@sos/contracts": "workspace:*",
+    "@sos/core": "workspace:*",
     "expo": "~57.0.12",
     "expo-constants": "~57.0.10",
     "expo-image-picker": "^57.0.9",
