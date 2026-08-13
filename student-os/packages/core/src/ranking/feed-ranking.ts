@@ -28,21 +28,54 @@ export interface FeedCandidate {
   socialProximity: number; // 0..1
   likeCount: number;
   commentCount: number;
-  /** True for lectures, resources, questions — content with study value. */
+  /** True for resources, questions, announcements — content with study value. */
   isAcademicKind: boolean;
+  /** The author said what this is: an explanation, a case, a summary. */
+  isClassified: boolean;
+  /** At least one citation is attached. */
+  hasSource: boolean;
+  /** Someone has challenged its accuracy and it is unresolved. */
+  isDisputed: boolean;
   /** Already seen by this viewer. */
   seen: boolean;
 }
 
+/*
+ * The weights, and why engagement is the smallest of them.
+ *
+ * The product is an academic learning system, not a social network with course
+ * material on it, and the direction is explicit that popularity must not be a
+ * primary ranking signal. Every term above `engagement` is about whether a
+ * piece of knowledge is relevant to THIS student's studies; `engagement` is the
+ * only one about whether other people liked it.
+ *
+ * It is not zero, because on a cold start — a new student with no enrolments,
+ * no interests and no answered questions — every academic term evaluates to
+ * zero and the feed would be pure recency. A small popularity term is what
+ * stops the first session being arbitrary. It is deliberately smaller than
+ * classification, so a well-labelled explanation with two likes outranks an
+ * unclassified post with twenty.
+ */
 export const FEED_WEIGHTS = {
   enrolledCourse: 3.0,
   weakTopic: 2.5,
   interestTopic: 1.8,
   cohort: 1.5,
   academicKind: 1.0,
+  /** The author told the system what this is. Structured beats unstructured. */
+  classified: 1.4,
+  /** It cites something. The strongest quality signal available without a model. */
+  sourced: 1.6,
   social: 1.2,
-  engagement: 0.8,
+  /** Deliberately the smallest positive weight. See above. */
+  engagement: 0.4,
   recency: 2.0,
+  /**
+   * Negative. Content whose accuracy is under challenge is demoted while the
+   * challenge is open — not hidden, because the disagreement is often where the
+   * learning is, but not promoted into other students' feeds either.
+   */
+  disputed: -1.5,
   /** Applied multiplicatively, not additively — a seen item is demoted, not banished. */
   seenPenalty: 0.35,
 } as const;
@@ -70,6 +103,9 @@ export function scoreFeedCandidate(candidate: FeedCandidate, now: Date = new Dat
     (candidate.matchesInterestTopic ? FEED_WEIGHTS.interestTopic : 0) +
     (candidate.sameCohort ? FEED_WEIGHTS.cohort : 0) +
     (candidate.isAcademicKind ? FEED_WEIGHTS.academicKind : 0) +
+    (candidate.isClassified ? FEED_WEIGHTS.classified : 0) +
+    (candidate.hasSource ? FEED_WEIGHTS.sourced : 0) +
+    (candidate.isDisputed ? FEED_WEIGHTS.disputed : 0) +
     candidate.socialProximity * FEED_WEIGHTS.social +
     engagement * FEED_WEIGHTS.engagement +
     recency * FEED_WEIGHTS.recency;

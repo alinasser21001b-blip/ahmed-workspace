@@ -1,9 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ContentItem } from '@sos/contracts';
+import { router } from 'expo-router';
 import { Image, Pressable, View } from 'react-native';
 import { useI18n } from '../i18n/index';
 import { API_BASE_URL } from '../state/session';
 import { useTheme } from '../theme/ThemeProvider';
+import { KnowledgeBadges, ReaderCaution, TopicChips } from './KnowledgeBadges';
 import { Text } from './Text';
 import { Avatar, Badge, Card } from './surfaces';
 
@@ -104,6 +106,10 @@ export function PostCard({
           ) : null}
         </View>
 
+        {/* Above the body, deliberately: a reader must know the content is
+            under challenge before they read it, not after. */}
+        <ReaderCaution item={item} />
+
         {item.body ? <Text variant="body" bidi="auto">{item.body}</Text> : null}
 
         {firstImage ? (
@@ -127,17 +133,27 @@ export function PostCard({
           />
         ) : null}
 
-        {/* Academic context is what separates this from a generic social card. */}
-        {item.academic.courseName || item.academic.topics.length > 0 ? (
+        {/*
+         * Academic context is what separates this from a generic social card.
+         * The topic chips come from `item.topics` rather than
+         * `item.academic.topics` — the same rows, but carrying who classified
+         * them, and pressable so a card is a way into a topic rather than a
+         * dead end. `academic.topics` stays in the contract for consumers that
+         * want the bilingual names.
+         */}
+        {item.academic.courseName ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-            {item.academic.courseName ? (
-              <Badge label={item.academic.courseName} tone="learning" />
-            ) : null}
-            {item.academic.topics.slice(0, 3).map((topic) => (
-              <Badge key={topic.id} label={locale === 'ar' ? topic.nameAr : topic.nameEn} tone="primary" />
-            ))}
+            <Badge label={item.academic.courseName} tone="learning" />
           </View>
         ) : null}
+
+        <TopicChips
+          topics={item.topics.slice(0, 3)}
+          onPress={(topicId) => router.push(`/topic/${topicId}`)}
+        />
+
+        {/* Counts and a provenance class — never a score (ADR-0013). */}
+        <KnowledgeBadges item={item} />
 
         <View
           style={{

@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import type { ContentItem, FileRef, Visibility } from '@sos/contracts';
+import type { ContentItem, Difficulty, FileRef, KnowledgeType, Visibility } from '@sos/contracts';
+import { allowedKnowledgeTypes } from '@sos/core';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -29,6 +30,13 @@ const VISIBILITY_OPTIONS: { value: Visibility; key: TranslationKey }[] = [
   { value: 'private', key: 'compose.visibility.private' },
 ];
 
+/*
+ * Read from the same table the server validates against (ADR-0012), so the
+ * composer can never offer a combination that would be rejected on publish.
+ */
+const KNOWLEDGE_TYPES: readonly KnowledgeType[] = allowedKnowledgeTypes('post');
+const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
+
 export default function Compose(): React.JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -43,6 +51,14 @@ export default function Compose(): React.JSX.Element {
 
   const [body, setBody] = useState('');
   const [visibility, setVisibility] = useState<Visibility>('stage');
+  /*
+   * Both stay null until the student chooses. There is no default knowledge
+   * type: guessing one would put a label the author never agreed to onto their
+   * post, and an honest gap is more useful than a confident wrong answer
+   * (ADR-0012). Language is not asked at all — it is derived from the text.
+   */
+  const [knowledgeType, setKnowledgeType] = useState<KnowledgeType | null>(null);
+  const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
   const [attachment, setAttachment] = useState<FileRef | null>(null);
   const [uploading, setUploading] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -90,6 +106,8 @@ export default function Compose(): React.JSX.Element {
       const created = await api.post<ContentItem>('/v1/content', {
         body: body.trim() || undefined,
         mediaFileIds: attachment ? [attachment.id] : [],
+        ...(knowledgeType ? { knowledgeType } : {}),
+        ...(difficulty ? { difficulty } : {}),
         ...(groupId ? { groupId, visibility: 'group' } : { visibility }),
       });
       // Tell every mounted feed to reload before navigating, so the post is
@@ -176,31 +194,48 @@ export default function Compose(): React.JSX.Element {
         <Text variant="label" tone="muted">
           {t('compose.visibility')}
         </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
-          {VISIBILITY_OPTIONS.map((option) => {
-            const active = visibility === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: active }}
-                onPress={() => setVisibility(option.value)}
-                style={{
-                  borderRadius: theme.radius.pill,
-                  borderWidth: 1,
-                  borderColor: active ? theme.colors.primary : theme.colors.border,
-                  backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface,
-                  paddingHorizontal: theme.spacing.lg,
-                  paddingVertical: theme.spacing.sm,
-                }}
-              >
-                <Text variant="caption" tone={active ? 'primary' : 'muted'}>
-                  {t(option.key)}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <ChoiceRow
+          options={VISIBILITY_OPTIONS.map((option) => ({
+            value: option.value,
+            label: t(option.key),
+          }))}
+          selected={visibility}
+          onSelect={(next) => setVisibility(next)}
+        />
+      </View>
+
+      {/*
+       * Classification is optional and sits after the audience, because a post
+       * nobody can see is worse than a post nobody classified. Tapping the
+       * active chip clears it — the student can decline to label, and that is a
+       * different state from having chosen "note".
+       */}
+      <View style={{ gap: theme.spacing.sm }}>
+        <Text variant="label" tone="muted">
+          {t('knowledge.type')}
+        </Text>
+        <ChoiceRow
+          options={KNOWLEDGE_TYPES.map((value) => ({
+            value,
+            label: t(`knowledge.type.${value}` as TranslationKey),
+          }))}
+          selected={knowledgeType}
+          onSelect={(next) => setKnowledgeType(next === knowledgeType ? null : next)}
+        />
+      </View>
+
+      <View style={{ gap: theme.spacing.sm }}>
+        <Text variant="label" tone="muted">
+          {t('knowledge.difficulty')}
+        </Text>
+        <ChoiceRow
+          options={DIFFICULTIES.map((value) => ({
+            value,
+            label: t(`knowledge.difficulty.${value}` as TranslationKey),
+          }))}
+          selected={difficulty}
+          onSelect={(next) => setDifficulty(next === difficulty ? null : next)}
+        />
       </View>
 
       {error ? (
@@ -218,6 +253,53 @@ export default function Compose(): React.JSX.Element {
         fullWidth
       />
     </Screen>
+  );
+}
+
+/**
+ * A row of mutually exclusive chips.
+ *
+ * Announced as radios, which is what they are — the visibility control has
+ * behaved this way since Phase 2 and the classification pickers reuse it rather
+ * than inventing a second look for the same decision.
+ */
+function ChoiceRow<T extends string>({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: { value: T; label: string }[];
+  selected: T | null;
+  onSelect: (value: T) => void;
+}): React.JSX.Element {
+  const theme = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+      {options.map((option) => {
+        const active = selected === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={option.label}
+            onPress={() => onSelect(option.value)}
+            style={{
+              borderRadius: theme.radius.pill,
+              borderWidth: 1,
+              borderColor: active ? theme.colors.primary : theme.colors.border,
+              backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface,
+              paddingHorizontal: theme.spacing.lg,
+              paddingVertical: theme.spacing.sm,
+            }}
+          >
+            <Text variant="caption" tone={active ? 'primary' : 'muted'}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 

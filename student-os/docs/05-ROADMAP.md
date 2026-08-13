@@ -13,7 +13,8 @@
 | **2 — Social core** | feed, posts, image upload, comments, reactions, bookmarks, reports, follow/block/mute | ✅ **Done** |
 | **3 — Community** | communities, groups, membership, join requests, group posts, search | ✅ **Done and closed** |
 | **4 — Messaging** | 1:1 + group chat, realtime, presence, typing, receipts, attachments | ✅ **Done** |
-| 5 — Learning | courses, classrooms, lectures, resources, PDF viewing, discussion | Next |
+| **5 — Knowledge foundation** | knowledge type, difficulty, language, sources, corrections, topic surface, learning signals, Learn | ✅ **Done** |
+| 5b — Classrooms | classrooms, lectures, materials, PDF viewing, discussion attached to a lecture | Next |
 | 6 — AI v1 | lecture summary, ask-AI, MCQ generation — all source-grounded | |
 | 7 — Quizzes | authoring, taking, attempts, scoring, explanations, topic performance | |
 | 8 — Reels | upload, transcoding pipeline, playback, academic metadata | |
@@ -106,7 +107,51 @@ after the original ones.
   during the outage arrive on reconnect, in order, exactly once; a double-tap on
   Send produces one message ([`e2e/messaging.mjs`](../apps/mobile/e2e/messaging.mjs))
 
-**Phase 5.** A student opens a classroom, reads a lecture, and downloads a
+**Phase 5 — met.**
+
+Phase 5 was re-scoped before implementation. It was sequenced as "classrooms and
+lectures"; the audit ([`07-PHASE-5-AUDIT.md`](07-PHASE-5-AUDIT.md)) found that
+building rooms on top of unclassified content would produce a second content
+system, so the phase became the knowledge foundation the rooms will stand on.
+Classrooms move to 5b, unchanged in scope.
+
+- content carries a knowledge type on a **second axis** beside `content_kind`,
+  validated against the same allowed-combinations table on both sides
+  ([ADR-0012](adr/0012-knowledge-type-as-a-second-axis.md)) — so the composer
+  cannot offer a combination the server rejects
+- language is **derived** from the body's script distribution, never asked for
+- provenance is a class computed from stated rules over row counts, and there is
+  **no stored score anywhere** ([ADR-0013](adr/0013-provenance-classes.md)): what
+  a reader sees is "two sources", and both are documents they can go and read
+- anyone who can see a piece of knowledge may **cite** it — finding the textbook
+  page for a classmate's explanation is the behaviour the product wants
+- a **correction** is a first-class row with a lifecycle the author resolves, not
+  a comment: a reader arriving six months later sees it whether or not they read
+  the thread. An author cannot correct their own content; they edit it
+- sources and corrections inherit the content's visibility **structurally**, by
+  hanging off `/content/:id/…` and running the same predicate — proven by a
+  non-member receiving 404 on both
+- a **topic is a place**: hierarchy, subtopics, related topics carrying whether
+  the edge was curated or derived, and permission-filtered counts per knowledge
+  type. A count that included content the reader cannot open would leak as
+  surely as a row would
+- the feed ranks classification and citation **above** engagement, and penalises
+  disputed content — engagement's weight halved, and `reel` lost its academic
+  bonus. Parity between the TS and SQL implementations still holds
+- `learning_events` finally has producers, through the **existing** insert path
+  rather than a second one; `learning_progress` has data, so `computeWeakness`
+  runs on real rows for the first time since Phase 0
+- the Learn tab is no longer a shell with a dead button: every section is built
+  from a row that exists, a section with no data is **absent** rather than shown
+  empty, and a weakness computed from too few answers says so on the row
+- **no AI, no embeddings, no vector store, no recommendation engine.** The
+  `content_topics.source = 'ai'` value and the derived/curated split on topic
+  edges exist and are carried to the client so a future classifier can never be
+  mistaken for the author ([ADR-0013](adr/0013-provenance-classes.md))
+- 24 new integration tests; 167 integration and 201 unit tests pass; the layout
+  audit covers the two new surfaces at 272 checks
+
+**Phase 5b.** A student opens a classroom, reads a lecture, and downloads a
 resource through a signed URL that a non-member cannot use.
 
 **Phase 6.** Every AI answer about course material cites a source that resolves
@@ -127,7 +172,8 @@ cheapest time to refuse a feature is before it has a schema.
 
 | Phase | Build | Do **not** build |
 | --- | --- | --- |
-| 5 — Learning | Classrooms, lectures, materials, discussion attached to a topic | A file locker. A resource with no academic placement is not discoverable, and undiscoverable knowledge is the problem this product exists to solve |
+| 5 — Knowledge foundation | Classification, provenance, corrections, topics as places, learning signals | A trust score. One number that blends citations, corrections and reactions is unarguable and therefore unimprovable — counts and a class, never a rating ([ADR-0013](adr/0013-provenance-classes.md)) |
+| 5b — Classrooms | Classrooms, lectures, materials, discussion attached to a topic | A file locker. A resource with no academic placement is not discoverable, and undiscoverable knowledge is the problem this product exists to solve |
 | 6 — AI v1 | Tutor and summariser reading the platform's own structured knowledge, source-grounded, behind the same authorization layer as a human | A chatbot beside the product. An AI with its own retrieval path is an AI with its own permission model |
 | 7 — Quizzes | Question-level results rolling up into topic performance | Scores as a leaderboard. Comparing students is a popularity mechanic wearing an academic hat |
 | 8 — Reels | **Reconsider entirely.** If it ships, micro-learning bound to a topic, a course and a lecture | A scrolling feed of clips. This is the single feature most able to turn the product into the thing it is defined against |

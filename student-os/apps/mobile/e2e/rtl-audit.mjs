@@ -227,6 +227,45 @@ for (const [sender, body] of [
   });
 }
 
+/*
+ * A classified post with a citation and an open correction against it. The
+ * Phase 5 surfaces are all badges and chip rows, which are exactly what wraps
+ * badly at a narrow width in the wrong direction — auditing them empty would
+ * prove nothing.
+ */
+const classified = await api('/v1/content', {
+  method: 'POST',
+  token,
+  body: {
+    body: 'الوذمة في المتلازمة الكلوية تنتج عن فقدان الألبومين في البول وانخفاض الضغط الجرمي في البلازما، وليس عن احتباس الصوديوم وحده.',
+    visibility: 'stage',
+    mediaFileIds: [],
+    topicIds: topics.slice(0, 2).map((t) => t.id),
+    knowledgeType: 'explanation',
+    difficulty: 'medium',
+  },
+});
+await api(`/v1/content/${classified.id}/sources`, {
+  method: 'POST',
+  token,
+  body: {
+    kind: 'textbook',
+    citation: 'Nelson Textbook of Pediatrics, 22nd edition',
+    url: null,
+    fileId: null,
+    pageRef: 'p. 2752',
+  },
+});
+// Proposed by the partner: the author cannot correct their own content.
+await api(`/v1/content/${classified.id}/corrections`, {
+  method: 'POST',
+  token: partner.tokens.accessToken,
+  body: {
+    body: 'الآلية الحديثة تصف خللاً أولياً في قناة الصوديوم بالأنبوب الجامع، فالعبارة أعلاه ناقصة وليست خاطئة تماماً.',
+    source: null,
+  },
+});
+
 console.log(`  cohort ready — @${handle}, group ${group.id}, conversation ${directConversation.id}\n`);
 
 // --- the audit --------------------------------------------------------------
@@ -249,6 +288,10 @@ const SCREENS = [
   { name: 'compose', path: '/compose' },
   { name: 'learn', path: '/(tabs)/learn' },
   { name: 'chat', path: '/(tabs)/chat' },
+  // Phase 5. Both are dense chip rows over mixed-direction text, which is the
+  // shape that wraps badly in one direction and looks fine in the other.
+  { name: 'post-knowledge', path: `/post/${classified.id}` },
+  { name: 'topic', path: `/topic/${topics[0].id}` },
 ];
 
 for (const viewport of VIEWPORTS) {

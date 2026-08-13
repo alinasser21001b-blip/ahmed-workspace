@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { KnowledgePanel } from '../../src/components/KnowledgePanel';
 import { PostCard, formatRelative } from '../../src/components/PostCard';
 import { Text } from '../../src/components/Text';
 import { Avatar, Divider } from '../../src/components/surfaces';
@@ -49,6 +50,19 @@ export default function PostDetail(): React.JSX.Element {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /*
+   * Accepting a correction changes the post's provenance, so the card has to
+   * be re-read — but without `load()`'s loading state, which would replace the
+   * thread the student is reading with a spinner.
+   */
+  const refreshItem = useCallback(async (): Promise<void> => {
+    try {
+      setItem(await api.get<ContentItem>(`/v1/content/${id}`));
+    } catch {
+      /* The card keeps the values it already has. */
+    }
+  }, [api, id]);
 
   const send = async (): Promise<void> => {
     const body = draft.trim();
@@ -164,6 +178,15 @@ export default function PostDetail(): React.JSX.Element {
             onToggleReaction={() => void toggleReaction()}
             onToggleBookmark={() => void toggleBookmark()}
           />
+
+          {/*
+           * Sources and corrections sit above the thread, not inside it. A
+           * correction buried at comment 40 is invisible to the next reader,
+           * which is precisely the failure this replaces.
+           */}
+          <KnowledgePanel item={item} onChanged={() => void refreshItem()} />
+
+          <Divider />
 
           {comments.length === 0 ? (
             <View style={{ minHeight: 160 }}>

@@ -9,6 +9,9 @@ import type {
 } from '@sos/contracts';
 import {
   canCreateContent,
+  detectLanguage,
+  isKnowledgeTypeAllowed,
+  impliedKnowledgeType,
   canDeleteContent,
   canEditContent,
   canPostInCommunity,
@@ -28,6 +31,9 @@ import { recordAnalytics } from '../analytics/events.service.js';
 import * as files from '../files/files.service.js';
 import { signMediaUrl } from '../files/signed-url.js';
 import * as profiles from '../users/users.repository.js';
+import * as knowledge from '../knowledge/knowledge.service.js';
+import * as knowledgeRepo from '../knowledge/knowledge.repository.js';
+import * as signals from '../learning/signals.service.js';
 import * as repo from './content.repository.js';
 
 /**
@@ -38,7 +44,31 @@ function localised(ar: string | null, en: string | null, locale: Locale): string
   return (locale === 'ar' ? ar : en) ?? en ?? ar;
 }
 
-export function toContentItem(row: repo.ContentRow, actor: Actor | null, locale: Locale): ContentItem {
+/**
+ * The signals a reader sees when nothing has been computed for this item.
+ *
+ * An unclassified, uncited, unchallenged piece of content is the normal state
+ * of a student's note, and `author_claim` says exactly that — it is a
+ * description, not a deficiency.
+ */
+const NO_SIGNALS: ContentItem['signals'] = {
+  sourceCount: 0,
+  acceptedCorrectionCount: 0,
+  openCorrectionCount: 0,
+  helpfulCount: 0,
+  hasAcceptedAnswer: false,
+  provenance: 'author_claim',
+};
+
+export function toContentItem(
+  row: repo.ContentRow,
+  actor: Actor | null,
+  locale: Locale,
+  knowledge?: {
+    signals?: ContentItem['signals'] | undefined;
+    topics?: { topic_id: string; name_ar: string; name_en: string; source: 'author' | 'ai' | 'moderator' }[] | undefined;
+  },
+): ContentItem {
   const isAuthor = actor?.userId === row.author_id;
 
   const container =
@@ -57,6 +87,19 @@ export function toContentItem(row: repo.ContentRow, actor: Actor | null, locale:
   return {
     id: row.id,
     kind: row.kind,
+    knowledgeType: row.knowledge_type,
+    difficulty: row.difficulty,
+    language: (row.language as ContentItem['language']) ?? null,
+    signals: knowledge?.signals ?? NO_SIGNALS,
+    // The classification source is carried to the client even though nothing
+    // sets `ai` yet: a read path that drops it would have to change when a
+    // classifier ships, and by then the two would have been indistinguishable
+    // for a year (ADR-0013).
+    topics: (knowledge?.topics ?? []).map((topic) => ({
+      id: topic.topic_id,
+      name: localised(topic.name_ar, topic.name_en, locale) ?? topic.name_en,
+      source: topic.source,
+    })),
     author: {
       userId: row.author_id,
       handle: row.author_handle,
@@ -111,6 +154,33 @@ export function toContentItem(row: repo.ContentRow, actor: Actor | null, locale:
   };
 }
 
+
+/**
+ * Enriches a page of rows with knowledge signals and classified topics.
+ *
+ * Two batched queries for a whole page, not two per row. The feed renders
+ * twenty items, and twenty round trips to answer "how many sources?" is the
+ * classic N+1 that turns a fast page into a slow one.
+ */
+async function withKnowledge(
+  rows: repo.ContentRow[],
+  actor: Actor | null,
+  locale: Locale,
+): Promise<ContentItem[]> {
+  if (rows.length === 0) return [];
+  const ids = rows.map((row) => row.id);
+  const [signalsById, topicsById] = await Promise.all([
+    knowledge.signalsFor(ids),
+    knowledgeRepo.listContentTopics(ids),
+  ]);
+  return rows.map((row) =>
+    toContentItem(row, actor, locale, {
+      signals: signalsById.get(row.id),
+      topics: topicsById.get(row.id),
+    }),
+  );
+}
+
 /**
  * Creates a post.
  *
@@ -136,6 +206,26 @@ export async function createPost(
 
   const privacy = await profiles.getPrivacySettings(actor.userId);
   const visibility = input.visibility ?? privacy.defaultPostVisibility;
+
+  /*
+   * Classification. `kind` is always `post` on this path, so the knowledge type
+   * is whatever the author chose — checked against the kind rather than trusted,
+   * because a `poll` labelled a `summary` would sit in a filter where nobody
+   * could use it.
+   */
+  const knowledgeType = input.knowledgeType ?? impliedKnowledgeType('post');
+  if (knowledgeType && !isKnowledgeTypeAllowed('post', knowledgeType)) {
+    throw errors.validation([
+      { path: 'knowledgeType', message: 'That knowledge type does not apply to a post.' },
+    ]);
+  }
+
+  /*
+   * Language is DERIVED, never accepted from the client. It is a fact about the
+   * body, and a client that could set it could put Arabic content in an English
+   * filter — with no way for anyone to notice.
+   */
+  const language = detectLanguage(input.body ?? null);
 
   /*
    * Container membership is checked here, not trusted from the request: posting
@@ -170,6 +260,9 @@ export async function createPost(
         authorId: actor.userId,
         body: input.body ?? null,
         visibility,
+        knowledgeType,
+        difficulty: input.difficulty ?? null,
+        language,
         universityId: profile.university_id,
         collegeId: profile.college_id,
         programId: profile.program_id,
@@ -216,7 +309,7 @@ export async function createPost(
 
   const row = await repo.findContentById(contentId, actor.userId);
   if (!row) throw errors.internal();
-  return toContentItem(row, actor, locale);
+  return (await withKnowledge([row], actor, locale))[0]!;
 }
 
 export async function getContent(
@@ -233,7 +326,7 @@ export async function getContent(
 
   const row = await repo.findContentById(contentId, actor?.userId ?? null);
   if (!row) throw errors.notFound('content');
-  return toContentItem(row, actor, locale);
+  return (await withKnowledge([row], actor, locale))[0]!;
 }
 
 export async function updatePost(
@@ -269,7 +362,7 @@ export async function updatePost(
 
   const row = await repo.findContentById(contentId, actor.userId);
   if (!row) throw errors.notFound('content');
-  return toContentItem(row, actor, locale);
+  return (await withKnowledge([row], actor, locale))[0]!;
 }
 
 export async function deletePost(actor: Actor, contentId: string): Promise<void> {
@@ -353,6 +446,9 @@ export async function listFeed(
       communityId: query.communityId,
       groupId: query.groupId,
       bookmarkedBy: query.scope === 'saved' ? actor.userId : undefined,
+      knowledgeType: query.knowledgeType,
+      difficulty: query.difficulty,
+      language: query.language,
     },
   });
 
@@ -366,7 +462,7 @@ export async function listFeed(
         )
       : null;
 
-  return { items: rows.map((row) => toContentItem(row, actor, locale)), nextCursor };
+  return { items: await withKnowledge(rows, actor, locale), nextCursor };
 }
 
 // --- interactions -----------------------------------------------------------
@@ -412,9 +508,31 @@ export async function addBookmark(
   collection: string | null,
 ): Promise<{ hasBookmarked: boolean; bookmarkCount: number }> {
   await assertVisible(actor, contentId);
-  const bookmarkCount = await withTransaction((client) =>
-    repo.addBookmark(contentId, actor.userId, collection, client),
-  );
+
+  const bookmarkCount = await withTransaction(async (client) => {
+    const count = await repo.addBookmark(contentId, actor.userId, collection, client);
+
+    /*
+     * Saving is a MEANINGFUL learning action, and one of very few this product
+     * can observe honestly. Choosing to keep something is a deliberate
+     * judgement about its usefulness — unlike opening it, which is channel B
+     * and is recorded as `knowledge_opened` with `is_meaningful = false`
+     * (ADR-0014).
+     *
+     * Written inside the same transaction as the bookmark: a signal describing
+     * a save that rolled back is worse than no signal, because nothing will
+     * ever contradict it.
+     */
+    await signals.recordForContent(client, {
+      userId: actor.userId,
+      kind: 'knowledge_saved',
+      contentId,
+      metadata: collection ? { collection } : {},
+    });
+
+    return count;
+  });
+
   return { hasBookmarked: true, bookmarkCount };
 }
 
@@ -437,6 +555,19 @@ export async function markViewed(
   await assertVisible(actor, contentId);
   await withTransaction(async (client) => {
     await repo.recordView(contentId, actor.userId, completion, client);
+
+    /*
+     * Recorded, and deliberately NOT meaningful. Opening something is channel B
+     * (content interaction); calling it learning would inflate the north-star
+     * with scrolling, which is exactly the metric this product is defined
+     * against. It is written anyway because the PATTERN is useful — a topic
+     * opened five times in a week is a signal even though no single open is.
+     */
+    await signals.recordForContent(client, {
+      userId: actor.userId,
+      kind: 'knowledge_opened',
+      contentId,
+    });
     await recordAnalytics('post_viewed', actor.userId, { contentId }, client);
   });
 }

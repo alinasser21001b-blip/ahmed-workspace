@@ -451,6 +451,114 @@ check(
   `and differs by locale (${englishProfile.academic?.stageName})`,
 );
 
+// --- knowledge (phase 5) ----------------------------------------------------
+
+console.log('\nknowledge');
+
+/*
+ * The point of these checks is not the happy path — the integration suite
+ * covers that — it is that the RUNNING build serves classification, provenance
+ * and topics, and that they are subject to the same authorisation as
+ * everything else. A knowledge layer that quietly reads around the permission
+ * predicate would pass every unit test and leak in production.
+ */
+const classifiedPost = await call('/v1/content', {
+  method: 'POST',
+  token: A,
+  body: {
+    body: 'الوذمة في المتلازمة الكلوية تنشأ من فقدان الألبومين، مع دور للاحتباس الأولي للصوديوم.',
+    visibility: 'stage',
+    mediaFileIds: [],
+    knowledgeType: 'explanation',
+    difficulty: 'medium',
+  },
+});
+check(classifiedPost.knowledgeType === 'explanation', 'a post carries the knowledge type it was given');
+check(classifiedPost.language === 'ar', 'the language is derived from the body, not asked for');
+check(
+  classifiedPost.signals.provenance === 'author_claim',
+  'an uncited post is an author claim, not an error',
+);
+
+await call(`/v1/content/${classifiedPost.id}/sources`, {
+  method: 'POST',
+  token: Z,
+  body: {
+    kind: 'textbook',
+    citation: 'Nelson Textbook of Pediatrics, 22nd edition',
+    url: null,
+    fileId: null,
+    pageRef: 'p. 2752',
+  },
+});
+const cited = await call(`/v1/content/${classifiedPost.id}`, { token: A });
+check(cited.signals.sourceCount === 1, 'a classmate can cite someone else’s explanation');
+check(
+  cited.signals.provenance === 'source_backed',
+  'the provenance class follows from the citation',
+);
+
+const proposed = await call(`/v1/content/${classifiedPost.id}/corrections`, {
+  method: 'POST',
+  token: Z,
+  body: { body: 'الآلية الأحدث تصف خللاً أولياً في قناة الصوديوم بالأنبوب الجامع.', source: null },
+});
+const disputed = await call(`/v1/content/${classifiedPost.id}`, { token: A });
+check(disputed.signals.openCorrectionCount === 1, 'an open correction is visible on the content');
+check(disputed.signals.provenance === 'disputed', 'a challenged post reads as disputed');
+
+const ownCorrection = await raw(`/v1/content/${classifiedPost.id}/corrections`, {
+  method: 'POST',
+  token: A,
+  body: { body: 'محاولة تصحيح منشوري الخاص، وهذا ما يجب أن يُرفض.', source: null },
+});
+check(ownCorrection.status >= 400, 'an author cannot correct their own content — they edit it');
+
+await call(`/v1/content/${classifiedPost.id}/corrections/${proposed.id}`, {
+  method: 'PATCH',
+  token: A,
+  body: { status: 'accepted' },
+});
+const corrected = await call(`/v1/content/${classifiedPost.id}`, { token: A });
+check(corrected.signals.provenance === 'corrected', 'an accepted correction changes the provenance');
+
+const topicId = classifiedPost.topics[0]?.id ?? cited.academic.topics[0]?.id ?? null;
+if (topicId) {
+  const topic = await call(`/v1/topics/${topicId}`, { token: A });
+  check(typeof topic.courseName === 'string', 'a topic knows where it sits academically');
+  check(Array.isArray(topic.knowledgeCounts), 'a topic reports what knowledge it holds');
+  const topicFeed = await call(`/v1/topics/${topicId}/knowledge?limit=10`, { token: A });
+  check(Array.isArray(topicFeed.items), 'a topic serves the knowledge filed under it');
+}
+
+const learn = await call('/v1/learn', { token: A });
+check(Array.isArray(learn.focusTopics), 'the Learn surface is built from real signals');
+check(learn.savedCount > 0, `saved knowledge is counted (${learn.savedCount})`);
+check(
+  learn.meaningfulActionsThisWeek > 0,
+  `meaningful learning actions are counted (${learn.meaningfulActionsThisWeek})`,
+);
+
+// Authorisation is one layer, and knowledge does not get its own.
+const groupOnly = await call('/v1/content', {
+  method: 'POST',
+  token: A,
+  body: {
+    body: 'ملاحظة داخل مجموعة غير مدرجة، لا يجوز أن يصل إليها من ليس عضواً.',
+    visibility: 'group',
+    groupId: unlisted.id,
+    mediaFileIds: [],
+    knowledgeType: 'note',
+  },
+});
+const outsiderSources = await raw(`/v1/content/${groupOnly.id}/sources`, { token: O });
+check(outsiderSources.status === 404, 'sources are hidden behind the content’s own visibility');
+const outsiderCorrections = await raw(`/v1/content/${groupOnly.id}/corrections`, { token: O });
+check(
+  outsiderCorrections.status === 404,
+  'corrections are hidden behind the content’s own visibility',
+);
+
 // --- result -----------------------------------------------------------------
 
 console.log(`\n${checks - failures.length}/${checks} checks passed`);

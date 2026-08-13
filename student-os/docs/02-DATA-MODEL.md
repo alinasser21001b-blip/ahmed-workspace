@@ -207,6 +207,42 @@ closed in `@sos/core` where the compiler checks it.
 `rotated_to_id` makes reuse of a rotated token detectable, which is the
 mechanism behind the theft-detection path in `auth.service.ts`.
 
+### 3.16 Knowledge type is a second axis, not more kinds
+
+Added in `0011`. `content_items.content_kind` says how something **renders**;
+`knowledge_type` says what it **is** academically. Folding them into one enum
+would make `explanation` and `summary` two kinds needing two renderers, and it
+would leave a question that has been answered no way to say so. The allowed
+combinations live in one table in `@sos/core` and are checked on both sides, so
+the composer cannot offer what the server rejects.
+[ADR-0012](adr/0012-knowledge-type-as-a-second-axis.md).
+
+`language` is a CHECK-constrained column, derived from the body's script
+distribution rather than submitted. It is nullable and null means *unclassified*
+— content published before Phase 5 is not backfilled with a guess.
+
+### 3.17 Provenance is stored as rows, never as a score
+
+`content_sources` and `content_corrections` are the whole of it. There is no
+`trust_score`, no `quality`, no rating column anywhere: what a reader is shown
+is a count of rows they can click into, plus a class computed at read time from
+stated rules. A stored float would be cheaper to read and impossible to argue
+with — and a number nobody can argue with is a number nobody can improve.
+[ADR-0013](adr/0013-provenance-classes.md).
+
+`content_corrections_one_open` is a partial unique index on
+`(content_id, proposed_by) WHERE status = 'proposed'`: one open correction per
+person per post, so disagreement is a claim rather than a volume knob.
+
+### 3.18 Topic edges carry who drew them
+
+`topic_relations.source` is `curated` or `derived`. A person asserting that two
+topics are related and the system counting co-tagging are different claims with
+different trust, and a graph that merges them can never be un-merged. The same
+reasoning puts `source` on `content_topics`, where `ai` is a legal value that
+nothing currently writes — the column exists so the day a classifier ships is
+not the day the UI learns to distinguish it.
+
 ## 4. Indexing
 
 Indexes are added for a named query, not by reflex. The load-bearing ones:

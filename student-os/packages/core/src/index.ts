@@ -9,3 +9,4 @@ export * from './ranking/feed-ranking.js';
 export * from './pagination/cursor.js';
 export * from './text/arabic.js';
 export * from './events/domain-events.js';
+export * from './knowledge/classification.js';

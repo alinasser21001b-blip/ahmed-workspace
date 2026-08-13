@@ -16,6 +16,7 @@ import { authRoutes } from '../modules/auth/auth.routes.js';
 import { contentRoutes } from '../modules/content/content.routes.js';
 import { filesRoutes } from '../modules/files/files.routes.js';
 import { groupsRoutes } from '../modules/groups/groups.routes.js';
+import { knowledgeRoutes } from '../modules/knowledge/knowledge.routes.js';
 import { messagingRoutes } from '../modules/messaging/messaging.routes.js';
 import { realtimeRoutes } from '../modules/messaging/realtime.routes.js';
 import { socialRoutes } from '../modules/social/social.routes.js';
@@ -114,6 +115,7 @@ export async function buildApp() {
   await app.register(socialRoutes, { prefix: '/v1' });
   await app.register(groupsRoutes, { prefix: '/v1' });
   await app.register(messagingRoutes, { prefix: '/v1' });
+  await app.register(knowledgeRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes, { prefix: '/v1' });
 
   return app;

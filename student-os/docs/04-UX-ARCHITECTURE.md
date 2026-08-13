@@ -54,11 +54,14 @@ their own cohort.
 | Onboarding (5 steps) | 0/1 | **Built** — every option fetched from the hierarchy API |
 | Home shell | 0 | **Built** — real profile header + section scaffolding + empty states |
 | Groups / Create / Learn / Chat shells | 0 | **Built** — real empty states with actions |
-| Feed, post composer, post detail | 2 | Contracted |
-| Community, group detail (Chat/Resources/Posts/Study/AI tabs) | 3 | Contracted |
-| Conversation, thread | 4 | Contracted |
-| Classroom (Overview/Lectures/Materials/Quizzes/Live/Discussion/Progress/AI) | 5 | Contracted |
-| Lecture hub (material · summary · objectives · quiz · flashcards · discussion · reels · AI) | 5/6 | Contracted |
+| Feed, post composer, post detail | 2 | **Built** |
+| Community, group detail (Chat/Resources/Posts/Study/AI tabs) | 3 | **Built** |
+| Conversation, thread | 4 | **Built** |
+| Topic (hierarchy · subtopics · related · knowledge, filtered by type) | 5 | **Built** |
+| Post detail with sources and corrections | 5 | **Built** |
+| Learn (focus topics · interests · saved · this week) | 5 | **Built** |
+| Classroom (Overview/Lectures/Materials/Quizzes/Live/Discussion/Progress/AI) | 5b | Contracted |
+| Lecture hub (material · summary · objectives · quiz · flashcards · discussion · reels · AI) | 5b/6 | Contracted |
 | Quiz player, results, topic performance | 7 | Contracted |
 | Reels feed | 8 | Contracted |
 | Learning profile, weak topics | 11 | Contracted |
@@ -77,6 +80,8 @@ Some product rules are better enforced by a component than by a review comment.
 | Learning ≠ social affordance | `Button variant="learning"` |
 | Minimum 44pt touch targets | `MIN_TOUCH_TARGET` in `Button`, `Input` |
 | RTL correctness | `theme.isRTL`; `Text` sets `writingDirection`; layout uses logical alignment |
+| A chip that navigates is announced as a control | `Badge` renders a `Pressable` with `accessibilityRole="button"` when given `onPress`, and a plain `View` otherwise — an inert button is never produced by accident |
+| Knowledge is described, never rated | `KnowledgeBadges` renders counts and a provenance class; there is no component that can display a score, because none exists to display ([ADR-0013](adr/0013-provenance-classes.md)) |
 
 ## 5. Empty states as a first-class surface
 
@@ -92,6 +97,19 @@ situation honestly and offers the next useful action:
 assessment of your ability"* — appears on every surface built from activity
 counts. Constitution §35 requires this framing in the data model; putting it in
 the interface too is the part that actually reaches the student.
+
+Phase 5 extended the same rule to three more places:
+
+- **A weak signal says so on the row.** A weakness computed from two answers
+  carries `learn.focus.lowConfidence` beside it, not in a footnote a student
+  will not read.
+- **`author_claim` is shown by its absence.** Most student notes are exactly
+  that, and badging every one of them would train readers to ignore the badge —
+  costing the cases it exists for. Only `source_backed`, `disputed` and
+  `corrected` get a chip.
+- **Disputed content is flagged, not hidden.** `ReaderCaution` sits *above* the
+  body, because a disagreement is often where the learning is; the product's job
+  is to make sure the reader knows before they read, not to decide for them.
 
 ## 7. Internationalisation
 

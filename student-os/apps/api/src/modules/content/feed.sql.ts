@@ -45,6 +45,15 @@ export interface FeedQueryOptions {
     communityId?: string | undefined;
     groupId?: string | undefined;
     bookmarkedBy?: string | undefined;
+    /*
+     * Knowledge filters — deterministic equality on classified columns. There
+     * is no relevance model here and there is not going to be one in this
+     * phase: a student asking for explanations of a topic should get exactly
+     * that, and be able to tell why each row is in the list.
+     */
+    knowledgeType?: string | undefined;
+    difficulty?: string | undefined;
+    language?: string | undefined;
   };
 }
 
@@ -100,6 +109,9 @@ function scoreExpression(base: number): string {
     seenPenalty: `$${base + 9}::float8`,
     halfLife: `$${base + 10}::float8`,
     now: `$${base + 11}::timestamptz`,
+    classified: `$${base + 12}::float8`,
+    sourced: `$${base + 13}::float8`,
+    disputed: `$${base + 14}::float8`,
   };
 
   return `(
@@ -107,7 +119,13 @@ function scoreExpression(base: number): string {
     + (CASE WHEN sig.matches_weak_topic THEN ${w.weak} ELSE 0 END)
     + (CASE WHEN sig.matches_interest_topic THEN ${w.interest} ELSE 0 END)
     + (CASE WHEN ci.college_id = $3::uuid AND ci.stage_id = $4::uuid THEN ${w.cohort} ELSE 0 END)
-    + (CASE WHEN ci.kind IN ('question', 'resource', 'announcement', 'reel') THEN ${w.academic} ELSE 0 END)
+    + (CASE WHEN ci.kind IN ('question', 'resource', 'announcement') THEN ${w.academic} ELSE 0 END)
+    + (CASE WHEN ci.knowledge_type IS NOT NULL THEN ${w.classified} ELSE 0 END)
+    + (CASE WHEN EXISTS (SELECT 1 FROM content_sources cs WHERE cs.content_id = ci.id)
+            THEN ${w.sourced} ELSE 0 END)
+    + (CASE WHEN EXISTS (SELECT 1 FROM content_corrections cc
+                         WHERE cc.content_id = ci.id AND cc.status = 'proposed')
+            THEN ${w.disputed} ELSE 0 END)
     + (CASE WHEN ci.author_id = ANY($9::uuid[]) THEN 1.0 ELSE 0.0 END) * ${w.social}
     + ln(1 + ci.like_count + ci.comment_count * 2) * ${w.engagement}
     + exp(
@@ -208,6 +226,9 @@ export function buildFeedQuery(options: FeedQueryOptions): BuiltQuery {
     FEED_WEIGHTS.seenPenalty,
     RECENCY_HALF_LIFE_HOURS,
     pinnedNow,
+    FEED_WEIGHTS.classified,
+    FEED_WEIGHTS.sourced,
+    FEED_WEIGHTS.disputed,
   );
 
   const conditions: string[] = [
@@ -278,6 +299,15 @@ export function buildFeedQuery(options: FeedQueryOptions): BuiltQuery {
       )}::uuid)`,
     );
   }
+  if (filters.knowledgeType) {
+    conditions.push(`ci.knowledge_type = ${push(filters.knowledgeType)}::knowledge_type`);
+  }
+  if (filters.difficulty) {
+    conditions.push(`ci.difficulty = ${push(filters.difficulty)}::difficulty_level`);
+  }
+  if (filters.language) {
+    conditions.push(`ci.language = ${push(filters.language)}`);
+  }
   if (filters.bookmarkedBy) {
     conditions.push(
       `EXISTS (SELECT 1 FROM bookmarks bm WHERE bm.content_id = ci.id AND bm.user_id = ${push(
@@ -295,6 +325,9 @@ export function buildFeedQuery(options: FeedQueryOptions): BuiltQuery {
       SELECT
         ci.id,
         ci.kind,
+        ci.knowledge_type,
+        ci.difficulty,
+        ci.language,
         ci.author_id,
         ci.body,
         ci.visibility,
@@ -380,7 +413,8 @@ export function buildContentByIdQuery(contentId: string, viewerId: string | null
   const text = `
     WITH scored AS (
       SELECT
-        ci.id, ci.kind, ci.author_id, ci.body, ci.visibility, ci.course_id,
+        ci.id, ci.kind, ci.knowledge_type, ci.difficulty, ci.language,
+        ci.author_id, ci.body, ci.visibility, ci.course_id,
         ci.subject_id, ci.community_id, ci.group_id, ci.classroom_id,
         ci.like_count, ci.comment_count, ci.bookmark_count, ci.view_count,
         ci.is_pinned, ci.edited_at, ci.created_at,
