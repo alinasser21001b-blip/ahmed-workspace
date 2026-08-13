@@ -2,9 +2,10 @@ import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 
 /**
- * E2E: the Phase 5b classroom journey.
+ * E2E: the classroom journey (Phase 5b, extended in 5c).
  *
- *   instructor signs up → opens a classroom → publishes a lecture with a
+ *   an account is refused a classroom until an administrator verifies it →
+ *   the verified instructor opens one → publishes a lecture with a
  *   material → student signs up → finds the classroom → joins → opens the
  *   lecture → sees the material → asks a question in its discussion → RELOADS
  *   → state persists → the instructor sees the authoring control the student
@@ -68,6 +69,7 @@ async function onboardedStudent(label, stageIndex = 0) {
     body: { email, password: PASSWORD },
   });
   const token = session.tokens.accessToken;
+  const userId = session.user.id;
 
   const [university] = await call('/v1/academic/universities', { token });
   const [college] = await call(`/v1/academic/colleges?universityId=${university.id}`, { token });
@@ -104,7 +106,7 @@ async function onboardedStudent(label, stageIndex = 0) {
     },
   });
 
-  return { email, token, handle, course: chosen.courses[0], stage: chosen.stage };
+  return { email, token, userId, handle, course: chosen.courses[0], stage: chosen.stage };
 }
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM || undefined;
@@ -145,9 +147,56 @@ const OTHER_LECTURE_TITLE = `التهاب السحايا — التشخيص ال
 const MATERIAL_TITLE = `شرائح المحاضرة ${RUN}`;
 
 try {
-  console.log('setup — an instructor opens a classroom and publishes a lecture');
+  console.log('setup — academic authority, then a classroom');
   const instructor = await onboardedStudent('inst');
   const student = await onboardedStudent('stud');
+
+  /*
+   * Since Phase 5c, signing up does not make you able to teach. The account
+   * that is about to open a classroom has to be granted instructor eligibility
+   * by a platform administrator first — so the journey does that over HTTP,
+   * through the real admin endpoint, which means the browser run also proves
+   * the admin workflow end to end.
+   *
+   * The administrator is @amjad from the demo cohort, promoted out of band by
+   * `demo:seed` (which CI runs before this journey). If that has not happened,
+   * fail here with a sentence that says so rather than 403-ing later in a way
+   * that looks like a permissions bug in classrooms.
+   */
+  const beforeGrant = await api('/v1/classrooms', {
+    method: 'POST',
+    token: instructor.token,
+    body: { courseId: instructor.course.id, title: 'قاعة قبل التوثيق', description: null },
+  });
+  check(beforeGrant.status === 403, 'an unverified account cannot open a classroom');
+
+  const adminLogin = await api('/v1/auth/login', {
+    method: 'POST',
+    body: { email: 'amjad@uob.edu.iq', password: PASSWORD },
+  });
+  if (adminLogin.status !== 200) {
+    throw new Error('the demo cohort is missing — run `pnpm --filter @sos/api demo:seed` first');
+  }
+  const adminToken = adminLogin.json.tokens.accessToken;
+
+  const granted = await api(`/v1/admin/users/${instructor.userId}/verification`, {
+    method: 'PUT',
+    token: adminToken,
+    body: { verificationLevel: 'instructor', reason: 'classroom journey fixture' },
+  });
+  if (granted.status !== 200) {
+    throw new Error(
+      `granting instructor eligibility failed (${granted.status}) — is @amjad a platform admin?`,
+    );
+  }
+  check(granted.json.teachingEligible === true, 'an administrator can grant teaching eligibility');
+
+  const studentCannotGrant = await api(`/v1/admin/users/${instructor.userId}/verification`, {
+    method: 'PUT',
+    token: student.token,
+    body: { verificationLevel: 'official', reason: 'self-service' },
+  });
+  check(studentCannotGrant.status === 403, 'an ordinary student cannot grant it');
 
   const classroom = await call('/v1/classrooms', {
     method: 'POST',
@@ -159,7 +208,7 @@ try {
       visibility: 'course',
     },
   });
-  check(Boolean(classroom.joinCode), 'the instructor receives a join code');
+  check(Boolean(classroom.joinCode), 'a verified instructor can now open one, and receives a join code');
 
   const lecture = await call(`/v1/classrooms/${classroom.id}/lectures`, {
     method: 'POST',
@@ -217,6 +266,16 @@ try {
 
   await page.getByText('القاعات الدراسية').last().click();
   await settle('c04-classroom-list');
+
+  /*
+   * The student is not offered the control for a thing the server would refuse.
+   * This is a courtesy rather than the boundary — step 9 proves the server
+   * refuses the request regardless — but a button that 403s is still a defect.
+   */
+  check(
+    (await page.getByRole('button', { name: 'افتح قاعة', exact: true }).count()) === 0,
+    'a student is not offered the Create Classroom control',
+  );
 
   console.log('step 3 — the classroom is discoverable and joinable');
   await visibleText('متاحة للانضمام').click();
@@ -367,6 +426,14 @@ try {
   const staffText = await staffPage.locator('body').innerText();
   check(staffText.includes('أضف مصدراً'), 'the instructor IS offered the material-authoring control');
   check(staffText.includes(question), 'the instructor sees the student’s question');
+
+  // ...and, being verified, is offered the control the student was not.
+  await staffPage.goto(`${WEB_URL}/classrooms`, { waitUntil: 'networkidle' });
+  await staffPage.waitForTimeout(2000);
+  check(
+    (await staffPage.getByRole('button', { name: 'افتح قاعة', exact: true }).count()) > 0,
+    'a verified instructor IS offered the Create Classroom control',
+  );
   await staffPage.close();
 
   console.log('step 10 — the membership persisted, not just the page');

@@ -176,6 +176,58 @@ export function auth(session: AuthSession): { authorization: string } {
   return { authorization: `Bearer ${session.tokens.accessToken}` };
 }
 
+// --- Phase 5c helpers -------------------------------------------------------
+
+/**
+ * Sets a user's global verification level directly.
+ *
+ * Direct SQL on purpose, and only for tests whose subject is something else.
+ * The API path for this is `PUT /v1/admin/users/:id/verification` and it is
+ * exercised properly in `authority.integration.test.ts` — including that it
+ * refuses non-administrators and writes an audit row. Routing every classroom
+ * fixture through an administrator login as well would triple the setup cost of
+ * tests that are not about verification, and would make a failure in the admin
+ * endpoint look like a failure in classrooms.
+ */
+export async function setVerificationLevel(
+  userId: string,
+  level: 'unverified' | 'student' | 'instructor' | 'official',
+): Promise<void> {
+  await queryOne(`UPDATE users SET verification_level = $2::verification_level WHERE id = $1 RETURNING id`, [
+    userId,
+    level,
+  ]);
+}
+
+/**
+ * An onboarded user who is also a verified instructor.
+ *
+ * The fixture most classroom tests need since Phase 5c: opening a classroom is
+ * a teaching act, so an ordinary student can no longer set one up.
+ */
+export async function verifiedInstructor(
+  options: { stageId?: string } = {},
+): Promise<{ session: AuthSession; handle: string }> {
+  const created = await onboardedUser(options);
+  await setVerificationLevel(created.session.user.id, 'instructor');
+  return created;
+}
+
+/**
+ * An onboarded user who is a platform administrator.
+ *
+ * Direct SQL for the same structural reason the bootstrap script exists: only
+ * an administrator can make an administrator, so the first one in any database
+ * — including a test one — has to come from outside the API.
+ */
+export async function platformAdmin(): Promise<{ session: AuthSession; handle: string }> {
+  const created = await onboardedUser();
+  await queryOne(`UPDATE users SET role = 'admin' WHERE id = $1 RETURNING id`, [
+    created.session.user.id,
+  ]);
+  return created;
+}
+
 // --- Phase 2 helpers --------------------------------------------------------
 
 /**

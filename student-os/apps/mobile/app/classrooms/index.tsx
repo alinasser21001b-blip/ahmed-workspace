@@ -30,7 +30,7 @@ type Scope = 'mine' | 'discover';
 export default function Classrooms(): React.JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
-  const { api } = useSession();
+  const { api, user } = useSession();
 
   const [scope, setScope] = useState<Scope>('mine');
   const [items, setItems] = useState<ClassroomSummary[]>([]);
@@ -168,12 +168,25 @@ export default function Classrooms(): React.JSX.Element {
         </View>
       </Card>
 
-      <Button
-        label={t('classrooms.create')}
-        variant="secondary"
-        fullWidth
-        onPress={() => router.push('/classrooms/new')}
-      />
+      {/*
+        * Opening a classroom is a teaching act, so the control is drawn only
+        * for an account the server has told us is academically eligible.
+        *
+        * `teachingEligible` is projected by the API, never derived here from
+        * `verificationLevel` — a client that decided for itself which levels
+        * count would drift from the server that enforces it. Hiding the button
+        * is a courtesy, not the boundary: `POST /v1/classrooms` refuses an
+        * ineligible caller regardless of what this screen chose to render, so
+        * a client holding a stale session simply gets a 403 instead of a room.
+        */}
+      {user?.teachingEligible ? (
+        <Button
+          label={t('classrooms.create')}
+          variant="secondary"
+          fullWidth
+          onPress={() => router.push('/classrooms/new')}
+        />
+      ) : null}
     </View>
   );
 
@@ -219,7 +232,13 @@ export default function Classrooms(): React.JSX.Element {
                 scope === 'mine' ? 'classrooms.empty.title' : 'classrooms.discover.empty.title',
               )}
               body={t(
-                scope === 'mine' ? 'classrooms.empty.body' : 'classrooms.discover.empty.body',
+                scope !== 'mine'
+                  ? 'classrooms.discover.empty.body'
+                  : // The eligible copy offers to open a room. Saying that to a
+                    // student would promise a control they are not shown.
+                    user?.teachingEligible
+                    ? 'classrooms.empty.body'
+                    : 'classrooms.empty.body.student',
               )}
               action={
                 scope === 'mine'

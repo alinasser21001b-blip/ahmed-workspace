@@ -7,8 +7,16 @@
  * that the real authorization, validation and ranking paths would never
  * produce, and then the review is of a fiction.
  *
- * The two exceptions are marked where they occur, and both are moderation-style
- * facts a student cannot set about themselves.
+ * There is exactly one exception, marked where it occurs: promoting @amjad to
+ * platform administrator. That one cannot go through the API by construction —
+ * only an administrator may create an administrator — so the first one in any
+ * database has to come from outside it. Everything downstream of it, including
+ * granting instructor verification, then goes through the real admin endpoints,
+ * which means this seed exercises the Phase 5c workflow rather than
+ * short-circuiting it, and leaves a genuine audit trail behind.
+ *
+ * It therefore needs DATABASE_URL as well as API_URL, pointed at the same
+ * database the API is serving.
  *
  * Run against a database that is NOT production:
  *   DATABASE_URL=postgres://…/studentos_demo pnpm db:reset
@@ -16,6 +24,9 @@
  *   (start the API against the same database)
  *   API_URL=http://localhost:4000 pnpm --filter @sos/api demo:seed
  */
+
+import { closePool } from '../src/platform/db.js';
+import { bootstrapPlatformAdmin } from './bootstrap-admin.js';
 
 const API = process.env.API_URL ?? 'http://localhost:4000';
 const PASSWORD = 'correct-horse-battery';
@@ -53,6 +64,38 @@ async function call<T>(
 
 function log(message: string): void {
   process.stdout.write(`${message}\n`);
+}
+
+/**
+ * Refuses to seed a database that already carries the demo cohort.
+ *
+ * Everything below signs students up, and a second run therefore used to die on
+ * `409 An account with that email already exists` — halfway through, after
+ * having written nothing useful. That reads as a broken script rather than as
+ * "this is already done", and it makes the seed unsafe to put in any pipeline
+ * that might run twice.
+ *
+ * The probe is a login rather than a table read, for the same reason the rest of
+ * this file goes through HTTP: if the API cannot authenticate @amjad, the demo
+ * is not really present no matter what the rows say.
+ */
+async function demoCohortExists(): Promise<boolean> {
+  const response = await fetch(`${API}/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'amjad@uob.edu.iq', password: PASSWORD }),
+  });
+  return response.ok;
+}
+
+if (await demoCohortExists()) {
+  log('The demo cohort is already present in this database — nothing to seed.');
+  log('');
+  log('Sign in with amjad@uob.edu.iq, zainab@uob.edu.iq or omar@uob.edu.iq');
+  log(`  password: ${PASSWORD}`);
+  log('');
+  log('To rebuild it from nothing: `pnpm db:reset && pnpm db:seed`, then run this again.');
+  process.exit(0);
 }
 
 // --- the academic hierarchy, read from the database, never invented ---------
@@ -354,11 +397,13 @@ const openGroup = await call<Group>('/v1/groups', {
     /*
      * NOT scoped to the Pediatrics course, deliberately.
      *
-     * `POST /groups` refuses a course the founder is not enrolled in — correct,
-     * and asserted by a Phase 3 test. Course enrolment has no API until
-     * Phase 5, and inserting `course_enrollments` rows behind the API's back
-     * would put this demo one row away from showing a screen the product
-     * cannot actually produce. The group is cohort-scoped instead.
+     * Course enrolment does now happen — completing onboarding enrols a student
+     * in their stage's courses — so this group *could* be course-scoped. It
+     * stays cohort-scoped so that the demo shows the two container kinds as
+     * different things: a group is students organising themselves, and the
+     * classroom below is a taught room with an instructor who publishes into
+     * it. A course-scoped group would blur exactly the distinction a reviewer
+     * is here to check.
      */
   },
 });
@@ -454,6 +499,181 @@ await call(`/v1/groups/${requestGroup.id}/membership`, {
 });
 log('  request-to-join group with 1 pending request (queue visible to @amjad)');
 
+// --- classroom --------------------------------------------------------------
+
+/*
+ * A taught container, and the thing that separates it from every group above:
+ * @amjad publishes into it and the others read. The demo needs one because a
+ * fresh database leaves the Classrooms screen empty, and an empty screen tells
+ * a reviewer nothing about whether the feature works.
+ *
+ * Course-scoped, which needs two things that are now both true: onboarding
+ * enrols a student in their stage's courses, and @amjad was granted instructor
+ * eligibility above. Either one missing and `POST /classrooms` refuses — which
+ * is the Phase 5c invariant, demonstrated rather than asserted.
+ */
+
+log('\nacademic authority');
+
+/*
+ * THE ONE DIRECT WRITE. See the header: only a platform administrator can make
+ * a platform administrator, so the first one is an operator action by
+ * definition. It grants no academic authority of its own — @amjad still has to
+ * be verified through the audited endpoint below, like anyone else.
+ */
+const bootstrapped = await bootstrapPlatformAdmin(amjad.email);
+log(`  @${amjad.handle} is a platform administrator (bootstrapped out of band)`);
+
+/*
+ * And now the real workflow, over HTTP, by an administrator: @amjad grants
+ * themselves instructor eligibility. @zainab and @omar are deliberately left
+ * as ordinary students — the demo is only useful if it shows both sides of the
+ * boundary, so one account can teach and two cannot.
+ */
+await call(`/v1/admin/users/${bootstrapped.userId}/verification`, {
+  method: 'PUT',
+  token: token(amjad),
+  body: {
+    verificationLevel: 'instructor',
+    reason: 'Faculty of Medicine — pediatrics teaching staff, demo cohort',
+  },
+});
+log(`  @${amjad.handle} verified as an instructor — through the admin API, and audited`);
+log(`  @${zainab.handle} and @${omar.handle} remain ordinary students and cannot open a classroom`);
+
+log('\nclassroom');
+
+interface Classroom {
+  id: string;
+  title: string;
+  joinCode: string | null;
+}
+interface Lecture {
+  id: string;
+  title: string;
+}
+
+const classroom = await call<Classroom>('/v1/classrooms', {
+  method: 'POST',
+  token: token(amjad),
+  body: {
+    courseId: pediatrics.id,
+    title: 'قاعة طب الأطفال — المرحلة الخامسة',
+    description: 'محاضرات المقرر، شرائحها، ونقاش الطلبة تحت كل محاضرة.',
+    visibility: 'course',
+  },
+});
+log(`  classroom — ${classroom.title}`);
+log(`    join code ${classroom.joinCode} — shown to teaching staff only`);
+
+for (const member of [zainab, omar]) {
+  await call(`/v1/classrooms/${classroom.id}/membership`, {
+    method: 'PUT',
+    token: token(member),
+    body: { joinCode: null },
+  });
+}
+log('  @zainab and @omar joined — @amjad is the owner');
+
+const nephrotic = await call<Lecture>(`/v1/classrooms/${classroom.id}/lectures`, {
+  method: 'POST',
+  token: token(amjad),
+  body: {
+    title: 'المتلازمة الكلوية عند الأطفال',
+    description: 'الوذمة، البيلة البروتينية، ونقص ألبومين الدم — الآلية والعلاج الأولي.',
+    learningObjectives: [
+      'شرح آلية الوذمة في المتلازمة الكلوية',
+      'تمييز المتلازمة الكلوية عن المتلازمة الكلائية الحادة',
+      'تحديد دواعي بدء الستيرويد قبل الخزعة',
+    ],
+    keyConcepts: ['الألبومين', 'الضغط الجرمي', 'البيلة البروتينية', 'الستيرويد'],
+    topicIds: topicId('nephrotic'),
+    durationMinutes: 50,
+  },
+});
+log(`  lecture — ${nephrotic.title}`);
+
+await call(`/v1/lectures/${nephrotic.id}/materials`, {
+  method: 'POST',
+  token: token(amjad),
+  body: {
+    title: 'شرائح المحاضرة',
+    description: 'Nelson Textbook of Pediatrics, 22nd edition — chapter 545.',
+    externalUrl: 'https://example.org/pediatrics/nephrotic-syndrome.pdf',
+  },
+});
+
+/*
+ * The second material is an uploaded file rather than a link, because the two
+ * take different paths: attaching a file stamps it into the classroom and its
+ * URL is signed per reader at read time. A demo with only external links would
+ * never exercise that, and it is the half that can leak.
+ */
+const materialFileId = await uploadImage(amjad);
+if (materialFileId) {
+  await call(`/v1/lectures/${nephrotic.id}/materials`, {
+    method: 'POST',
+    token: token(amjad),
+    body: { title: 'مخطط آلية الوذمة', ordinal: 1, fileId: materialFileId },
+  });
+  log('  2 materials — one external link, one uploaded file behind a signed URL');
+} else {
+  log('  1 material — external link only (upload unavailable)');
+}
+
+await call(`/v1/lectures/${nephrotic.id}/discussion`, {
+  method: 'POST',
+  token: token(omar),
+  body: {
+    body: 'لماذا تظهر الوذمة أحياناً قبل أن ينخفض الألبومين بشكل واضح في التحاليل؟',
+    mediaFileIds: [],
+    topicIds: [],
+  },
+});
+await call(`/v1/lectures/${nephrotic.id}/discussion`, {
+  method: 'POST',
+  token: token(amjad),
+  body: {
+    body:
+      'لأن إعادة توزيع السوائل تبدأ مع انخفاض الضغط الجرمي الموضعي قبل أن ينعكس ذلك ' +
+      'على قياس الألبومين المصلي. القياس يتأخر عن الفيزيولوجيا، لا العكس.',
+    mediaFileIds: [],
+    topicIds: [],
+  },
+});
+log('  discussion under it — a student question and the instructor’s answer');
+
+// A second published lecture, so the discussion above is visibly attached to
+// ONE lecture rather than to the room.
+await call<Lecture>(`/v1/classrooms/${classroom.id}/lectures`, {
+  method: 'POST',
+  token: token(amjad),
+  body: {
+    title: 'التهاب السحايا الجرثومي — التشخيص المبكر',
+    description: 'العلامات السريرية، فحص السائل الدماغي الشوكي، وتوقيت الصادات.',
+    learningObjectives: ['تحديد العلامات التي توجب البزل القطني دون تأخير'],
+    keyConcepts: ['البزل القطني', 'الصادات التجريبية'],
+    ordinal: 1,
+    durationMinutes: 45,
+  },
+});
+
+/*
+ * A draft. @amjad sees it; @zainab and @omar must not — the filter is in the
+ * SQL, and this is the row that proves it by eye.
+ */
+await call<Lecture>(`/v1/classrooms/${classroom.id}/lectures`, {
+  method: 'POST',
+  token: token(amjad),
+  body: {
+    title: 'الربو عند الأطفال — مسودة غير منشورة',
+    description: 'لم تُنشر بعد.',
+    ordinal: 2,
+    publish: false,
+  },
+});
+log('  3 lectures — 2 published, 1 draft that only @amjad may see');
+
 // --- conversations ----------------------------------------------------------
 
 log('\nconversations');
@@ -525,6 +745,15 @@ for (const s of [amjad, zainab, omar]) {
 }
 log('');
 log('Start with @amjad: they have unread messages, saved posts, a pending');
-log('join request to approve, and membership of the unlisted group that');
-log('@omar must not be able to find.');
+log('join request to approve, membership of the unlisted group that @omar');
+log('must not be able to find, and ownership of the classroom — so they see');
+log('the join code, the draft lecture and the material-authoring control that');
+log('@zainab and @omar do not.');
+log('');
+log(`Classroom  /classrooms/${classroom.id}`);
+log(`Lecture    /lecture/${nephrotic.id}`);
 log('─────────────────────────────────────────────');
+
+// The bootstrap above opened a connection pool; without this the process keeps
+// the event loop alive and the script appears to hang after printing.
+await closePool();

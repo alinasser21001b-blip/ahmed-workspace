@@ -1,3 +1,4 @@
+export * from './policy/academic.policy.js';
 export * from './policy/actor.js';
 export * from './policy/content.policy.js';
 export * from './policy/conversation.policy.js';

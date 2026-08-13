@@ -16,10 +16,12 @@ import type {
   VerificationLevel,
 } from '@sos/contracts';
 import {
+  canCreateClassroom,
   canJoinClassroom,
   canLeaveClassroom,
   canManageClassroom,
-  canPostInClassroom,
+  canManageClassroomMembership,
+  canParticipateInClassroom,
   canReadClassroom,
   canTeachInClassroom,
   canViewClassroom,
@@ -109,6 +111,8 @@ function toSummary(row: repo.ClassroomRow, actor: Actor, locale: Locale): Classr
       canRead: caps.canRead,
       canJoin: caps.canJoin,
       canLeave: caps.canLeave,
+      canParticipate: caps.canParticipate,
+      canManageMembership: caps.canManageMembership,
       canTeach: caps.canTeach,
       canManage: caps.canManage,
     },
@@ -170,9 +174,16 @@ export async function getClassroom(
   const summary = toSummary(row, actor, locale);
   return {
     ...summary,
-    // A join code is a bearer credential: whoever holds it can enter. Students
-    // receive null, so a screenshot of a student's screen cannot leak the room.
-    joinCode: canTeachInClassroom(actor, membership).allowed ? row.join_code : null,
+    /*
+     * A join code is a bearer credential: whoever holds it can enter. Students
+     * receive null, so a screenshot of a student's screen cannot leak the room.
+     *
+     * Gated on running the room rather than on teaching in it. Handing out the
+     * code is a roster act, so an owner who has lost instructor verification
+     * still gets it — otherwise revoking a credential would silently strip the
+     * one person who can transfer the room of the means to populate it.
+     */
+    joinCode: canManageClassroomMembership(actor, membership).allowed ? row.join_code : null,
   };
 }
 
@@ -220,13 +231,18 @@ export async function createClassroom(
   locale: Locale,
 ): Promise<ClassroomDetail> {
   /*
-   * You may only open a classroom for a course you are in. Without this an
-   * actor could mint a room against any course id they could guess and then
-   * invite people into it.
+   * Opening a classroom is a teaching act, so it needs the credential — not
+   * merely enrolment in the course.
+   *
+   * Before Phase 5c this checked enrolment alone, which meant any student in a
+   * course could mint a room, become its owner, and thereby acquire the ability
+   * to publish lectures under the instructor claim. Teaching authority was
+   * reachable by pressing a button. `canCreateClassroom` now requires BOTH the
+   * global credential and the academic scope, and it is the policy layer that
+   * says so rather than a role comparison written out here.
    */
-  if (!actor.courseIds.has(body.courseId)) {
-    throw errors.forbidden('not_enrolled_in_course');
-  }
+  const decision = canCreateClassroom(actor, body.courseId);
+  if (!decision.allowed) throw errors.forbidden(decision.reason);
 
   const created = await withTransaction(async (tx) => {
     const classroom = await repo.insertClassroom(
@@ -336,7 +352,12 @@ export async function listLectures(
   classroomId: string,
 ): Promise<{ items: LectureSummary[] }> {
   const { membership } = await loadReadable(actor, classroomId);
-  const includeDrafts = canTeachInClassroom(actor, membership).allowed;
+  /*
+   * Staff of this room see drafts, whether or not they may still publish.
+   * Revocation blocks authoring, not reading: an owner who lost verification
+   * must still be able to see what is in the room they are handing over.
+   */
+  const includeDrafts = canManageClassroomMembership(actor, membership).allowed;
   const rows = await repo.listLectures(actor.userId, classroomId, includeDrafts);
   return { items: rows.map(toLectureSummary) };
 }
@@ -353,8 +374,17 @@ export async function getLecture(
   // rather than trusting the lecture row is what stops a direct lecture id
   // from bypassing the room.
   const { membership } = await loadReadable(actor, row.classroom_id);
+  /*
+   * Two different questions, and Phase 5c made them different answers.
+   *
+   * Seeing a draft is staffhood — an owner who lost instructor verification
+   * must still be able to read what is in the room they are handing over.
+   * Authoring into it is teaching, and that is what the client is told, so a
+   * de-verified owner opens the lecture and finds no way to attach a material.
+   */
+  const isStaff = canManageClassroomMembership(actor, membership).allowed;
   const canTeach = canTeachInClassroom(actor, membership).allowed;
-  if (!row.published_at && !canTeach) throw errors.notFound('lecture');
+  if (!row.published_at && !isStaff) throw errors.notFound('lecture');
 
   const [topics, materials] = await Promise.all([
     repo.listLectureTopics(lectureId),
@@ -521,7 +551,7 @@ async function loadReadableLecture(
   if (!lecture || !lecture.classroom_id) throw errors.notFound('lecture');
   const classroomId = lecture.classroom_id;
   const { membership } = await loadReadable(actor, classroomId);
-  if (!lecture.published_at && !canTeachInClassroom(actor, membership).allowed) {
+  if (!lecture.published_at && !canManageClassroomMembership(actor, membership).allowed) {
     throw errors.notFound('lecture');
   }
   return { classroomId, membership };
@@ -573,7 +603,7 @@ export async function createLectureDiscussionPost(
   locale: Locale,
 ): Promise<ContentItem> {
   const { classroomId, membership } = await loadReadableLecture(actor, lectureId);
-  const decision = canPostInClassroom(actor, membership);
+  const decision = canParticipateInClassroom(actor, membership);
   if (!decision.allowed) throw errors.forbidden(decision.reason);
 
   return content.createPost(

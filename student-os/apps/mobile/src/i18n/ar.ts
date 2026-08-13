@@ -151,6 +151,7 @@ export const ar = {
   'classrooms.discover': 'متاحة للانضمام',
   'classrooms.empty.title': 'لست في أي قاعة بعد',
   'classrooms.empty.body': 'انضم إلى قاعة من مقرراتك، أو افتح قاعة لطلابك.',
+  'classrooms.empty.body.student': 'انضم إلى قاعة من مقرراتك لتتابع محاضراتها ومصادرها.',
   'classrooms.empty.action': 'ابحث عن قاعة',
   'classrooms.discover.empty.title': 'لا توجد قاعات متاحة',
   'classrooms.discover.empty.body': 'عندما يفتح تدريسي قاعة لأحد مقرراتك ستظهر هنا.',
