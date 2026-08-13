@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { ApiClient } from '../api/client';
+import { resolveApiBaseUrl } from '../config/api-base-url';
 
 /**
  * Session state.
@@ -42,10 +43,30 @@ async function secureSet(key: string, value: string | null): Promise<void> {
   else await SecureStore.setItemAsync(key, value);
 }
 
-export const API_BASE_URL: string =
-  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  'http://localhost:4000';
+/**
+ * The API address, resolved once at module load.
+ *
+ * `extra.apiBaseUrl` is now *computed* from `EXPO_PUBLIC_API_URL` at build time
+ * (see `app.config.ts`) rather than hardcoded, so reading it first no longer
+ * shadows the environment — it is the environment, frozen. The variable is still
+ * read as a second source because the dev server injects `EXPO_PUBLIC_*` into
+ * the bundle directly.
+ *
+ * There is deliberately no `?? 'http://localhost:4000'` on the end. `__DEV__` is
+ * a Metro compile-time literal and is `false` in anything `expo export`
+ * produces, so a production bundle with no address throws here instead of
+ * quietly addressing the machine that built it. That is a hard failure at
+ * startup, which is the point: it is loud, it is immediate, and the build that
+ * caused it should already have been refused by `pnpm --filter @sos/mobile
+ * build:web`. This is the gate that cannot be skipped by calling the Expo CLI
+ * directly, which is why it is the guarantee and that one is the convenience.
+ */
+export const API_BASE_URL: string = resolveApiBaseUrl({
+  // Not cast: `resolveApiBaseUrl` takes `unknown` and checks, because this value
+  // crosses Expo's config serialisation and does not always arrive as declared.
+  configured: Constants.expoConfig?.extra?.apiBaseUrl ?? process.env.EXPO_PUBLIC_API_URL,
+  isDevelopmentBuild: __DEV__,
+});
 
 interface SessionValue {
   status: 'loading' | 'signedOut' | 'signedIn';

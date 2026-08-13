@@ -6,10 +6,10 @@
   "scripts": {
     "start": "expo start",
     "web": "expo start --web",
-    "export:web": "expo export --platform web",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:unit": "vitest run --passWithNoTests"
+    "test:unit": "vitest run --passWithNoTests",
+    "build:web": "tsx scripts/check-api-url.ts && expo export --platform web --output-dir dist --clear"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
