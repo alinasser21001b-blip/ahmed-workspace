@@ -275,6 +275,16 @@ jobs:
           PLAYWRIGHT_CHROMIUM: ''
         run: pnpm test:messaging
 
+      # The Phase 5b vertical slice: open a classroom, publish a lecture, join,
+      # read it, reload, and confirm an outsider is refused every surface.
+      - name: Run the classroom journey
+        env:
+          E2E_WEB_URL: http://localhost:8081
+          E2E_API_URL: http://localhost:4000
+          E2E_SHOT_DIR: ${{ runner.temp }}/e2e-shots
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:classrooms
+
       - name: Audit RTL and layout — Arabic and English, phone and desktop
         env:
           E2E_WEB_URL: http://localhost:8081

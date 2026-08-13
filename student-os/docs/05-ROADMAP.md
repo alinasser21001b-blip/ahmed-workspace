@@ -15,7 +15,7 @@
 | **4 — Messaging** | 1:1 + group chat, realtime, presence, typing, receipts, attachments | ✅ **Done** |
 | **5 — Knowledge foundation** | knowledge type, difficulty, language, sources, corrections, topic surface, learning signals, Learn | ✅ **Done** |
 | **5.1 — CI & test infrastructure** | root-level GitHub Actions workflow, test-database safety contract | ✅ **Done** |
-| 5b — Classrooms | classrooms, lectures, materials, PDF viewing, discussion attached to a lecture | Next |
+| **5b — Classrooms** | classrooms, membership, lectures, materials, signed-URL access | ✅ **Done** |
 | 6 — AI v1 | lecture summary, ask-AI, MCQ generation — all source-grounded | |
 | 7 — Quizzes | authoring, taking, attempts, scoring, explanations, topic performance | |
 | 8 — Reels | upload, transcoding pipeline, playback, academic metadata | |
@@ -175,8 +175,36 @@ found by merging it ([`07-PHASE-5-AUDIT.md` §10](07-PHASE-5-AUDIT.md)).
 - 22 unit tests cover the contract itself, and `pnpm test:unit` no longer loads
   the database-dropping global setup at all
 
-**Phase 5b.** A student opens a classroom, reads a lecture, and downloads a
-resource through a signed URL that a non-member cannot use.
+**Phase 5b — met.**
+
+- a student opens a classroom, reads a lecture, and reaches its material through
+  a signed URL — proven end to end in a real browser
+  ([`e2e/classroom-journey.mjs`](../apps/mobile/e2e/classroom-journey.mjs))
+- a non-member cannot **obtain** one: both routes to a signed URL — the lecture
+  that lists it and the file endpoint that mints it — return 404. The signature
+  itself remains a bearer capability by prior design (§49/§50), so the boundary
+  the phase defends is the mint, and that is what the tests assert
+- **enrolment finally has a producer.** `course_enrollments` had existed since
+  0002 with nothing ever writing to it, so `actor.courseIds` was empty for every
+  user and every course-scoped surface was silently unreachable. Onboarding now
+  enrols a student in their stage's active courses, which is what makes a
+  classroom creatable and discoverable at all
+- seeing a room and reading it are separate gates: enrolment in the course gets
+  a student the door, membership gets them the room. An unlisted room is invisible
+  without its join code, and a wrong code is 404 rather than a distinguishable
+  "wrong code"
+- publishing is a teaching act — a student who could publish a lecture would make
+  "the instructor published this" meaningless. Drafts are filtered in SQL, and a
+  direct lecture id does not reveal one
+- a join code is a bearer credential, so it is sent only to teaching staff
+- an owner cannot strand their own classroom by leaving it (the Phase 3 group
+  finding, applied before it could recur)
+- 15 new integration tests; 183 integration, 223 unit; the layout audit covers
+  the four new screens at 352 checks
+
+**Phase 5c / 6.** Lecture-scoped discussion is the remaining piece of 5b's
+original scope: `content_items.lecture_id` and its index ship in `0012`, but no
+endpoint writes or reads it yet.
 
 **Phase 6.** Every AI answer about course material cites a source that resolves
 to a real retrieved chunk. A fabricated citation is rejected by the validator,

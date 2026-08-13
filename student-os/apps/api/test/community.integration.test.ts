@@ -440,16 +440,38 @@ describe('groups', () => {
     expect(ids).not.toContain(secret.id);
   });
 
+  /*
+   * Until Phase 5b, `course_enrollments` had no producer at all, so
+   * `actor.courseIds` was empty for everyone and this assertion held for the
+   * wrong reason: it proved that nobody is ever enrolled, not that a
+   * non-enrolled founder is refused. Onboarding now enrols a student in their
+   * stage's courses, so the case needs a founder who genuinely is not in the
+   * course — a student placed in a different stage. Both directions are
+   * asserted, because a rule only tested in the negative is a rule that could
+   * be refusing everyone.
+   */
   it('refuses a group scoped to a course the founder is not enrolled in', async () => {
+    const app = await getApp();
+    const otherStage = await onboardedUser({ stageId: cohort.stage4Id });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/groups',
+      headers: auth(otherStage.session),
+      payload: { name: 'Not my course', visibility: 'course', courseId: cohort.courseIds[0] },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  it('allows a group scoped to a course the founder IS enrolled in', async () => {
     const app = await getApp();
     const student = await onboardedUser();
     const response = await app.inject({
       method: 'POST',
       url: '/v1/groups',
       headers: auth(student.session),
-      payload: { name: 'Not my course', visibility: 'course', courseId: cohort.courseIds[0] },
+      payload: { name: 'My own course', visibility: 'course', courseId: cohort.courseIds[0] },
     });
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(201);
   });
 });
 

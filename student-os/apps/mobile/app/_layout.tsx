@@ -42,6 +42,10 @@ export default function RootLayout(): React.JSX.Element {
               <Stack.Screen name="group/[id]" />
               <Stack.Screen name="search" />
               <Stack.Screen name="topic/[id]" />
+              <Stack.Screen name="classrooms/index" />
+              <Stack.Screen name="classrooms/[id]" />
+              <Stack.Screen name="classrooms/new" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="lecture/[id]" />
               <Stack.Screen name="chat/[id]" />
               <Stack.Screen name="profile/[handle]" />
             </Stack>

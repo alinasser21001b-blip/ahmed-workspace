@@ -9,3 +9,4 @@ export * from './social/interactions.contract.js';
 export * from './social/community.contract.js';
 export * from './social/messaging.contract.js';
 export * from './knowledge/knowledge.contract.js';
+export * from './learning/classroom.contract.js';

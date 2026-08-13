@@ -150,6 +150,12 @@ export async function completeOnboarding(
       throw error;
     }
 
+    /*
+     * Placement implies enrolment. Without this the student has a stage but no
+     * courses, and every course-scoped surface — including the classrooms this
+     * unlocks — is empty for them no matter what exists in it.
+     */
+    await repo.enrolInStageCourses(actor.userId, input.stageId, client);
     await repo.replaceInterests(actor.userId, topicIds, client);
     await repo.getPrivacySettings(actor.userId, client);
   });
