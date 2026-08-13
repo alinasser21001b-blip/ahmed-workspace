@@ -27,7 +27,8 @@
     "dev:mobile": "pnpm --filter @sos/mobile start",
     "test:e2e": "node apps/mobile/e2e/first-journey.mjs",
     "test:rtl": "node apps/mobile/e2e/rtl-audit.mjs",
-    "test:messaging": "node apps/mobile/e2e/messaging.mjs"
+    "test:messaging": "node apps/mobile/e2e/messaging.mjs",
+    "demo:seed": "pnpm --filter @sos/api demo:seed"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
