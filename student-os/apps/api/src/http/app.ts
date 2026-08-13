@@ -14,6 +14,7 @@ import { academicRoutes } from '../modules/academic/academic.routes.js';
 import { authRoutes } from '../modules/auth/auth.routes.js';
 import { contentRoutes } from '../modules/content/content.routes.js';
 import { filesRoutes } from '../modules/files/files.routes.js';
+import { groupsRoutes } from '../modules/groups/groups.routes.js';
 import { socialRoutes } from '../modules/social/social.routes.js';
 import { healthRoutes } from '../modules/health/health.routes.js';
 import { usersRoutes } from '../modules/users/users.routes.js';
@@ -96,6 +97,7 @@ export async function buildApp() {
   await app.register(filesRoutes, { prefix: '/v1' });
   await app.register(contentRoutes, { prefix: '/v1' });
   await app.register(socialRoutes, { prefix: '/v1' });
+  await app.register(groupsRoutes, { prefix: '/v1' });
 
   return app;
 }

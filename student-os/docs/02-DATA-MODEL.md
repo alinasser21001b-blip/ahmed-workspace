@@ -2,7 +2,7 @@
 
 > Constitution §89.C. The **migrations are the source of truth**
 > (`apps/api/migrations/*.sql`); this document explains the decisions behind
-> them. 78 tables across seven migrations.
+> them. 79 tables across eight migrations.
 
 ## 1. Conventions
 
@@ -147,7 +147,19 @@ row per (user, content) with a repeat counter. `content_items.view_count` is
 incremented only on the first view, so it stays a distinct-viewer count rather
 than a refresh counter.
 
-### 3.12 Sessions store hashes, never tokens
+### 3.12 Groups carry an academic placement
+
+Added in `0008`, for the same reason files did in `0007`: `canViewGroup`
+resolves a group's audience with the scope vocabulary content uses, so a
+`stage`-scoped group needs a stage to compare against. Without it the policy
+could only ever answer "member or not".
+
+`visibility = 'group'` is the unlisted setting — the group is invisible to
+everyone except members and invitees, whatever their cohort. It is excluded in
+the query, not filtered afterwards, so a secret group never occupies a slot in
+a page and its existence is not inferable from a short result.
+
+### 3.13 Sessions store hashes, never tokens
 
 `sessions.token_hash` holds SHA-256 of an opaque refresh token.
 `rotated_to_id` makes reuse of a rotated token detectable, which is the

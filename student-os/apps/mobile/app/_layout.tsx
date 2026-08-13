@@ -36,6 +36,10 @@ export default function RootLayout(): React.JSX.Element {
               {/* Modal-style routes that sit above the tab shell. */}
               <Stack.Screen name="compose" options={{ presentation: 'modal' }} />
               <Stack.Screen name="post/[id]" />
+              <Stack.Screen name="group/new" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="group/[id]" />
+              <Stack.Screen name="search" />
+              <Stack.Screen name="profile/[handle]" />
             </Stack>
           </SessionProvider>
         </ThemeProvider>

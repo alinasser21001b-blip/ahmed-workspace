@@ -60,12 +60,28 @@ export const allow = (reason = 'allowed'): Decision => ({ allowed: true, reason 
 export const deny = (reason: string): Decision => ({ allowed: false, reason });
 
 /**
- * Suspended and banned accounts keep read access to nothing and write access
- * to nothing. Restricted accounts can read but not create — checked separately
- * by write policies.
+ * Full standing: may read and may write.
+ *
+ * Deliberately excludes `restricted`, which is the moderation action that
+ * removes the ability to create while leaving the account usable (§39). Write
+ * policies gate on this.
  */
 export function isActive(actor: MaybeActor): actor is Actor {
   return actor !== null && actor.status === 'active';
+}
+
+/**
+ * May read.
+ *
+ * Restricted accounts belong here and not in `isActive`: a restriction that
+ * also blanked the feed would be indistinguishable from a suspension, which
+ * defeats the point of having two moderation actions. Suspended, banned and
+ * deleted accounts read nothing.
+ *
+ * Every read path gates on this; every write path gates on `isActive`.
+ */
+export function canRead(actor: MaybeActor): actor is Actor {
+  return actor !== null && (actor.status === 'active' || actor.status === 'restricted');
 }
 
 export function isBlockedEitherWay(actor: Actor, otherUserId: string): boolean {
@@ -84,7 +100,7 @@ export function isPlatformAdmin(actor: MaybeActor): boolean {
  * when the actor actually holds at least one membership of that type.
  */
 export function candidateVisibilities(actor: MaybeActor): Visibility[] {
-  if (!isActive(actor)) return ['public'];
+  if (!canRead(actor)) return ['public'];
   const levels: Visibility[] = ['public', 'private', 'followers'];
   if (actor.universityId) levels.push('university');
   if (actor.collegeId) levels.push('college');

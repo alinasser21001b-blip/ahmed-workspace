@@ -1,6 +1,7 @@
 import type { Visibility } from '@sos/contracts';
 import {
   allow,
+  canRead,
   deny,
   isActive,
   isBlockedEitherWay,
@@ -128,8 +129,9 @@ export function canViewContent(actor: MaybeActor, content: ContentRef): Decision
     return deny('content_deleted');
   }
 
-  if (!isActive(actor)) {
-    // Anonymous and non-active accounts see only genuinely public content.
+  if (!canRead(actor)) {
+    // Anonymous, suspended and banned accounts see only genuinely public
+    // content. A restricted account still reads normally.
     return content.visibility === 'public' ? allow('public_anonymous') : deny('unauthenticated');
   }
 
@@ -211,7 +213,7 @@ export interface VisibilityScopes {
 }
 
 export function visibilityScopesFor(actor: MaybeActor): VisibilityScopes {
-  if (!isActive(actor)) {
+  if (!canRead(actor)) {
     return {
       userId: null,
       universityId: null,

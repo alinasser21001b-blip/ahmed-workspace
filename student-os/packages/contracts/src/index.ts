@@ -6,3 +6,4 @@ export * from './users/users.contract.js';
 export * from './social/files.contract.js';
 export * from './social/content.contract.js';
 export * from './social/interactions.contract.js';
+export * from './social/community.contract.js';

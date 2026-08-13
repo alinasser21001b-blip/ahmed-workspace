@@ -5,9 +5,10 @@ communities, study groups, messaging, classrooms, lectures, quizzes and an AI
 layer — built as **one academic graph**, not as separate products stapled
 together.
 
-> Status: **Phases 0–2 complete** — Foundation, Identity, and Social core.
-> 154 tests passing. The full journey — sign up through publishing a post,
-> commenting, liking and saving — runs end-to-end in a real browser.
+> Status: **Phases 0–3 complete** — Foundation, Identity, Social core, and
+> Community. 209 tests passing. The full journey — sign up, publish, comment,
+> like, save, create a study group, post inside it, and find it by search —
+> runs end-to-end in a real browser, in Arabic.
 
 ## Read this first
 
@@ -56,8 +57,8 @@ pnpm dev:mobile                             # Expo dev server
 
 ```bash
 pnpm typecheck          # all four packages
-pnpm test:unit          # 81 unit tests (@sos/core)
-pnpm test:integration   # 73 integration tests against real Postgres
+pnpm test:unit          # 115 unit tests (@sos/core)
+pnpm test:integration   # 94 integration tests against real Postgres
 ```
 
 Integration tests run against a **real database**, not a mock. Permission bugs
@@ -95,6 +96,8 @@ layout bugs actually appear.
 | The feed cannot leak across cohorts | The permission filter is pushed into the SQL `WHERE`, never applied after the fetch ([ADR-0003](docs/adr/0003-single-authorization-layer.md)) |
 | Ranking matches its documented formula | SQL and TypeScript implementations compared by a parity test ([ADR-0007](docs/adr/0007-ranking-in-sql-with-parity-test.md)) |
 | An upload is what it claims to be | Format read from magic bytes; the declared MIME type is discarded |
+| A private group leaks nowhere | The same predicate gates the feed, the item read and search — tested across all three ([ADR-0008](docs/adr/0008-trigram-search.md)) |
+| A restriction is not a suspension | `canRead` and `isActive` are separate gates: restricted accounts read, they do not write |
 
 ## Deliberately not built yet
 

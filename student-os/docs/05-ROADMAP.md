@@ -11,8 +11,8 @@
 | **0 — Foundation** | repo, architecture, database, auth, config, design system, navigation, error handling, logging, tests, CI | ✅ **Done** |
 | **1 — Identity** | signup/login, profile, academic placement, interests, privacy | ✅ **Done** |
 | **2 — Social core** | feed, posts, image upload, comments, reactions, bookmarks, reports, follow/block/mute | ✅ **Done** |
-| 3 — Community | communities, groups, membership, group posts | Next |
-| 4 — Messaging | 1:1 + group chat, realtime, presence, typing, receipts, attachments | |
+| **3 — Community** | communities, groups, membership, join requests, group posts, search | ✅ **Done** |
+| 4 — Messaging | 1:1 + group chat, realtime, presence, typing, receipts, attachments | Next |
 | 5 — Learning | courses, classrooms, lectures, resources, PDF viewing, discussion | |
 | 6 — AI v1 | lecture summary, ask-AI, MCQ generation — all source-grounded | |
 | 7 — Quizzes | authoring, taking, attempts, scoring, explanations, topic performance | |
@@ -48,9 +48,16 @@
 - SQL and TypeScript ranking agree to six decimal places (parity test)
 - the browser journey now runs through publish → comment → like → save
 
-**Phase 3.** A private group's posts are invisible to non-members through the
-API, search, and (later) AI retrieval — one policy, three surfaces, one test
-suite.
+**Phase 3 — met.**
+- an unlisted group's posts are invisible to non-members through the feed, the
+  single-item read, and search — proven by one test across all three surfaces
+- the group itself is unfindable: neither browsable nor searchable by name
+- join policy is honoured: open joins, request queues for approval, invite-only
+  refuses without an invitation and accepts with one
+- role rank is enforced — a moderator cannot remove an admin or mint more
+  moderators; an owner cannot strand a group by leaving it
+- `member_count` stays accurate across join, leave and rejoin
+- search honours the searchable opt-out and both block directions
 
 **Phase 4.** A message survives: app backgrounded mid-send, connection dropped,
 duplicate retry, out-of-order receipt, reconnect with a gap. No duplicates, no

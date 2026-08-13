@@ -7,6 +7,7 @@ import { mkdir } from 'node:fs/promises';
  *   sign up → university → college → program → stage → profile + interests
  *           → academic home → create a post → see it in the feed
  *           → open the thread → comment → like → save
+ *           → create a study group → post inside it → find it by search
  *
  * The Constitution is explicit that this journey must work end to end before
  * the product expands, so it is a test rather than a manual checklist. It runs
@@ -186,6 +187,66 @@ try {
   check(
     (await page.locator('body').innerText()).includes(postBody),
     'the post is in the author’s own cohort feed',
+  );
+
+  console.log('step 7 — community (phase 3)');
+  await visibleText('المجموعات').click();
+  await settle('20-groups-empty');
+  check(
+    (await page.locator('body').innerText()).includes('لا توجد مجموعات دراسية بعد'),
+    'the groups tab starts with a real empty state',
+  );
+
+  const groupName = `مجموعة الكلى ${Date.now().toString().slice(-6)}`;
+  await page.getByLabel('إنشاء مجموعة').last().click();
+  await settle('21-create-group');
+  check(
+    await page.getByText('من يمكنه رؤية المجموعة').last().isVisible(),
+    'creating a group asks who can find it separately from who can join',
+  );
+
+  await page.getByLabel('اسم المجموعة').last().fill(groupName);
+  await page.getByRole('button', { name: 'إنشاء', exact: true }).last().click();
+  await page.waitForTimeout(2500);
+  await settle('22-group-detail');
+  check(
+    (await page.locator('body').innerText()).includes(groupName),
+    'the new group opens after creation',
+  );
+  check(
+    (await page.locator('body').innerText()).includes('لا توجد منشورات في المجموعة'),
+    'an empty group offers a way to post rather than a blank tab',
+  );
+
+  const groupPost = `ملاحظة داخل المجموعة ${Date.now()}`;
+  await page.getByLabel('منشور جديد').last().click();
+  await page.waitForTimeout(1200);
+  await page.locator('textarea:visible, input:visible').first().fill(groupPost);
+  await page.getByRole('button', { name: 'نشر' }).last().click();
+  await page.waitForTimeout(2500);
+  await settle('23-group-post');
+  check(
+    (await page.locator('body').innerText()).includes(groupPost),
+    'a post published into a group is visible to its members',
+  );
+
+  console.log('step 8 — search');
+  // Publishing lands on the post detail, which sits two screens above the tab
+  // bar: back out to the group, then to the shell, before the tabs are usable.
+  await page.getByLabel('رجوع').last().click();
+  await page.waitForTimeout(1200);
+  await page.getByLabel('رجوع').last().click();
+  await page.waitForTimeout(1500);
+  await visibleText('الرئيسية').click();
+  await page.waitForTimeout(1500);
+  await page.getByLabel('بحث').last().click();
+  await settle('24-search-empty');
+  await page.getByLabel('ابحث عن زملاء أو منشورات أو مجموعات…').last().fill('الكلى');
+  await page.waitForTimeout(2000);
+  await settle('25-search-results');
+  check(
+    (await page.locator('body').innerText()).includes(groupName),
+    'search finds the group the student just created',
   );
 
   check(jsErrors.length === 0, `no uncaught JS errors (saw ${jsErrors.length})`);

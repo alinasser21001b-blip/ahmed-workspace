@@ -151,6 +151,22 @@ describe('canViewContent — account state', () => {
     expect(canViewContent(suspended, content()).allowed).toBe(false);
   });
 
+  it('lets a restricted account keep reading while losing the ability to post', () => {
+    // The two moderation actions must be distinguishable: a restriction that
+    // also blanked the feed would be indistinguishable from a suspension.
+    const restricted = actor({ status: 'restricted' });
+    expect(canViewContent(restricted, content()).allowed).toBe(true);
+    expect(canCreateContent(restricted)).toMatchObject({
+      allowed: false,
+      reason: 'account_restricted',
+    });
+  });
+
+  it('keeps a restricted account’s feed scopes intact', () => {
+    const scopes = visibilityScopesFor(actor({ status: 'restricted', courseIds: new Set(['c-a']) }));
+    expect(scopes.courseIds).toEqual(['c-a']);
+  });
+
   it('denies deleted content to its own author', () => {
     const author = actor({ userId: 'bob' });
     expect(canViewContent(author, content({ deletedAt: new Date() }))).toMatchObject({

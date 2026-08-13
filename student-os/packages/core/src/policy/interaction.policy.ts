@@ -1,6 +1,7 @@
 import type { Visibility } from '@sos/contracts';
 import {
   allow,
+  canRead,
   deny,
   isActive,
   isBlockedEitherWay,
@@ -78,7 +79,7 @@ export function canViewProfile(actor: MaybeActor, target: TargetUserRef): Decisi
     return isPlatformAdmin(actor) ? allow('platform_admin') : deny('account_banned');
   }
 
-  if (!isActive(actor)) {
+  if (!canRead(actor)) {
     return target.profileVisibility === 'public' ? allow('public_anonymous') : deny('unauthenticated');
   }
   if (actor.userId === target.userId) return allow('self');
@@ -159,7 +160,7 @@ export interface FileRef {
 
 export function canAccessFile(actor: MaybeActor, file: FileRef): Decision {
   if (file.deletedAt !== null) return deny('file_deleted');
-  if (!isActive(actor)) {
+  if (!canRead(actor)) {
     return file.visibility === 'public' ? allow('public_anonymous') : deny('unauthenticated');
   }
   if (file.ownerId === actor.userId) return allow('owner');

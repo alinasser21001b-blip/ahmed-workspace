@@ -133,6 +133,30 @@ Every node returns both `nameAr` and `nameEn`.
 | PUT/DELETE | `/mutes` | required | user / conversation / group / community / topic. |
 | POST | `/reports` | required | 20/min. One open report per reporter per target. |
 
+### Communities, groups and search — `/v1`
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| GET | `/communities` | required | `scope=mine\|discover`. Cursor-paginated. |
+| GET | `/communities/:id` | required | 404 when out of scope. |
+| PUT/DELETE | `/communities/:id/membership` | required | Join / leave. |
+| GET | `/groups` | required | `scope=mine\|discover`. Unlisted groups never appear in discover. |
+| POST | `/groups` | required | 20/min. Placement copied from the founder's profile. |
+| GET | `/groups/:id` | required | 404 for an unlisted group the caller is not in. |
+| PATCH/DELETE | `/groups/:id` | required | Owner/admin. DELETE archives. |
+| PUT | `/groups/:id/membership` | required | Returns `active` or `pending` — the server decides which. |
+| DELETE | `/groups/:id/membership` | required | 412 if an owner would strand the group. |
+| GET | `/groups/:id/members` | required | `status=active` for members, `pending` for moderators only. |
+| POST | `/groups/:id/invites` | required | Owner/admin. |
+| PATCH | `/groups/:id/members/:handle` | required | Approve, promote, demote, ban, transfer ownership. |
+| DELETE | `/groups/:id/members/:handle` | required | Rank-checked: cannot remove an equal or superior. |
+| GET | `/search` | required | 120/min. People, content, groups, communities — all permission-filtered. |
+
+**Search and permissions.** `/search` runs the same visibility predicate as the
+feed, including the hard container boundary. That is the phase's central claim
+and it is covered by a test asserting a private group's post is absent from a
+non-member's results.
+
 **CORS.** The allowed-methods list is set explicitly. The library default omits
 `PUT`, `PATCH` and `DELETE`, which leaves reads working and every mutation from
 a browser failing at preflight — a failure that looks like a client bug.
@@ -143,7 +167,6 @@ Shapes are settled; implementation follows the roadmap.
 
 | Phase | Surface |
 | --- | --- |
-| 3 — Community | `/v1/communities`, `/v1/groups`, `/members`, join/leave |
 | 4 — Messaging | `/v1/conversations`, `/messages` (cursor by `seq`), `WS /v1/realtime` |
 | 5 — Learning | `/v1/classrooms`, `/lectures`, `/materials`, `/v1/files` (signed URLs) |
 | 6 — AI | `POST /v1/ai/sessions`, `/messages`, `/lectures/:id/summary`, `/lectures/:id/generate-quiz` |

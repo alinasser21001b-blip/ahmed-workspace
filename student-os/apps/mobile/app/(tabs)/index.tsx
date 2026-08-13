@@ -78,6 +78,14 @@ export default function Home(): React.JSX.Element {
         )}
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={t('nav.search')}
+          onPress={() => router.push('/search')}
+          hitSlop={8}
+        >
+          <Ionicons name="search-outline" size={24} color={theme.colors.primary} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel={t('compose.title')}
           onPress={() => router.push('/compose')}
           hitSlop={8}

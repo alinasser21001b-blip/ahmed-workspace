@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ContentItem, FileRef, Visibility } from '@sos/contracts';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, TextInput, View } from 'react-native';
 import { ApiError, NetworkError } from '../src/api/client';
@@ -33,6 +33,13 @@ export default function Compose(): React.JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
   const { api } = useSession();
+  /*
+   * When opened from a group, the post belongs to that group and the audience
+   * control is hidden: a group's membership already IS the audience, and
+   * offering a second, contradictory choice would be a way to publish into a
+   * group with a visibility that says otherwise.
+   */
+  const { groupId } = useLocalSearchParams<{ groupId?: string }>();
 
   const [body, setBody] = useState('');
   const [visibility, setVisibility] = useState<Visibility>('stage');
@@ -83,7 +90,7 @@ export default function Compose(): React.JSX.Element {
       const created = await api.post<ContentItem>('/v1/content', {
         body: body.trim() || undefined,
         mediaFileIds: attachment ? [attachment.id] : [],
-        visibility,
+        ...(groupId ? { groupId, visibility: 'group' } : { visibility }),
       });
       // Tell every mounted feed to reload before navigating, so the post is
       // already there when the student comes back.
@@ -165,7 +172,7 @@ export default function Compose(): React.JSX.Element {
         />
       )}
 
-      <View style={{ gap: theme.spacing.sm }}>
+      <View style={{ gap: theme.spacing.sm, display: groupId ? 'none' : 'flex' }}>
         <Text variant="label" tone="muted">
           {t('compose.visibility')}
         </Text>
