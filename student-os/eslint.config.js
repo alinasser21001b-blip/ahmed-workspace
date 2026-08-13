@@ -93,6 +93,12 @@ export default tseslint.config(
         window: 'readonly',
         localStorage: 'readonly',
         getComputedStyle: 'readonly',
+        // Node 22 provides these natively; the E2E drivers use them directly.
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        WebSocket: 'readonly',
+        FormData: 'readonly',
+        Blob: 'readonly',
       },
     },
   },

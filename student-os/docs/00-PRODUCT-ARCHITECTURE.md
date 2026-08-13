@@ -1,7 +1,8 @@
 # Product Architecture — Student Social Learning OS
 
-> Status: **Approved for Phase 0**. This document is the product half of the
-> architecture gate required before implementation (Constitution §89.A).
+> Status: **Approved.** This document is the product half of the architecture
+> gate required before implementation (Constitution §89.A). §1.1 was added
+> during Phase 4 and constrains every phase after it.
 
 ## 1. What this product is
 
@@ -15,6 +16,67 @@ enrolled in, which has Lectures, which generate Quizzes, whose results update
 the student's Learning Graph, which decides what the feed shows next.
 
 If a feature cannot be attached to that graph, it does not belong in V1.
+
+### 1.1 Knowledge is the social object
+
+The sentence that decides arguments about scope:
+
+> **Knowledge is the social object.**
+
+This is an *academic social learning network*, not a social network with
+educational content on it. The social layer exists to move knowledge between
+people. Every significant interaction should end up attached to an academic
+context.
+
+What that rules out, as constraints rather than preferences:
+
+| Not built | Because |
+| --- | --- |
+| General-interest social content | The cohort is here for a degree; a feed that carries anything else competes with the thing it exists to serve |
+| An entertainment-first feed | The feed answers "what is academically useful to me now?", not "what will keep this person scrolling?" |
+| An influencer or viral-content model | Academic relevance outranks popularity. A correct answer from a quiet student beats a popular one |
+| Engagement mechanics aimed at screen time | Time in the app is a cost to the student, not a metric |
+| Short-form video as an entertainment surface | If video ships, it is **micro-learning** attached to a topic, a course and a lecture — never a scrolling feed of clips |
+
+And what it requires:
+
+- **Knowledge must stay discoverable.** A good explanation typed into a group
+  chat is currently lost to everyone who was not reading at the time. Chat is
+  communication; posts, questions, answers and resources are persistent
+  knowledge. The two stay separate, and the architecture must eventually allow
+  the second to be *promoted out of* the first — without messaging becoming a
+  knowledge store, and without knowledge becoming a chat log.
+- **Content must carry its intent.** Not "what's on your mind" but *ask a
+  question*, *explain something*, *share a resource*, *share notes*, *present a
+  case*, *start a discussion*, *poll*, *announce*. `content_items.kind` already
+  models this; the creation UI must eventually ask for it, because a system
+  that does not know what a piece of content *is* cannot rank, route or
+  retrieve it usefully.
+- **Groups are learning spaces**, not a member list with a chat attached. A
+  group should be able to grow discussions, resources, questions, study
+  sessions and its own academic context.
+- **AI is part of the academic system**, not a chatbot beside it: tutor,
+  examiner, librarian, curator — all reading the platform's own structured
+  knowledge and community signals, and all through the same authorization layer
+  as a human.
+
+**The shape this imposes on the data model** — and the reason it is recorded
+here rather than in a backlog — is that the domain is *not*
+`Users → Posts → Comments`. It is:
+
+```
+Users → Academic Context → Knowledge → Interaction → Learning Signals
+      → Recommendations → AI
+```
+
+A knowledge object must be connectable to a course, a topic, a community, an
+author, its sources, related knowledge, and the learning activity it produced.
+`content_items` (ADR-0002) is that spine, `content_links` is the
+related-knowledge edge, and `learning_events` is the signal channel — all three
+present since Phase 0 and deliberately unused until the phase that needs them.
+
+None of this is built ahead of its phase. It is written down so that no phase
+builds something that makes it harder.
 
 ## 2. The product loop
 
@@ -156,6 +218,11 @@ Per Constitution §86, and reserved-but-not-built in schema: payments, ads,
 marketplace, monetization, ML recommendation, custom video infrastructure,
 custom cryptography, microservices, Kubernetes, enterprise org management,
 full grading/LMS replacement, follower economy.
+
+Added by §1.1, and excluded permanently rather than deferred: an
+entertainment-first feed, a virality or influencer model, engagement mechanics
+whose purpose is screen time, and short-form video as anything other than
+micro-learning attached to an academic context.
 
 ## 9. North-star metric
 

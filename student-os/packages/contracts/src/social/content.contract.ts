@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import {
   contentKindSchema,
+  contentLanguageSchema,
+  difficultySchema,
+  knowledgeTypeSchema,
   uuidSchema,
   visibilitySchema,
 } from '../common/primitives.js';
+import { knowledgeSignalsSchema } from '../knowledge/knowledge.contract.js';
 import { profileSummarySchema } from '../users/users.contract.js';
 import { fileRefSchema, MAX_MEDIA_PER_POST } from './files.contract.js';
 
@@ -73,6 +77,28 @@ export const contentViewerStateSchema = z.object({
 export const contentItemSchema = z.object({
   id: uuidSchema,
   kind: contentKindSchema,
+  /**
+   * What this is academically — a second axis beside `kind`, which says how it
+   * renders (ADR-0012). Null for content published before classification
+   * existed; that gap is visible rather than backfilled with a guess.
+   */
+  knowledgeType: knowledgeTypeSchema.nullable(),
+  difficulty: difficultySchema.nullable(),
+  /** Derived deterministically from the body's script distribution. */
+  language: contentLanguageSchema.nullable(),
+  /**
+   * How this knowledge is founded — counts a reader can click into, and a
+   * provenance class chosen by stated rules. Never a score (ADR-0013).
+   */
+  signals: knowledgeSignalsSchema,
+  /** Topics, each carrying WHO classified it. */
+  topics: z.array(
+    z.object({
+      id: uuidSchema,
+      name: z.string(),
+      source: z.enum(['author', 'ai', 'moderator']),
+    }),
+  ),
   author: profileSummarySchema,
   body: z.string().nullable(),
   media: z.array(fileRefSchema),
@@ -108,6 +134,15 @@ export const createPostRequestSchema = z
     topicIds: z.array(uuidSchema).max(10).default([]),
     communityId: uuidSchema.optional(),
     groupId: uuidSchema.optional(),
+    /**
+     * The classification pathway starts here.
+     *
+     * Optional, because forcing it would push students toward whichever value
+     * dismisses the picker fastest — and a taxonomy filled with the default is
+     * worse than one with gaps, because the gaps are at least visible.
+     */
+    knowledgeType: knowledgeTypeSchema.optional(),
+    difficulty: difficultySchema.optional(),
   })
   .refine((value) => Boolean(value.body?.length) || value.mediaFileIds.length > 0, {
     message: 'A post needs either text or media.',
@@ -118,6 +153,13 @@ export const createPostRequestSchema = z
     path: ['communityId'],
   });
 export type CreatePostRequest = z.infer<typeof createPostRequestSchema>;
+
+export const updateClassificationRequestSchema = z.object({
+  knowledgeType: knowledgeTypeSchema.nullable().optional(),
+  difficulty: difficultySchema.nullable().optional(),
+  topicIds: z.array(uuidSchema).max(10).optional(),
+});
+export type UpdateClassificationRequest = z.infer<typeof updateClassificationRequestSchema>;
 
 export const updatePostRequestSchema = z.object({
   body: z.string().trim().max(10_000).nullable().optional(),
@@ -149,6 +191,10 @@ export const feedQuerySchema = z.object({
   topicId: uuidSchema.optional(),
   communityId: uuidSchema.optional(),
   groupId: uuidSchema.optional(),
+  /** Deterministic knowledge filters. No relevance model involved. */
+  knowledgeType: knowledgeTypeSchema.optional(),
+  difficulty: difficultySchema.optional(),
+  language: contentLanguageSchema.optional(),
 });
 export type FeedQuery = z.infer<typeof feedQuerySchema>;
 

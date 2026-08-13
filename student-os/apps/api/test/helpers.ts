@@ -86,13 +86,24 @@ export async function ensureCohort(): Promise<Cohort> {
      ON CONFLICT (course_id, slug) DO UPDATE SET name_en = EXCLUDED.name_en RETURNING id`,
     [course!.id],
   );
+  /*
+   * Three topics, not one.
+   *
+   * Phase 5 made Topic a navigation primitive and added topic-to-topic
+   * relationships, and a co-tagging edge cannot be tested against a cohort with
+   * a single topic. `ordinal` keeps the ordering stable so `topicIds[1]` means
+   * the same thing on every run.
+   */
   await queryOne(
-    `INSERT INTO topics (subject_id, slug, name_ar, name_en)
-     VALUES ($1, 'nephrotic-syndrome', 'المتلازمة الكلوية', 'Nephrotic Syndrome')
+    `INSERT INTO topics (subject_id, slug, name_ar, name_en, ordinal)
+     VALUES
+       ($1, 'nephrotic-syndrome',       'المتلازمة الكلوية',    'Nephrotic Syndrome', 0),
+       ($1, 'acute-glomerulonephritis', 'التهاب الكبيبات الحاد', 'Acute Glomerulonephritis', 1),
+       ($1, 'uti-in-children',          'التهاب المجاري البولية', 'UTI in Children', 2)
      ON CONFLICT (subject_id, slug) DO NOTHING`,
     [subject!.id],
   );
-  const topics = await queryRows<{ id: string }>(`SELECT id FROM topics`);
+  const topics = await queryRows<{ id: string }>(`SELECT id FROM topics ORDER BY ordinal, slug`);
 
   cohort = {
     universityId: university!.id,
@@ -236,9 +247,26 @@ export async function createPost(
   return { statusCode: response.statusCode, body: response.json() };
 }
 
+/**
+ * Reads the feed for a visibility assertion.
+ *
+ * Defaults to `scope=recent`, NOT the ranked home feed, and the distinction
+ * matters. Almost every caller is asking "can this reader see this content?" —
+ * a permission question. The ranked scope answers a different one, and it
+ * answers it against a shared test database that every suite writes into, so a
+ * probe post can be pushed off the first page by content another test file
+ * created. That failure looks like a leak and is not one.
+ *
+ * Both scopes run the identical permission predicate in `buildFeedQuery`, so
+ * nothing about the security property is weakened by ordering deterministically
+ * — the item under test is the newest, and therefore always on page one.
+ *
+ * Ranking has its own coverage in `feed-parity.integration.test.ts`, which is
+ * where an ordering assertion belongs.
+ */
 export async function readFeed(
   session: AuthSession,
-  query = '',
+  query = '?scope=recent&limit=50',
 ): Promise<{ items: ContentItem[]; nextCursor: string | null }> {
   const app = await getApp();
   const response = await app.inject({

@@ -68,6 +68,39 @@ export const contentKindSchema = z.enum([
 ]);
 export type ContentKind = z.infer<typeof contentKindSchema>;
 
+/**
+ * What a piece of content IS, academically — a second axis beside
+ * `contentKindSchema`, which says how it renders (ADR-0012).
+ *
+ * A clinical case and a summary are both `kind: 'post'` and are not the same
+ * knowledge. One enum cannot express the cross product without becoming a list
+ * of pairs, so there are two.
+ */
+export const knowledgeTypeSchema = z.enum([
+  'question',
+  'explanation',
+  'summary',
+  'note',
+  'case',
+  'resource',
+  'reference',
+  'correction',
+  'discussion',
+]);
+export type KnowledgeType = z.infer<typeof knowledgeTypeSchema>;
+
+export const difficultySchema = z.enum(['easy', 'medium', 'hard']);
+export type Difficulty = z.infer<typeof difficultySchema>;
+
+/**
+ * The script a body is written in, derived deterministically from its letters.
+ *
+ * `mixed` is a real answer for a cohort that writes Arabic prose with English
+ * drug names in it; `und` is the honest answer for a body too short to judge.
+ */
+export const contentLanguageSchema = z.enum(['ar', 'en', 'mixed', 'und']);
+export type ContentLanguage = z.infer<typeof contentLanguageSchema>;
+
 export const localeSchema = z.enum(['ar', 'en']);
 export type Locale = z.infer<typeof localeSchema>;
 

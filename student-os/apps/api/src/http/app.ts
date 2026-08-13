@@ -10,11 +10,15 @@ import {
 import { getConfig } from '../platform/config.js';
 import { getLogger } from '../platform/logger.js';
 import multipart from '@fastify/multipart';
+import websocket from '@fastify/websocket';
 import { academicRoutes } from '../modules/academic/academic.routes.js';
 import { authRoutes } from '../modules/auth/auth.routes.js';
 import { contentRoutes } from '../modules/content/content.routes.js';
 import { filesRoutes } from '../modules/files/files.routes.js';
 import { groupsRoutes } from '../modules/groups/groups.routes.js';
+import { knowledgeRoutes } from '../modules/knowledge/knowledge.routes.js';
+import { messagingRoutes } from '../modules/messaging/messaging.routes.js';
+import { realtimeRoutes } from '../modules/messaging/realtime.routes.js';
 import { socialRoutes } from '../modules/social/social.routes.js';
 import { healthRoutes } from '../modules/health/health.routes.js';
 import { usersRoutes } from '../modules/users/users.routes.js';
@@ -58,6 +62,21 @@ export async function buildApp() {
     // The API serves JSON to a native client and a web build; a CSP here would
     // apply to nothing it serves.
     contentSecurityPolicy: false,
+    /*
+     * Media is served to a client on a different origin, always.
+     *
+     * The web bundle is built against `EXPO_PUBLIC_API_URL` and the native app
+     * has no origin at all, so every `<Image>` in the product is a cross-origin
+     * request. Helmet's default `same-origin` policy blocks exactly those with
+     * `ERR_BLOCKED_BY_RESPONSE.NotSameOrigin` — the images simply never appear,
+     * with no failed API request to point at.
+     *
+     * This is not a hole. CORP is not an access control: file bytes are reached
+     * only through a signed, expiring URL minted for a caller who has already
+     * passed `canAccessFile`. Relaxing the embedding rule does not relax that
+     * gate, and the header was only ever preventing the product from working.
+     */
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
   });
 
   await app.register(cors, {
@@ -87,6 +106,18 @@ export async function buildApp() {
     limits: { fileSize: 8 * 1024 * 1024, files: 1, fields: 4 },
   });
 
+  /*
+   * The realtime transport. Registered before the routes that use it, and after
+   * the rate limiter so a connection storm is still bounded.
+   *
+   * `maxPayload` is small on purpose: every frame this endpoint accepts is a
+   * subscription or an ephemeral hint. Nothing arriving over the socket becomes
+   * a database write, so nothing arriving over it needs to be large.
+   */
+  await app.register(websocket, {
+    options: { maxPayload: 16 * 1024 },
+  });
+
   await app.register(authenticatePlugin);
   await app.register(errorHandlerPlugin);
 
@@ -98,6 +129,9 @@ export async function buildApp() {
   await app.register(contentRoutes, { prefix: '/v1' });
   await app.register(socialRoutes, { prefix: '/v1' });
   await app.register(groupsRoutes, { prefix: '/v1' });
+  await app.register(messagingRoutes, { prefix: '/v1' });
+  await app.register(knowledgeRoutes, { prefix: '/v1' });
+  await app.register(realtimeRoutes, { prefix: '/v1' });
 
   return app;
 }

@@ -130,7 +130,17 @@ try {
   check(home.includes(displayName), 'home greets the student by name');
   check(home.includes('كلية الطب'), 'home shows the real college from the profile');
   check(home.includes('المرحلة الخامسة'), 'home shows the real stage from the profile');
-  check(home.includes('كن أول من ينشر'), 'the empty feed has a real empty state');
+  /*
+   * The feed either offers the empty state or shows real cohort content — what
+   * it must never do is render a blank area. Asserting the empty state alone
+   * only held while the database happened to be empty; once a cohort has posts
+   * a new student correctly lands in a populated feed, and a test that failed
+   * on that would be testing the fixture rather than the product.
+   */
+  check(
+    home.includes('كن أول من ينشر') || (await page.getByLabel('إعجاب').count()) > 0,
+    'the home feed shows either a real empty state or real cohort content',
+  );
 
   console.log('step 5 — the five primary destinations');
   for (const [tab, label] of [
@@ -145,7 +155,16 @@ try {
   const shell = await page.locator('body').innerText();
   check(shell.includes('لا توجد مجموعات دراسية بعد'), 'groups shell has an empty state');
   check(shell.includes('مقطع تعليمي'), 'create sheet offers academic content types');
-  check(shell.includes('مواضيع تحتاج مراجعة'), 'learn shell exposes weak topics');
+  /*
+   * Phase 5 replaced the Learn shell. It used to list "topics to review" as a
+   * coming-soon card whether or not any existed; it now shows sections only
+   * where the student has signals. This student has exactly one signal — the
+   * interest they declared two steps ago — so Learn shows the interests
+   * section and nothing else. That is the cold-start path working: the
+   * screen is built from a real row, not from a placeholder.
+   */
+  check(shell.includes('اهتماماتك'), 'learn shows the interests the student declared');
+  check(shell.includes('المتلازمة الكلوية'), 'learn names the declared interest topic');
   check(
     shell.includes('هذه مؤشرات نشاط دراسي، وليست تقييماً لمستواك.'),
     'learning signals carry their honesty disclaimer where they are shown',

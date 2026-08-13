@@ -5,9 +5,11 @@ communities, study groups, messaging, classrooms, lectures, quizzes and an AI
 layer — built as **one academic graph**, not as separate products stapled
 together.
 
-> Status: **Phases 0–3 complete and closed** — Foundation, Identity, Social
-> core, and Community. 272 tests passing, plus a browser journey and a layout
-> audit that runs every screen in Arabic and English, on phone and desktop.
+> Status: **Phases 0–5 complete** — Foundation, Identity, Social core,
+> Community, Messaging, and the Knowledge foundation. 368 tests passing, plus
+> an API smoke suite and three browser suites: the first journey, a layout
+> audit over every screen in Arabic and English on phone and desktop, and a
+> two-user messaging journey that drops a real connection mid-conversation.
 > The full journey — sign up, publish, comment, like, save, create a study
 > group, post inside it, and find it by search — runs end-to-end in a real
 > browser, in Arabic.
@@ -17,6 +19,12 @@ together.
 > issues including a group that could be permanently stranded without an owner,
 > mutes that changed nothing, a CI step that had been red since Phase 0, and
 > Arabic search that returned nothing for diacritised text.
+>
+> Phase 5 began the same way, with an audit before any code
+> ([docs/07-PHASE-5-AUDIT.md](docs/07-PHASE-5-AUDIT.md)). It found the schema
+> already knowledge-shaped, so the phase added three tables and three columns
+> rather than a subsystem — and re-scoped itself from "classrooms" to the
+> classification, provenance and topic layer those rooms need underneath them.
 
 ## Read this first
 
@@ -29,7 +37,15 @@ together.
 | [UX Architecture](docs/04-UX-ARCHITECTURE.md) | Screens, navigation, design rules |
 | [Roadmap](docs/05-ROADMAP.md) | Phases and exit criteria |
 | [Phase 3 Closure Audit](docs/06-PHASE-3-AUDIT.md) | What was actually true at the end of Phase 3, and what was done about it |
+| [Phase 5 Audit](docs/07-PHASE-5-AUDIT.md) | What already existed before the knowledge layer was built, what was missing, and what was deliberately deferred |
 | [ADRs](docs/adr/) | Decisions that were not obvious |
+
+**Knowledge is the social object.** This is an academic social learning network,
+not a social network with course material on it. What that rules in and out —
+no entertainment feed, no virality model, no engagement-for-its-own-sake
+mechanics, and knowledge that stays discoverable instead of disappearing into
+chats — is [§1.1 of the product architecture](docs/00-PRODUCT-ARCHITECTURE.md),
+and it constrains every phase from here.
 
 ## Layout
 
@@ -66,8 +82,8 @@ pnpm dev:mobile                             # Expo dev server
 
 ```bash
 pnpm typecheck          # all four packages
-pnpm test:unit          # 156 unit tests (@sos/core)
-pnpm test:integration   # 116 integration tests against real Postgres
+pnpm test:unit          # 201 unit tests (@sos/core)
+pnpm test:integration   # 167 integration tests against real Postgres
 ```
 
 Integration tests run against a **real database**, not a mock. Permission bugs
@@ -85,19 +101,27 @@ pnpm dev:api &
 pnpm --filter @sos/mobile export:web
 npx serve apps/mobile/dist -l 8081 --single &
 
-pnpm test:e2e     # the first journey, in Arabic
-pnpm test:rtl     # every screen, ar/en × phone/desktop
+pnpm --filter @sos/api demo:seed             # a cohort with real content
+node apps/mobile/e2e/smoke.mjs              # 76 API checks across every area
+
+pnpm test:e2e        # the first journey, in Arabic
+pnpm test:messaging  # two students, two browsers, one dropped connection
+pnpm test:rtl        # every screen, ar/en × phone/desktop
 ```
 
+`smoke.mjs` mutates and several of its assertions count rows, so it expects a
+freshly seeded database: `db:reset && db:seed && demo:seed` before each run.
+
 The journey runs **in Arabic**, because Arabic is the primary language and RTL
-is where layout bugs actually appear. Run it before `test:rtl`: it asserts that
-a brand-new student sees a real empty state, which stops being true once the
-layout audit publishes its fixtures into the same cohort.
+is where layout bugs actually appear. It asserts that the home feed offers
+either a real empty state or real cohort content — not that the database
+happens to be empty, which was only ever true on the first run.
 
 `test:rtl` checks direction, horizontal overflow, clipped text, hit areas,
-directional-icon geometry, the console and the network on every Phase 3 screen —
-192 checks. It exists because the three worst RTL defects in this repository
-were all invisible to code review and to a single screenshot.
+directional-icon geometry, the console and the network on every screen — 272
+checks, including the Phase 5 topic and knowledge surfaces. It exists because
+the three worst RTL defects in this repository were all invisible to code
+review and to a single screenshot.
 
 Both run in CI, against a real API and a real bundle.
 
@@ -112,7 +136,9 @@ Both run in CI, against a real API and a real bundle.
 | No hardcoded UI strings | English catalogue typed against Arabic — a missing translation is a compile error |
 | Every async surface has loading / empty / error / retry | `states.tsx` primitives |
 | Learning signals are not claims about learning | Named `learning signals` in schema, API and UI, with a visible disclaimer |
-| Messages survive bad networks | Server-assigned `seq`, client-minted idempotency key, unit-tested state machine |
+| Messages survive bad networks | Server-assigned `seq`, client-minted idempotency key, and a two-browser E2E that drops a real connection and checks the gap replays once, in order ([ADR-0011](docs/adr/0011-realtime-notifies-database-decides.md)) |
+| A realtime frame never outruns the database | Every write is HTTP and committed before it is announced; the socket is an optimisation over a plain `afterSeq` read, so a dropped connection is late data, never lost data |
+| Nobody reads a conversation they are not in | No admin bypass exists for messaging, deliberately — a post was published to an audience, a message was not |
 | The feed cannot leak across cohorts | The permission filter is pushed into the SQL `WHERE`, never applied after the fetch ([ADR-0003](docs/adr/0003-single-authorization-layer.md)) |
 | Ranking matches its documented formula | SQL and TypeScript implementations compared by a parity test ([ADR-0007](docs/adr/0007-ranking-in-sql-with-parity-test.md)) |
 | An upload is what it claims to be | Format read from magic bytes; the declared MIME type is discarded |
@@ -125,6 +151,14 @@ Both run in CI, against a real API and a real bundle.
 | Arabic counts read like Arabic | CLDR's six plural categories, not an English rule with a suffix |
 | The Arabic UI is designed, not mirrored | Navigation icons flip; play buttons, clocks and checkmarks do not ([`DirectionalIcon`](apps/mobile/src/components/DirectionalIcon.tsx)) |
 | Every event has one delivery path | A transactional outbox, written in the same transaction as the change ([ADR-0010](docs/adr/0010-domain-events-outbox.md)) |
+| Knowledge is never scored | Provenance is a class computed from counted rows, never a stored float. Two sources means two documents a reader can open ([ADR-0013](docs/adr/0013-provenance-classes.md)) |
+| A correction outlives the thread it started in | `content_corrections` is a first-class row with a lifecycle, not comment 40 — a reader six months later sees it either way |
+| A citation is not a privilege | Anyone who can see a piece of knowledge may cite it; `addedBy` records who made the claim |
+| Sources and corrections cannot leak | They hang off `/content/:id/…` and run the content's own predicate, so their visibility *is* its visibility — 404 for a non-member, on both |
+| A machine's classification can never pass as a person's | `content_topics.source` and `topic_relations.source` are carried to the client before any classifier exists; a graph that merges them can never be un-merged ([ADR-0013](docs/adr/0013-provenance-classes.md)) |
+| The feed optimises for learning value | Classification and citation outweigh engagement, disputed content is penalised, and `reel` earns no academic bonus — with the SQL/TS parity test still holding ([ADR-0007](docs/adr/0007-ranking-in-sql-with-parity-test.md)) |
+| A weak signal says it is weak | A weakness computed from too few answers is returned with `lowConfidence` and rendered with the caveat on the row, not in a footnote ([ADR-0014](docs/adr/0014-learning-signals-are-not-analytics.md)) |
+| A screen never shows a control that does nothing | The Learn tab renders only sections backed by rows that exist; the topic filter offers only types with a non-zero permission-filtered count |
 
 ## Deliberately not built yet
 

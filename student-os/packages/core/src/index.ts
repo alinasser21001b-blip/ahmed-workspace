@@ -1,5 +1,6 @@
 export * from './policy/actor.js';
 export * from './policy/content.policy.js';
+export * from './policy/conversation.policy.js';
 export * from './policy/interaction.policy.js';
 export * from './policy/membership.policy.js';
 export * from './messaging/message-state.js';
@@ -8,3 +9,4 @@ export * from './ranking/feed-ranking.js';
 export * from './pagination/cursor.js';
 export * from './text/arabic.js';
 export * from './events/domain-events.js';
+export * from './knowledge/classification.js';

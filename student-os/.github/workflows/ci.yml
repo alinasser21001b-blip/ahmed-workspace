@@ -106,6 +106,13 @@ jobs:
       # The client is bundled against this, so it must be baked in before the
       # export rather than set at runtime — a web bundle has no environment.
       EXPO_PUBLIC_API_URL: http://localhost:4000
+      # Five suites, one runner, one source IP. The production default of 10
+      # credential calls per minute is correct for a browser and wrong for a CI
+      # job that seeds a cohort and then signs up four throwaway students in the
+      # same minute — the limiter would fail the build for working correctly.
+      # It is raised only here; the rate limiter itself is still exercised, by
+      # the integration suite that asserts it.
+      AUTH_RATE_LIMIT_MAX: '200'
 
     steps:
       - uses: actions/checkout@v4
@@ -158,10 +165,17 @@ jobs:
       - name: Install Chromium for Playwright
         run: pnpm exec playwright install --with-deps chromium
 
-      # Order matters: the journey asserts that a brand-new student sees a real
-      # empty state, which is only true before the layout audit publishes its
-      # fixtures into the same cohort. Running the audit first would make the
-      # journey fail for a reason that has nothing to do with the journey.
+      # The API smoke suite runs FIRST and on its own seed. Several of its
+      # assertions count rows — messages in a conversation, unread totals — so
+      # it has to see the demo dataset before anything else publishes into it.
+      - name: Seed the demo cohort
+        run: pnpm --filter @sos/api demo:seed
+
+      - name: Smoke-test every product area through the API
+        env:
+          API_URL: http://localhost:4000
+        run: node apps/mobile/e2e/smoke.mjs
+
       - name: Run the first journey, in Arabic
         env:
           E2E_WEB_URL: http://localhost:8081
@@ -170,6 +184,17 @@ jobs:
           # this repository uses locally.
           PLAYWRIGHT_CHROMIUM: ''
         run: pnpm test:e2e
+
+      # Two browsers, one conversation, a real network interruption. This is the
+      # Phase 4 exit criterion, and it is the only test that can observe a
+      # message surviving a dropped socket.
+      - name: Run the two-user messaging journey
+        env:
+          E2E_WEB_URL: http://localhost:8081
+          E2E_API_URL: http://localhost:4000
+          E2E_SHOT_DIR: ${{ runner.temp }}/e2e-shots
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:messaging
 
       - name: Audit RTL and layout — Arabic and English, phone and desktop
         env:

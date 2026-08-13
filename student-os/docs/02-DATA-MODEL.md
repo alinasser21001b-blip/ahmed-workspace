@@ -2,7 +2,7 @@
 
 > Constitution §89.C. The **migrations are the source of truth**
 > (`apps/api/migrations/*.sql`); this document explains the decisions behind
-> them. 80 tables across nine migrations.
+> them. 80 tables across ten migrations.
 
 ## 1. Conventions
 
@@ -101,6 +101,22 @@ Three columns carry the entire delivery contract:
 `conversations.last_seq` is the row locked to allocate the next `seq`, which
 also serialises concurrent writes to one conversation.
 
+### 3.5.1 Delivery is a position, not a row per message per recipient
+
+Revised in `0010`. `0004` created `message_receipts (message_id, user_id)` for
+delivery state — one row per message per recipient, which in a 200-member group
+chat is 200 rows per message, to answer a question worth two ticks in a bubble.
+
+Read state had already avoided this, and delivery has the same shape, so it got
+the same treatment: `conversation_members.last_delivered_seq`, one integer per
+member, beside `last_read_seq`. A CHECK enforces `delivered >= read`, so an
+out-of-order receipt cannot rewind a position and resurrect a cleared badge.
+
+`message_receipts` is left in place and unused. Per-message delivery is a real
+requirement for a later feature — *which of my devices has this?* — and dropping
+a table to re-add it is worse than leaving an empty one. It is recorded as
+reserved rather than quietly carried as though it were live.
+
 ### 3.6 Question-level quiz results
 
 `quiz_answers` is keyed `(attempt_id, question_id)` and `quiz_questions` carries
@@ -190,6 +206,42 @@ closed in `@sos/core` where the compiler checks it.
 `sessions.token_hash` holds SHA-256 of an opaque refresh token.
 `rotated_to_id` makes reuse of a rotated token detectable, which is the
 mechanism behind the theft-detection path in `auth.service.ts`.
+
+### 3.16 Knowledge type is a second axis, not more kinds
+
+Added in `0011`. `content_items.content_kind` says how something **renders**;
+`knowledge_type` says what it **is** academically. Folding them into one enum
+would make `explanation` and `summary` two kinds needing two renderers, and it
+would leave a question that has been answered no way to say so. The allowed
+combinations live in one table in `@sos/core` and are checked on both sides, so
+the composer cannot offer what the server rejects.
+[ADR-0012](adr/0012-knowledge-type-as-a-second-axis.md).
+
+`language` is a CHECK-constrained column, derived from the body's script
+distribution rather than submitted. It is nullable and null means *unclassified*
+— content published before Phase 5 is not backfilled with a guess.
+
+### 3.17 Provenance is stored as rows, never as a score
+
+`content_sources` and `content_corrections` are the whole of it. There is no
+`trust_score`, no `quality`, no rating column anywhere: what a reader is shown
+is a count of rows they can click into, plus a class computed at read time from
+stated rules. A stored float would be cheaper to read and impossible to argue
+with — and a number nobody can argue with is a number nobody can improve.
+[ADR-0013](adr/0013-provenance-classes.md).
+
+`content_corrections_one_open` is a partial unique index on
+`(content_id, proposed_by) WHERE status = 'proposed'`: one open correction per
+person per post, so disagreement is a claim rather than a volume knob.
+
+### 3.18 Topic edges carry who drew them
+
+`topic_relations.source` is `curated` or `derived`. A person asserting that two
+topics are related and the system counting co-tagging are different claims with
+different trust, and a graph that merges them can never be un-merged. The same
+reasoning puts `source` on `content_topics`, where `ai` is a legal value that
+nothing currently writes — the column exists so the day a classifier ships is
+not the day the UI learns to distinguish it.
 
 ## 4. Indexing
 

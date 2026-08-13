@@ -115,6 +115,9 @@ describe('feed ranking parity between SQL and @sos/core', () => {
         matches_interest: boolean;
         matches_weak: boolean;
         seen: boolean;
+        knowledge_type: string | null;
+        has_source: boolean;
+        is_disputed: boolean;
       }>(
         `SELECT ci.author_id, ci.created_at, ci.kind::text AS kind, ci.course_id,
                 ci.college_id, ci.stage_id, ci.like_count, ci.comment_count,
@@ -131,7 +134,15 @@ describe('feed ranking parity between SQL and @sos/core', () => {
                 EXISTS (
                   SELECT 1 FROM content_views cv
                   WHERE cv.content_id = ci.id AND cv.user_id = $2
-                ) AS seen
+                ) AS seen,
+                ci.knowledge_type,
+                EXISTS (
+                  SELECT 1 FROM content_sources cs WHERE cs.content_id = ci.id
+                ) AS has_source,
+                EXISTS (
+                  SELECT 1 FROM content_corrections cc
+                  WHERE cc.content_id = ci.id AND cc.status = 'proposed'
+                ) AS is_disputed
          FROM content_items ci WHERE ci.id = $1`,
         [contentId, viewer.session.user.id],
       );
@@ -148,7 +159,12 @@ describe('feed ranking parity between SQL and @sos/core', () => {
         socialProximity: actor!.followingIds.has(row!.author_id) ? 1 : 0,
         likeCount: row!.like_count,
         commentCount: row!.comment_count,
-        isAcademicKind: ['question', 'resource', 'announcement', 'reel'].includes(row!.kind),
+        // `reel` is deliberately absent: short-form video is not part of the
+        // product's centre of gravity and no longer earns an academic bonus.
+        isAcademicKind: ['question', 'resource', 'announcement'].includes(row!.kind),
+        isClassified: row!.knowledge_type !== null,
+        hasSource: row!.has_source,
+        isDisputed: row!.is_disputed,
         seen: row!.seen,
       };
 

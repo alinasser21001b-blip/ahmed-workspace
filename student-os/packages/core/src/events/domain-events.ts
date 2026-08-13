@@ -44,6 +44,10 @@ export type DomainEventKind =
   | 'content.comment.created'
   | 'content.reply.created'
   | 'content.mention.created'
+  // knowledge — produced in Phase 5
+  | 'content.correction.proposed'
+  | 'content.correction.accepted'
+  | 'content.correction.rejected'
   // messaging — Phase 4, contracted here so it extends this union
   | 'conversation.created'
   | 'message.created'
@@ -117,6 +121,15 @@ export const NOTIFICATION_RULES: Readonly<Record<DomainEventKind, NotificationRu
   'content.comment.created': { notifies: true, groupBy: 'targetId', dedupeWindowMs: 900_000 },
   'content.reply.created': { notifies: true, groupBy: 'targetId', dedupeWindowMs: 900_000 },
   'content.mention.created': { notifies: true },
+
+  // A challenge to your work is worth knowing about immediately, and there is
+  // no burst to collapse: one person proposes one correction at a time.
+  'content.correction.proposed': { notifies: true },
+  'content.correction.accepted': { notifies: true },
+  // A rejection is deliberately quiet. The proposer can see the status on the
+  // content; a push notification saying "you were wrong" is not a thing this
+  // product should send.
+  'content.correction.rejected': { notifies: false },
 
   'conversation.created': { notifies: false },
   'message.created': { notifies: true, groupBy: 'targetId', dedupeWindowMs: 300_000 },

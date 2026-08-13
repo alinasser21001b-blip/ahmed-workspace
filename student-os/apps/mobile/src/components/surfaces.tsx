@@ -90,7 +90,16 @@ export function Avatar({
 
 export type BadgeTone = 'neutral' | 'primary' | 'learning' | 'warning' | 'danger';
 
-export function Badge({ label, tone = 'neutral' }: { label: string; tone?: BadgeTone }): React.JSX.Element {
+export function Badge({
+  label,
+  tone = 'neutral',
+  onPress,
+}: {
+  label: string;
+  tone?: BadgeTone;
+  /** When set the badge becomes a control — a topic chip opens its topic. */
+  onPress?: (() => void) | undefined;
+}): React.JSX.Element {
   const theme = useTheme();
   const backgrounds: Record<BadgeTone, string> = {
     neutral: theme.colors.background,
@@ -107,20 +116,28 @@ export function Badge({ label, tone = 'neutral' }: { label: string; tone?: Badge
     danger: 'danger',
   } as const;
 
-  return (
-    <View
-      style={{
-        backgroundColor: backgrounds[tone],
-        borderRadius: theme.radius.pill,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.xxs,
-        alignSelf: 'flex-start',
-      }}
-    >
-      <Text variant="micro" tone={tones[tone]}>
-        {label}
-      </Text>
-    </View>
+  const style = {
+    backgroundColor: backgrounds[tone],
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xxs,
+    alignSelf: 'flex-start' as const,
+  };
+
+  const content = (
+    <Text variant="micro" tone={tones[tone]} bidi="auto">
+      {label}
+    </Text>
+  );
+
+  // A badge with a press handler is a control and is announced as one; without
+  // it, it stays a plain label rather than becoming an inert button.
+  return onPress ? (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={style} hitSlop={6}>
+      {content}
+    </Pressable>
+  ) : (
+    <View style={style}>{content}</View>
   );
 }
 

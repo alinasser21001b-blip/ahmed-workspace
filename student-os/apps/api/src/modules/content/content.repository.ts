@@ -1,4 +1,10 @@
-import type { AccountStatus, ContentKind, ReactionKind, Visibility } from '@sos/contracts';
+import type {
+  AccountStatus,
+  ContentKind,
+  KnowledgeType,
+  ReactionKind,
+  Visibility,
+} from '@sos/contracts';
 import type { ContentRef, VisibilityScopes } from '@sos/core';
 import { queryOne, queryRows, type Sql } from '../../platform/db.js';
 import { buildContentByIdQuery, buildFeedQuery, type FeedQueryOptions } from './feed.sql.js';
@@ -10,6 +16,9 @@ import { buildContentByIdQuery, buildFeedQuery, type FeedQueryOptions } from './
 export interface ContentRow {
   id: string;
   kind: ContentKind;
+  knowledge_type: KnowledgeType | null;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
+  language: string | null;
   author_id: string;
   body: string | null;
   visibility: Visibility;
@@ -53,6 +62,10 @@ export interface InsertContentInput {
   authorId: string;
   body: string | null;
   visibility: Visibility;
+  knowledgeType: KnowledgeType | null;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
+  /** Derived deterministically from the body — never supplied by the client. */
+  language: string | null;
   universityId: string | null;
   collegeId: string | null;
   programId: string | null;
@@ -71,8 +84,10 @@ export async function insertContent(
     `INSERT INTO content_items (
        kind, author_id, body, visibility,
        university_id, college_id, program_id, stage_id,
-       course_id, subject_id, community_id, group_id
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       course_id, subject_id, community_id, group_id,
+       knowledge_type, difficulty, language
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+               $13::knowledge_type, $14::difficulty_level, $15)
      RETURNING id`,
     [
       input.kind,
@@ -87,6 +102,9 @@ export async function insertContent(
       input.subjectId,
       input.communityId,
       input.groupId,
+      input.knowledgeType,
+      input.difficulty,
+      input.language,
     ],
     client,
   );

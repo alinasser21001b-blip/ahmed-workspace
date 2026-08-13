@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
@@ -186,7 +187,86 @@ await api('/v1/content', {
   },
 });
 
-console.log(`  cohort ready — @${handle}, group ${group.id}\n`);
+/*
+ * A conversation with real content, so the thread screen is audited with
+ * bubbles, a date separator and a composer rather than as an empty state.
+ */
+const partner = await api('/v1/auth/signup', {
+  method: 'POST',
+  body: { email: `rtl-partner-${stamp}@uob.edu.iq`, password: PASSWORD },
+});
+await api('/v1/me/onboarding', {
+  method: 'POST',
+  token: partner.tokens.accessToken,
+  body: {
+    handle: `rtlp_${stamp.toString(36)}`.slice(0, 30),
+    displayName: 'زينب الحسيني',
+    universityId: university.id,
+    collegeId: college.id,
+    programId: program.id,
+    stageId: stage.id,
+    academicYearId: year.id,
+    interestTopicIds: topics.slice(0, 1).map((t) => t.id),
+  },
+});
+
+const directConversation = await api('/v1/conversations', {
+  method: 'POST',
+  token,
+  body: { recipientHandle: `rtlp_${stamp.toString(36)}`.slice(0, 30) },
+});
+for (const [sender, body] of [
+  [token, 'سؤال سريع عن المحاضرة الأخيرة، هل عندك الملخص؟'],
+  [partner.tokens.accessToken, 'Yes — I uploaded it earlier. Check the group files.'],
+  [token, 'شكراً جزيلاً، سأراجعه الليلة قبل الامتحان النهائي إن شاء الله.'],
+]) {
+  await api(`/v1/conversations/${directConversation.id}/messages`, {
+    method: 'POST',
+    token: sender,
+    body: { clientMessageId: randomUUID(), body },
+  });
+}
+
+/*
+ * A classified post with a citation and an open correction against it. The
+ * Phase 5 surfaces are all badges and chip rows, which are exactly what wraps
+ * badly at a narrow width in the wrong direction — auditing them empty would
+ * prove nothing.
+ */
+const classified = await api('/v1/content', {
+  method: 'POST',
+  token,
+  body: {
+    body: 'الوذمة في المتلازمة الكلوية تنتج عن فقدان الألبومين في البول وانخفاض الضغط الجرمي في البلازما، وليس عن احتباس الصوديوم وحده.',
+    visibility: 'stage',
+    mediaFileIds: [],
+    topicIds: topics.slice(0, 2).map((t) => t.id),
+    knowledgeType: 'explanation',
+    difficulty: 'medium',
+  },
+});
+await api(`/v1/content/${classified.id}/sources`, {
+  method: 'POST',
+  token,
+  body: {
+    kind: 'textbook',
+    citation: 'Nelson Textbook of Pediatrics, 22nd edition',
+    url: null,
+    fileId: null,
+    pageRef: 'p. 2752',
+  },
+});
+// Proposed by the partner: the author cannot correct their own content.
+await api(`/v1/content/${classified.id}/corrections`, {
+  method: 'POST',
+  token: partner.tokens.accessToken,
+  body: {
+    body: 'الآلية الحديثة تصف خللاً أولياً في قناة الصوديوم بالأنبوب الجامع، فالعبارة أعلاه ناقصة وليست خاطئة تماماً.',
+    source: null,
+  },
+});
+
+console.log(`  cohort ready — @${handle}, group ${group.id}, conversation ${directConversation.id}\n`);
 
 // --- the audit --------------------------------------------------------------
 
@@ -198,6 +278,8 @@ if (SHOTS) await mkdir(SHOTS, { recursive: true });
 
 const SCREENS = [
   { name: 'feed', path: '/' },
+  { name: 'chat-list', path: '/(tabs)/chat' },
+  { name: 'chat-thread', path: `/chat/${directConversation.id}` },
   { name: 'groups', path: '/(tabs)/groups' },
   { name: 'group-detail', path: `/group/${group.id}` },
   { name: 'group-new', path: '/group/new' },
@@ -206,6 +288,10 @@ const SCREENS = [
   { name: 'compose', path: '/compose' },
   { name: 'learn', path: '/(tabs)/learn' },
   { name: 'chat', path: '/(tabs)/chat' },
+  // Phase 5. Both are dense chip rows over mixed-direction text, which is the
+  // shape that wraps badly in one direction and looks fine in the other.
+  { name: 'post-knowledge', path: `/post/${classified.id}` },
+  { name: 'topic', path: `/topic/${topics[0].id}` },
 ];
 
 for (const viewport of VIEWPORTS) {
