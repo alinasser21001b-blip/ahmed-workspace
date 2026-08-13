@@ -13,6 +13,23 @@ Expo / React Native skill set, reachable through the `/skillpro` command
 
 `LICENSE-expo` is the upstream MIT license covering the vendored skills.
 
+## Using them in every project
+
+This directory is project-scoped. To make the skills and `/skillpro` available in **all** projects on
+a machine, install them into `~/.claude`:
+
+```bash
+bash scripts/install-skillpro.sh              # install or update
+bash scripts/install-skillpro.sh --uninstall  # remove
+```
+
+It copies each skill to `~/.claude/skills/<name>` and the command to
+`~/.claude/commands/skillpro.md`, replacing only what it owns. `~/.claude/skills/synced` (skills from
+your Claude account) is left alone. Set `CLAUDE_CONFIG_DIR` to target a different config directory.
+
+This repository stays the source of truth: re-run the installer after pulling changes, and on any
+new machine or fresh remote session, since `~/.claude` is not part of the repo.
+
 ## Deliberate omissions
 
 - **`expo-skill-feedback`** — its telemetry commands resolve `${CLAUDE_PLUGIN_ROOT}`, which only
