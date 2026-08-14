@@ -62,28 +62,64 @@ surface to be covered by fast unit tests instead of slow integration tests.
 
 ## Getting started
 
-Requires Node 22+, pnpm, PostgreSQL 16.
+Requires Node 22+, pnpm, and a running PostgreSQL 16.
 
 ```bash
 pnpm install
+pnpm dev
+```
 
-# database
-createdb studentos_dev && createdb studentos_test
-cp apps/api/.env.example apps/api/.env     # then set JWT_SECRET
-pnpm db:migrate
-pnpm db:seed                                # University of Baghdad → Medicine → Stage 5
+`pnpm dev` finds your PostgreSQL, **creates the databases if they do not exist**,
+migrates them, seeds the academic hierarchy and a small demo cohort, then starts
+the API and the web client together. There is no connection string to configure:
+it tries the usual local ones — a Homebrew install that trusts your login user, a
+Debian one that wants `postgres`/`postgres` — and uses the first that answers.
+Set `DATABASE_URL` yourself and that wins instead. Open the URL it
+prints — **http://localhost:8081** — and sign in with any of the accounts it
+lists (password `correct-horse-battery`):
 
-# run
-pnpm dev:api                                # http://localhost:4000
-pnpm dev:mobile                             # Expo dev server
+| account | what it shows |
+|---|---|
+| `amjad@uob.edu.iq` | verified instructor and platform administrator — sees the join code, the draft lecture, and can open a classroom |
+| `zainab@uob.edu.iq` | ordinary student |
+| `omar@uob.edu.iq` | ordinary student |
+
+Both servers reload on save; Ctrl-C stops them together.
+
+### Configuration
+
+Configuration comes from the **process environment**, not from a `.env` file —
+nothing in the codebase loads one, which is how CI supplies it too. `pnpm dev`
+exports working defaults, and sources `apps/api/.env` first if you have created
+one, so customising it still works:
+
+| variable | default under `pnpm dev` | required in production |
+|---|---|---|
+| `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/studentos_dev` | yes |
+| `JWT_SECRET` | a development value | yes, ≥32 chars |
+| `PORT` | `4000` | no |
+| `EXPO_PUBLIC_API_URL` | `http://localhost:4000` | **yes, at build time** |
+
+`EXPO_PUBLIC_API_URL` is the one that bites. A web bundle has no runtime
+environment, so the API address is frozen in at build time:
+`pnpm --filter @sos/mobile build:web` **refuses to build without it** rather
+than shipping an app addressed to the machine that built it.
+
+### Running the individual pieces
+
+```bash
+pnpm dev:api      # API only, http://localhost:4000
+pnpm dev:mobile   # Expo dev server only (device/simulator)
+pnpm db:reset     # drop and rebuild the schema from the migrations
+pnpm demo:seed    # demo cohort (needs the API running; idempotent)
 ```
 
 ## Tests
 
 ```bash
 pnpm typecheck          # all four packages
-pnpm test:unit          # 223 unit tests (@sos/core + @sos/api), no database needed
-pnpm test:integration   # 167 integration tests against real Postgres
+pnpm test:unit          # 261 unit tests (@sos/core, @sos/api, @sos/mobile), no database needed
+pnpm test:integration   # 219 integration tests against real Postgres
 ```
 
 Integration tests run against a **real database**, not a mock. Permission bugs
