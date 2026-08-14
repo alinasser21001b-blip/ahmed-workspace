@@ -105,7 +105,7 @@ export async function startSession(
 
   return withTransaction(async (client) => {
     const attempt = await repo.startOrResumeAttempt(
-      { quizId: quiz.quiz_id, userId: actor.userId },
+      { quizId: quiz.quiz_id, userId: actor.userId, topicId: quiz.topic_id },
       client,
     );
 
@@ -180,16 +180,43 @@ export async function submitAnswer(
      * Ownership is in the WHERE clause. Another student's attempt id does not
      * come back, so this is a 404 and not a 403 — the same 404-not-403 rule the
      * rest of the API follows, and the reason a probe cannot confirm that an
-     * attempt exists.
+     * attempt exists. Submitted attempts ARE found — see the retry path below.
      */
     const attempt = await repo.lockAttempt({ attemptId, userId: actor.userId }, client);
     if (!attempt) throw errors.notFound('practice attempt');
 
+    /*
+     * The question is resolved inside the attempt's quiz AND the attempt's
+     * topic. The topic scope is the boundary invariant: a quiz may hold
+     * questions from several topics, and without it a valid question id from
+     * Topic B, submitted through an attempt started for Topic A, would grade
+     * and roll into B's progress. Outside the boundary the question is simply
+     * not found — never refused — so the probe learns nothing.
+     */
     const question = await repo.findGradableQuestion(
-      { quizId: attempt.quiz_id, questionId: body.questionId },
+      { quizId: attempt.quiz_id, topicId: attempt.topic_id, questionId: body.questionId },
       client,
     );
     if (!question) throw errors.notFound('question');
+
+    /*
+     * A submitted attempt answers retries and accepts nothing new.
+     *
+     * The final answer of a set writes the answer AND closes the attempt in one
+     * transaction. When that response is lost on the wire, the client retries a
+     * request that already succeeded — and the retry arrives at a submitted
+     * attempt. The stored verdict is returned, identical to the response that
+     * was lost, and nothing moves.
+     *
+     * A question this attempt never answered — one added to the quiz after
+     * submission, say — is a 404: the attempt is closed, and for new writes a
+     * closed attempt is indistinguishable from an absent one.
+     */
+    if (attempt.status === 'submitted') {
+      const stored = await repo.findStoredAnswer({ attemptId, questionId: question.id }, client);
+      if (!stored) throw errors.notFound('practice attempt');
+      return storedResult({ question, stored, attemptCompleted: true }, actor, client);
+    }
 
     const grade = gradeSelection(
       {
@@ -218,24 +245,12 @@ export async function submitAnswer(
      * what the student's progress was actually built from.
      */
     if (!inserted) {
-      const stored = await repo.findStoredAnswer(
-        { attemptId, questionId: question.id },
+      const stored = await repo.findStoredAnswer({ attemptId, questionId: question.id }, client);
+      return storedResult(
+        { question, stored, attemptCompleted: false },
+        actor,
         client,
       );
-      const topicId = question.topic_id;
-      const current = topicId
-        ? await repo.findTopicProgress({ userId: actor.userId, topicId }, client)
-        : null;
-      return {
-        questionId: question.id,
-        isCorrect: stored?.is_correct ?? false,
-        correctOptionIds: question.correct_option_ids,
-        explanation: question.explanation,
-        pointsAwarded: Number(stored?.points_awarded ?? 0),
-        alreadyAnswered: true,
-        attemptCompleted: false,
-        progress: topicId ? projectProgress(topicId, current) : null,
-      };
     }
 
     /*
@@ -302,6 +317,39 @@ export async function submitAnswer(
       progress,
     };
   });
+}
+
+/**
+ * The stored verdict, projected the same way whichever path re-asked for it.
+ *
+ * Used for both idempotent returns — the same question resubmitted while the
+ * attempt is open, and any retry arriving after the attempt closed. The result
+ * reproduces the response the first submission produced (with `alreadyAnswered`
+ * flagged), so a client that lost the original learns exactly what it missed.
+ */
+async function storedResult(
+  input: {
+    question: { id: string; topic_id: string | null; explanation: string | null; correct_option_ids: string[] };
+    stored: { is_correct: boolean; points_awarded: string } | null;
+    attemptCompleted: boolean;
+  },
+  actor: Actor,
+  client: Sql,
+): Promise<PracticeAnswerResult> {
+  const topicId = input.question.topic_id;
+  const current = topicId
+    ? await repo.findTopicProgress({ userId: actor.userId, topicId }, client)
+    : null;
+  return {
+    questionId: input.question.id,
+    isCorrect: input.stored?.is_correct ?? false,
+    correctOptionIds: input.question.correct_option_ids,
+    explanation: input.question.explanation,
+    pointsAwarded: Number(input.stored?.points_awarded ?? 0),
+    alreadyAnswered: true,
+    attemptCompleted: input.attemptCompleted,
+    progress: topicId ? projectProgress(topicId, current) : null,
+  };
 }
 
 /**

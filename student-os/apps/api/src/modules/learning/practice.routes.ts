@@ -61,9 +61,11 @@ export const practiceRoutes: FastifyPluginAsyncZod = async (app) => {
         summary: 'Answer one practice question',
         description:
           'Grades the selection on the server, records it, and rolls it into the student’s ' +
-          'per-topic learning signal — all in one transaction. Answering the same question ' +
-          'twice in one attempt changes nothing and returns the stored verdict. An attempt ' +
-          'that belongs to another student is a 404, not a 403.',
+          'per-topic learning signal — all in one transaction. Retrying a submission changes ' +
+          'nothing and returns the stored verdict — including a retry of the final answer, ' +
+          'which arrives after the attempt has closed itself. Only questions from the ' +
+          'attempt’s own topic are answerable. An attempt that belongs to another student ' +
+          'is a 404, not a 403.',
         params: z.object({ attemptId: uuidSchema }),
         body: submitPracticeAnswerRequestSchema,
         response: { 200: practiceAnswerResultSchema, 404: errorEnvelopeSchema },

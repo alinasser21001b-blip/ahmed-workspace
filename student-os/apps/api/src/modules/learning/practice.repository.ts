@@ -116,7 +116,7 @@ export async function hasPracticableQuestions(
 }
 
 /**
- * The student's open attempt on this quiz, or a new one.
+ * The student's open attempt on this quiz FOR THIS TOPIC, or a new one.
  *
  * `quiz_attempts_one_active` (0005) is a unique index on (quiz_id, user_id)
  * where status = 'in_progress', so this is an upsert against that constraint
@@ -124,21 +124,47 @@ export async function hasPracticableQuestions(
  * student cannot produce two attempts. `DO UPDATE` on a no-op column is what
  * makes `RETURNING` yield the existing row — `DO NOTHING` would return none and
  * force a second round trip.
+ *
+ * The topic is part of the attempt's identity (0014), and an open attempt for a
+ * DIFFERENT topic of the same quiz is not resumable from here: resuming it
+ * would either serve Topic B questions under an attempt started for Topic A, or
+ * silently re-point the attempt mid-flight so one attempt mutates two topics'
+ * progress. It is closed as `abandoned` — its answered questions already rolled
+ * up, nothing is lost — and a fresh attempt is opened for the topic actually
+ * asked for. The upsert's `DO UPDATE` row lock is what makes the
+ * abandon-then-insert race-free: a concurrent start holds the same row.
  */
 export async function startOrResumeAttempt(
-  input: { quizId: string; userId: string },
+  input: { quizId: string; userId: string; topicId: string },
   client: Sql,
 ): Promise<{ id: string; is_new: boolean }> {
-  const row = await queryOne<{ id: string; is_new: boolean }>(
-    `INSERT INTO quiz_attempts (quiz_id, user_id, status)
-     VALUES ($1, $2, 'in_progress')
+  const row = await queryOne<{ id: string; topic_id: string | null; is_new: boolean }>(
+    `INSERT INTO quiz_attempts (quiz_id, user_id, topic_id, status)
+     VALUES ($1, $2, $3, 'in_progress')
      ON CONFLICT (quiz_id, user_id) WHERE status = 'in_progress'
        DO UPDATE SET quiz_id = EXCLUDED.quiz_id
-     RETURNING id, (xmax = 0) AS is_new`,
-    [input.quizId, input.userId],
+     RETURNING id, topic_id, (xmax = 0) AS is_new`,
+    [input.quizId, input.userId, input.topicId],
     client,
   );
-  return row!;
+
+  if (!row!.is_new && row!.topic_id !== input.topicId) {
+    await queryOne(
+      `UPDATE quiz_attempts SET status = 'abandoned' WHERE id = $1 RETURNING id`,
+      [row!.id],
+      client,
+    );
+    const fresh = await queryOne<{ id: string }>(
+      `INSERT INTO quiz_attempts (quiz_id, user_id, topic_id, status)
+       VALUES ($1, $2, $3, 'in_progress')
+       RETURNING id`,
+      [input.quizId, input.userId, input.topicId],
+      client,
+    );
+    return { id: fresh!.id, is_new: true };
+  }
+
+  return { id: row!.id, is_new: row!.is_new };
 }
 
 export interface SessionQuestionRow {
@@ -190,15 +216,25 @@ export async function listSessionQuestions(
 export interface AttemptRow {
   id: string;
   quiz_id: string;
-  status: string;
+  topic_id: string | null;
+  status: 'in_progress' | 'submitted';
 }
 
 /**
- * Locks the student's own in-progress attempt for the duration of a submission.
+ * Locks the student's own attempt for the duration of a submission.
  *
  * Ownership is part of the predicate, not a check afterwards: another student's
  * attempt id returns null and the service raises a 404, so the response cannot
  * confirm that the attempt exists.
+ *
+ * `submitted` attempts ARE matched, on purpose. The final answer of a set both
+ * writes the answer and closes the attempt in one transaction — so when that
+ * response is lost on the wire and the client retries, the retry arrives at a
+ * submitted attempt. Matching it is what lets the service return the stored
+ * verdict instead of a 404 for a request that already succeeded. What a
+ * submitted attempt never does is accept a NEW answer; the service enforces
+ * that from the `status` returned here. `abandoned` attempts are not matched:
+ * they were closed unanswered, and nothing about them was ever acknowledged.
  *
  * `FOR UPDATE` is what makes two simultaneous submissions of the same answer
  * serialise. Without it both transactions read "not yet answered", both grade,
@@ -210,9 +246,9 @@ export async function lockAttempt(
   client: Sql,
 ): Promise<AttemptRow | null> {
   return queryOne<AttemptRow>(
-    `SELECT id, quiz_id, status::text AS status
+    `SELECT id, quiz_id, topic_id, status::text AS status
      FROM quiz_attempts
-     WHERE id = $1::uuid AND user_id = $2::uuid AND status = 'in_progress'
+     WHERE id = $1::uuid AND user_id = $2::uuid AND status IN ('in_progress', 'submitted')
      FOR UPDATE`,
     [input.attemptId, input.userId],
     client,
@@ -231,12 +267,18 @@ export interface GradableQuestionRow {
 /**
  * A question with its key, for grading.
  *
- * Scoped to the attempt's quiz, so a question id borrowed from a quiz the
- * student is not attempting resolves to nothing rather than being graded
- * against the wrong attempt.
+ * Scoped to the attempt's quiz AND the attempt's topic. The quiz scope stops a
+ * question id borrowed from another quiz; the topic scope stops the subtler
+ * attack the quiz scope alone permits — a quiz whose questions span Topics A
+ * and B, where an attempt started for A is handed a perfectly valid question id
+ * from B. Both resolve to nothing rather than to a refusal, so neither probe
+ * learns that the id was real.
+ *
+ * A null `topicId` (an attempt from before 0014) applies no topic restriction,
+ * which is the behaviour those attempts had when they were created.
  */
 export async function findGradableQuestion(
-  input: { quizId: string; questionId: string },
+  input: { quizId: string; topicId: string | null; questionId: string },
   client: Sql,
 ): Promise<GradableQuestionRow | null> {
   return queryOne<GradableQuestionRow>(
@@ -253,8 +295,9 @@ export async function findGradableQuestion(
      FROM quiz_questions qq
      WHERE qq.id = $2::uuid
        AND qq.quiz_id = $1::uuid
+       AND ($3::uuid IS NULL OR qq.topic_id = $3::uuid)
        AND qq.kind IN ${GRADABLE_KINDS}`,
-    [input.quizId, input.questionId],
+    [input.quizId, input.questionId, input.topicId],
     client,
   );
 }

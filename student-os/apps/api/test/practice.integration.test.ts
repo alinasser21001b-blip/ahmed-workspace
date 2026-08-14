@@ -294,7 +294,7 @@ describe('a progress mutation happens exactly once, for exactly one student', ()
     expect(after).toMatchObject({ questions_seen: 1, questions_correct: 0 });
   });
 
-  it('a finished attempt accepts nothing further, and counts nothing further', async () => {
+  it('a finished attempt counts nothing further', async () => {
     const topicId = await freshTopic('موضوع تدريبي');
     const questionId = await oneQuestionOn(topicId);
     const student = await onboardedUser();
@@ -304,11 +304,17 @@ describe('a progress mutation happens exactly once, for exactly one student', ()
     const first = await answer(student, session.attemptId, questionId, key);
     expect(first.body.attemptCompleted).toBe(true);
 
-    // The attempt is submitted, so it is no longer a thing that can be written
-    // to — and a closed attempt is indistinguishable from one that never
-    // existed, which is the same 404-not-403 rule applied to state.
+    /*
+     * A repeat of the final submission is ANSWERED — with the stored verdict —
+     * because a lost HTTP response makes the client retry a request that
+     * already succeeded, and 404ing it would tell a student their real answer
+     * vanished. What a finished attempt never does is move a counter. The
+     * closed-for-new-writes half of the invariant has its own test in the
+     * retry describe block.
+     */
     const late = await answer(student, session.attemptId, questionId, key);
-    expect(late.statusCode).toBe(404);
+    expect(late.statusCode).toBe(200);
+    expect(late.body.alreadyAnswered).toBe(true);
 
     const after = await readProgressRow(student.session.user.id, topicId);
     expect(after).toMatchObject({ questions_seen: 1, questions_correct: 1 });
@@ -415,6 +421,249 @@ describe('a progress mutation happens exactly once, for exactly one student', ()
       headers: auth(student.session),
     });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+// --- the topic boundary -----------------------------------------------------
+
+describe('an attempt is bound to the topic it was started for', () => {
+  /** One quiz whose questions span two topics — the adversarial shape. */
+  async function mixedQuiz(topicA: string, topicB: string): Promise<{
+    aQuestion: string;
+    bQuestion: string;
+  }> {
+    const { questionIds } = await seedPracticeQuiz({
+      courseId: cohort.courseIds[0]!,
+      title: 'Mixed-topic quiz',
+      questions: [
+        {
+          topicId: topicA,
+          prompt: 'سؤال الموضوع أ',
+          options: [
+            { label: 'صحيح', correct: true },
+            { label: 'خاطئ', correct: false },
+          ],
+        },
+        {
+          topicId: topicB,
+          prompt: 'سؤال الموضوع ب',
+          options: [
+            { label: 'صحيح', correct: true },
+            { label: 'خاطئ', correct: false },
+          ],
+        },
+      ],
+    });
+    return { aQuestion: questionIds[0]!, bQuestion: questionIds[1]! };
+  }
+
+  it('rejects a valid question from another topic of the same quiz', async () => {
+    const topicA = await freshTopic('موضوع أ');
+    const topicB = await freshTopic('موضوع ب');
+    const { bQuestion } = await mixedQuiz(topicA, topicB);
+    const student = await onboardedUser();
+
+    const session = await startPractice(student, topicA);
+    // The session itself never offered the Topic B question.
+    expect(session.questions.some((q) => q.id === bQuestion)).toBe(false);
+
+    // Submit it anyway — a real question id, in this attempt's own quiz.
+    const attack = await answer(
+      student,
+      session.attemptId,
+      bQuestion,
+      await correctOptionIds(bQuestion),
+    );
+
+    // Not found, not refused: the probe must not learn the id was real.
+    expect(attack.statusCode).toBe(404);
+  });
+
+  it('leaves the other topic’s progress untouched by the rejected submission', async () => {
+    const topicA = await freshTopic('موضوع أ');
+    const topicB = await freshTopic('موضوع ب');
+    const { bQuestion } = await mixedQuiz(topicA, topicB);
+    const student = await onboardedUser();
+
+    const session = await startPractice(student, topicA);
+    await answer(student, session.attemptId, bQuestion, await correctOptionIds(bQuestion));
+
+    expect(await readProgressRow(student.session.user.id, topicB)).toBeNull();
+    expect(await readProgressRow(student.session.user.id, topicA)).toBeNull();
+    const answers = await queryOne<{ n: number }>(
+      `SELECT count(*)::int AS n FROM quiz_answers WHERE attempt_id = $1`,
+      [session.attemptId],
+    );
+    expect(answers!.n).toBe(0);
+  });
+
+  it('cannot be completed by answering another topic’s questions', async () => {
+    const topicA = await freshTopic('موضوع أ');
+    const topicB = await freshTopic('موضوع ب');
+    const { aQuestion, bQuestion } = await mixedQuiz(topicA, topicB);
+    const student = await onboardedUser();
+
+    const session = await startPractice(student, topicA);
+    // The Topic B question bounces; the attempt must still be open and waiting
+    // for its own single question.
+    await answer(student, session.attemptId, bQuestion, await correctOptionIds(bQuestion));
+
+    const open = await queryOne<{ status: string }>(
+      `SELECT status::text AS status FROM quiz_attempts WHERE id = $1`,
+      [session.attemptId],
+    );
+    expect(open!.status).toBe('in_progress');
+
+    // Its own question closes it — one question on Topic A is the whole set.
+    const own = await answer(
+      student,
+      session.attemptId,
+      aQuestion,
+      await correctOptionIds(aQuestion),
+    );
+    expect(own.body.attemptCompleted).toBe(true);
+  });
+
+  it('starting the other topic on the same quiz opens a NEW attempt, not the old one', async () => {
+    const topicA = await freshTopic('موضوع أ');
+    const topicB = await freshTopic('موضوع ب');
+    const { aQuestion, bQuestion } = await mixedQuiz(topicA, topicB);
+    const student = await onboardedUser();
+
+    const sessionA = await startPractice(student, topicA);
+    const sessionB = await startPractice(student, topicB);
+
+    // Same quiz, different topic ⇒ a different attempt. Resuming the Topic A
+    // attempt for Topic B would let one attempt mutate two topics' progress.
+    expect(sessionB.quizId).toBe(sessionA.quizId);
+    expect(sessionB.attemptId).not.toBe(sessionA.attemptId);
+
+    // The Topic A attempt was closed, its answers already rolled up; only the
+    // Topic B attempt is live.
+    const statuses = await queryRows<{ id: string; status: string }>(
+      `SELECT id, status::text AS status FROM quiz_attempts WHERE user_id = $1 ORDER BY started_at`,
+      [student.session.user.id],
+    );
+    expect(statuses.find((row) => row.id === sessionA.attemptId)!.status).toBe('abandoned');
+    expect(statuses.find((row) => row.id === sessionB.attemptId)!.status).toBe('in_progress');
+
+    // And each attempt answers only its own topic.
+    const aViaB = await answer(
+      student,
+      sessionB.attemptId,
+      aQuestion,
+      await correctOptionIds(aQuestion),
+    );
+    expect(aViaB.statusCode).toBe(404);
+    const bViaB = await answer(
+      student,
+      sessionB.attemptId,
+      bQuestion,
+      await correctOptionIds(bQuestion),
+    );
+    expect(bViaB.statusCode).toBe(200);
+    expect(await readProgressRow(student.session.user.id, topicB)).toMatchObject({
+      questions_seen: 1,
+      questions_correct: 1,
+    });
+    expect(await readProgressRow(student.session.user.id, topicA)).toBeNull();
+  });
+});
+
+// --- the retry after the attempt closed -------------------------------------
+
+describe('a retry after the attempt closed is answered, not 404d', () => {
+  it('returns the stored verdict for a lost final-answer response, and moves nothing', async () => {
+    const topicId = await freshTopic('موضوع تدريبي');
+    const questionId = await oneQuestionOn(topicId);
+    const student = await onboardedUser();
+    const session = await startPractice(student, topicId);
+    const key = await correctOptionIds(questionId);
+
+    // The final answer: writes the observation AND closes the attempt.
+    const original = await answer(student, session.attemptId, questionId, key);
+    expect(original.body.attemptCompleted).toBe(true);
+
+    const closed = await queryOne<{ status: string }>(
+      `SELECT status::text AS status FROM quiz_attempts WHERE id = $1`,
+      [session.attemptId],
+    );
+    expect(closed!.status).toBe('submitted');
+
+    // The response is lost; the client retries the identical request.
+    const retry = await answer(student, session.attemptId, questionId, key);
+
+    // Answered with what the original response said — not a 404 for a request
+    // that already succeeded.
+    expect(retry.statusCode).toBe(200);
+    expect(retry.body.isCorrect).toBe(original.body.isCorrect);
+    expect(retry.body.attemptCompleted).toBe(true);
+    expect(retry.body.alreadyAnswered).toBe(true);
+    expect(retry.body.progress).toMatchObject({
+      questionsSeen: original.body.progress!.questionsSeen,
+      questionsCorrect: original.body.progress!.questionsCorrect,
+    });
+
+    // And nothing moved: one answer row, one event, the same counters.
+    const answers = await queryOne<{ n: number }>(
+      `SELECT count(*)::int AS n FROM quiz_answers WHERE attempt_id = $1`,
+      [session.attemptId],
+    );
+    expect(answers!.n).toBe(1);
+    const events = await queryOne<{ n: number }>(
+      `SELECT count(*)::int AS n FROM learning_events
+       WHERE user_id = $1 AND kind = 'practice_question_answered' AND subject_ref_id = $2`,
+      [student.session.user.id, questionId],
+    );
+    expect(events!.n).toBe(1);
+    expect(await readProgressRow(student.session.user.id, topicId)).toMatchObject({
+      questions_seen: 1,
+      questions_correct: 1,
+    });
+  });
+
+  it('a submitted attempt refuses a question it never answered', async () => {
+    const topicId = await freshTopic('موضوع تدريبي');
+    const questionId = await oneQuestionOn(topicId);
+    const student = await onboardedUser();
+    const session = await startPractice(student, topicId);
+    await answer(student, session.attemptId, questionId, await correctOptionIds(questionId));
+
+    // A question added to the same quiz and topic AFTER the attempt closed.
+    const late = await queryOne<{ id: string }>(
+      `INSERT INTO quiz_questions (quiz_id, topic_id, kind, prompt, points, ordinal)
+       VALUES ($1, $2, 'mcq_single', 'سؤال متأخر', 1, 9)
+       RETURNING id`,
+      [session.quizId, topicId],
+    );
+    await queryOne(
+      `INSERT INTO quiz_options (question_id, label, is_correct, ordinal)
+       VALUES ($1, 'صحيح', true, 0) RETURNING id`,
+      [late!.id],
+    );
+
+    const attempt = await answer(student, session.attemptId, late!.id, await correctOptionIds(late!.id));
+
+    // Closed for new writes — indistinguishable from absent.
+    expect(attempt.statusCode).toBe(404);
+    expect(await readProgressRow(student.session.user.id, topicId)).toMatchObject({
+      questions_seen: 1,
+      questions_correct: 1,
+    });
+  });
+
+  it('another student cannot read a submitted attempt’s verdict either', async () => {
+    const topicId = await freshTopic('موضوع تدريبي');
+    const questionId = await oneQuestionOn(topicId);
+    const [owner, intruder] = await Promise.all([onboardedUser(), onboardedUser()]);
+    const session = await startPractice(owner, topicId);
+    const key = await correctOptionIds(questionId);
+    await answer(owner, session.attemptId, questionId, key);
+
+    // The retry path must not have widened ownership: the stored verdict is
+    // the owner's to re-read and nobody else's.
+    const probe = await answer(intruder, session.attemptId, questionId, key);
+    expect(probe.statusCode).toBe(404);
   });
 });
 
