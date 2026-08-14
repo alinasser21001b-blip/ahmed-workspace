@@ -130,10 +130,41 @@ async function boot(): Promise<App> {
   );
   await seedAcademicHierarchy();
 
+  await ensureAdministrator();
+
   const { buildApp } = await import('../../apps/api/dist/http/app.js');
   const app = await buildApp();
   await app.ready();
   return app;
+}
+
+/**
+ * The first administrator, for a host with no shell.
+ *
+ * `pnpm --filter @sos/api admin:bootstrap` assumes someone with a terminal and
+ * a database connection string. Neither exists here, and a deployment with
+ * nobody who can administer it cannot verify an instructor, which means it
+ * cannot have a classroom, which means most of the product is unreachable.
+ *
+ * Both variables are required together, and the whole thing is skipped when
+ * either is missing — so a deployment that says nothing about an administrator
+ * gets no administrator, rather than a default one.
+ */
+async function ensureAdministrator(): Promise<void> {
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL;
+  const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  if (!email || !password) return;
+
+  const { ensureBootstrapAdmin } = await import(
+    '../../apps/api/dist/modules/admin/admin.bootstrap.js'
+  );
+  const result = await ensureBootstrapAdmin({ email, password });
+  // One line, on the boot path, so the deploy log says which account was made
+  // and whether this run is the one that made it. Never the password.
+  console.log(
+    `[bootstrap] ${result.email} is a platform administrator ` +
+      `(created=${result.created}, alreadyAdmin=${result.wasAlreadyAdmin})`,
+  );
 }
 
 let booting: Promise<App> | null = null;
