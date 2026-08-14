@@ -7,12 +7,6 @@
   "engines": {
     "node": ">=22"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "argon2"
-    ]
-  },
   "scripts": {
     "build": "pnpm -r --filter \"./packages/**\" build && pnpm --filter @sos/api build",
     "dev": "bash scripts/dev.sh",
