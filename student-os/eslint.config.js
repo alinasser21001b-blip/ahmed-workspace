@@ -15,6 +15,10 @@ export default tseslint.config(
       '**/.expo/**',
       '**/coverage/**',
       'apps/mobile/dist/**',
+      // Build output: the packaged API function, three megabytes of bundled
+      // dependencies. Linting it says nothing about this codebase and drowns
+      // anything that does.
+      'netlify/functions/**',
     ],
   },
   js.configs.recommended,
