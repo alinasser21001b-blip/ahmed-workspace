@@ -31,6 +31,34 @@
 export const DEV_API_BASE_URL = 'http://localhost:4000';
 
 /**
+ * "The API is wherever this page came from."
+ *
+ * For a deployment that serves the client and the API from one origin, which is
+ * how this product is deployed. Naming the origin in that arrangement is not
+ * just redundant, it is a live hazard, and both halves of it were hit on the
+ * first real deploy:
+ *
+ *   * the host baked in was the deploy's own branch subdomain, which the person
+ *     opening the site was not on;
+ *   * and it was `http://`, which a browser refuses outright from an `https://`
+ *     page as mixed content.
+ *
+ * In both cases `fetch` throws before any request leaves, so the app reports
+ * "no internet connection" while the API sits healthy on the very host the page
+ * was served from. Resolving the origin at runtime cannot produce either
+ * failure, because there is nothing left to get wrong.
+ *
+ * Web only. Native has no page and therefore no origin, so it must still be
+ * told an address — and asking for this one there is an error rather than a
+ * silent fallback to something that happened to work in a browser.
+ */
+export const SAME_ORIGIN = 'same-origin';
+
+export function isSameOriginConfig(configured: unknown): boolean {
+  return typeof configured === 'string' && configured.trim().toLowerCase() === SAME_ORIGIN;
+}
+
+/**
  * Hosts that only mean anything on the machine that built the bundle.
  *
  * `0.0.0.0` is included because it is a bind address rather than a destination:
@@ -72,6 +100,15 @@ export interface ResolveApiBaseUrlInput {
   isDevelopmentBuild: boolean;
   /** Named in error messages so the reader is told which knob to turn. */
   variableName?: string;
+  /**
+   * The origin this page was served from, or null where there is no page.
+   *
+   * Only consulted for `same-origin`. Passing null there is a hard error and
+   * not a fallback: a native build asking for "wherever the page came from" has
+   * asked an unanswerable question, and guessing an answer is how a client ends
+   * up addressing whichever host the last person happened to build on.
+   */
+  origin?: string | null;
 }
 
 /**
@@ -95,6 +132,18 @@ export function resolveApiBaseUrl(input: ResolveApiBaseUrlInput): string {
         'no environment to read at runtime, so the API address has to be baked in ' +
         `at build time. Set ${variable} and build again.`,
     );
+  }
+
+  if (isSameOriginConfig(configured)) {
+    const origin = input.origin?.trim();
+    if (!origin) {
+      throw new ApiBaseUrlError(
+        `${variable} is "${SAME_ORIGIN}", but this build has no page to take an origin from. ` +
+          'That mode is for a web bundle served from the same host as the API; a native build ' +
+          'must be given an absolute http(s) URL.',
+      );
+    }
+    return origin.replace(/\/+$/, '');
   }
 
   if (!/^https?:\/\//i.test(configured)) {

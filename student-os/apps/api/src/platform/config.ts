@@ -40,8 +40,15 @@ const envSchema = z.object({
    * Object storage. `local` writes to disk and is for development and test
    * only — a container filesystem is ephemeral, so a production deploy on
    * `local` would lose every upload on restart.
+   *
+   * `external` means the host supplies the driver by calling `setStorage()`
+   * before the first request. That exists so a deployment target with its own
+   * object store (Netlify Blobs, a platform bucket binding) can be honest about
+   * where bytes live without this package taking a dependency on that platform.
+   * If nothing registers a driver, `getStorage()` refuses rather than falling
+   * back to disk.
    */
-  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_DRIVER: z.enum(['local', 's3', 'external']).default('local'),
   STORAGE_LOCAL_DIR: z.string().default('.storage'),
   /**
    * Signing key for media URLs. Separate from JWT_SECRET so that rotating one

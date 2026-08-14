@@ -223,7 +223,7 @@ empty and dies with the runner:
 
 | Job | What it proves |
 | --- | --- |
-| **verify** | typecheck, lint, unit, integration, migrations from an empty database (asserting applied count equals files on disk), API build, client bundle |
+| **verify** | typecheck, lint, unit, integration, migrations from an empty database (asserting applied count equals files on disk), API build, client bundle, and the deployment contract — the Netlify function packaged with Netlify's own bundler, unpacked, and driven from a directory where this repository's `node_modules` cannot be reached |
 | **journey** | seed → serve → the 78-check API smoke suite, the Arabic first journey, the two-browser messaging journey, and the RTL/layout audit |
 
 No credential in this repository points anywhere but a container that lives for

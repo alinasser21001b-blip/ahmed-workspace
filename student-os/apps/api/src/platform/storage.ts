@@ -91,6 +91,16 @@ export function getStorage(): StorageDriver {
   if (driver) return driver;
   const { env } = getConfig();
 
+  if (env.STORAGE_DRIVER === 'external') {
+    // Reached only if the host forgot to register one. Refusing here is the
+    // whole point of the mode: silently writing to disk instead would put
+    // uploads on a filesystem that disappears with the instance.
+    throw new Error(
+      'STORAGE_DRIVER=external, but no driver was registered. The host must call ' +
+        'setStorage() during boot, before the first request.',
+    );
+  }
+
   driver =
     env.STORAGE_DRIVER === 's3'
       ? new S3StorageDriver()
@@ -99,7 +109,12 @@ export function getStorage(): StorageDriver {
   return driver;
 }
 
-/** Test seam. */
+/**
+ * Registers the active driver.
+ *
+ * Two callers: tests, which swap in a fake, and a deployment host running with
+ * `STORAGE_DRIVER=external`, which supplies its platform's object store.
+ */
 export function setStorage(next: StorageDriver | null): void {
   driver = next;
 }

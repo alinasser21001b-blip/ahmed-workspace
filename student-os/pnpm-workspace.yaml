@@ -1,3 +1,15 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+
+# Which dependencies are allowed to run install scripts.
+#
+# pnpm 10 read this from the `pnpm` field in package.json; pnpm 11 reads it only
+# from here and ignores the old location with a warning. `packageManager` pins
+# this repository to 10.33.0, so the setting still applies today — but a machine
+# whose pnpm is newer prints that warning during every install, and the day the
+# pin moves it would stop applying silently. esbuild not being built is not a
+# subtle failure, but it is an obscure one to diagnose from the symptom.
+onlyBuiltDependencies:
+  - esbuild
+  - argon2

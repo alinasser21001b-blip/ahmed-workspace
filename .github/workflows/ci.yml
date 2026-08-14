@@ -151,6 +151,30 @@ jobs:
           EXPO_PUBLIC_API_URL: https://api.studentos.example
         run: pnpm --filter @sos/mobile build:web
 
+      # ---------------------------------------------------------------------
+      # The deployment contract.
+      #
+      # Every step above was green while production answered 502 to every
+      # request, and that was not bad luck: none of them tested the artifact
+      # that gets deployed. Typecheck reads sources; the tests import from
+      # `src` with the whole workspace resolvable around them; the build proves
+      # tsc succeeds. What broke was what survives packaging — the function
+      # shipped with three of its dependencies and threw
+      # `Cannot find package 'zod'` before a line of it ran.
+      #
+      # So this packages the function with Netlify's own bundler, unpacks it,
+      # and drives the handler out of the unpacked copy from a temporary
+      # directory where the repository's node_modules cannot be reached. It
+      # also proves a failed boot says nothing to the public that a stranger
+      # should not read.
+      # ---------------------------------------------------------------------
+      - name: Verify the packaged Netlify function loads and serves
+        env:
+          VERIFY_DATABASE_URL: postgres://postgres:postgres@localhost:5432/studentos_test
+        run: |
+          node scripts/bundle-function.mjs
+          node scripts/verify-function-package.mjs
+
   # ---------------------------------------------------------------------------
   # The API smoke suite and the browser journeys, against a real server and a
   # real bundle.

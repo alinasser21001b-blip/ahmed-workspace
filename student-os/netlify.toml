@@ -1,0 +1,57 @@
+# Public deployment.
+#
+# One site serves both halves of the product: the Expo web export as static
+# files on the CDN, and the Fastify API as a single function behind the same
+# origin. Same origin on purpose — the client's API address is then the site's
+# own URL, which removes CORS from the picture entirely and, more importantly,
+# removes the class of bug where the two halves are deployed to addresses that
+# disagree.
+#
+# `pnpm dev` remains the way to run this locally; nothing here changes it.
+
+[build]
+  command = "bash scripts/netlify-build.sh"
+  publish = "apps/mobile/dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  # The lockfile pins pnpm; corepack honours `packageManager` in package.json.
+  NODE_VERSION = "22"
+
+[functions]
+  # No `node_bundler` here on purpose. Netlify packages v2 functions with nft
+  # regardless of what this says — asking for esbuild produced an artifact
+  # reporting `bundler: nft`, with every API dependency left as an unresolvable
+  # bare import. The function is therefore bundled before Netlify sees it, by
+  # `scripts/bundle-function.mjs`, and what lands here is a single file that
+  # imports nothing but Node builtins. There is nothing left for a file tracer
+  # to get wrong.
+  #
+  # The migration SQL is data rather than code, so no bundler would find it.
+  included_files = ["apps/api/migrations/**"]
+
+# The API. Declared here as well as in the function's own `path` config so the
+# routing does not depend on which of the two Netlify consults first — and
+# ordered before the SPA fallback, which would otherwise answer `/v1/auth/login`
+# with the HTML shell and a 200, the single most confusing failure available.
+[[redirects]]
+  from = "/v1/*"
+  to = "/.netlify/functions/api/v1/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/health"
+  to = "/.netlify/functions/api/health"
+  status = 200
+
+[[redirects]]
+  from = "/health/*"
+  to = "/.netlify/functions/api/health/:splat"
+  status = 200
+
+# The client is a single-page app (`web.output: "single"`), so every other path
+# is a client-side route and must be served the same document.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

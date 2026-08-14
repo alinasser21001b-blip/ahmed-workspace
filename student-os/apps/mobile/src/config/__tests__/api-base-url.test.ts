@@ -3,7 +3,9 @@ import {
   ApiBaseUrlError,
   DEV_API_BASE_URL,
   isLoopbackApiUrl,
+  isSameOriginConfig,
   resolveApiBaseUrl,
+  SAME_ORIGIN,
   shouldWarnAboutLoopback,
 } from '../api-base-url';
 
@@ -84,6 +86,76 @@ describe('a configured address', () => {
         ApiBaseUrlError,
       );
     }
+  });
+});
+
+describe('same-origin', () => {
+  /*
+   * The regression tests for the second silent deployment failure. The client
+   * loaded, every request failed before leaving the browser, and the app said
+   * "no internet connection" — while the API was answering on the exact host the
+   * page had been served from. Two independent causes, one shape:
+   *
+   *   * the baked host was the deploy's branch subdomain, not the address the
+   *     site is opened at;
+   *   * and it was `http://`, blocked as mixed content by an `https://` page.
+   *
+   * Neither is reachable once the origin is read at runtime.
+   */
+  it('resolves to the origin the page was served from', () => {
+    expect(
+      resolveApiBaseUrl({
+        configured: SAME_ORIGIN,
+        isDevelopmentBuild: false,
+        origin: 'https://studentos.netlify.app',
+      }),
+    ).toBe('https://studentos.netlify.app');
+  });
+
+  it('is recognised however it is cased or padded, since it comes from a shell', () => {
+    for (const spelling of ['same-origin', 'SAME-ORIGIN', '  Same-Origin  ']) {
+      expect(isSameOriginConfig(spelling), spelling).toBe(true);
+      expect(
+        resolveApiBaseUrl({
+          configured: spelling,
+          isDevelopmentBuild: false,
+          origin: 'https://studentos.netlify.app',
+        }),
+      ).toBe('https://studentos.netlify.app');
+    }
+  });
+
+  it('is not confused with a host that merely resembles it', () => {
+    for (const other of ['https://same-origin.example', 'same-origin.example', 'sameorigin']) {
+      expect(isSameOriginConfig(other), other).toBe(false);
+    }
+  });
+
+  it('refuses when there is no page to take an origin from', () => {
+    // A native build. Falling back to anything here is how a phone ends up
+    // addressing whichever machine produced the bundle.
+    expect(() =>
+      resolveApiBaseUrl({ configured: SAME_ORIGIN, isDevelopmentBuild: false, origin: null }),
+    ).toThrow(ApiBaseUrlError);
+    expect(() =>
+      resolveApiBaseUrl({ configured: SAME_ORIGIN, isDevelopmentBuild: false }),
+    ).toThrow(/no page to take an origin from/i);
+  });
+
+  it('refuses in a development build too, rather than quietly using localhost', () => {
+    expect(() =>
+      resolveApiBaseUrl({ configured: SAME_ORIGIN, isDevelopmentBuild: true, origin: null }),
+    ).toThrow(ApiBaseUrlError);
+  });
+
+  it('loses a trailing slash, which would otherwise produce //v1/...', () => {
+    expect(
+      resolveApiBaseUrl({
+        configured: SAME_ORIGIN,
+        isDevelopmentBuild: false,
+        origin: 'https://studentos.netlify.app/',
+      }),
+    ).toBe('https://studentos.netlify.app');
   });
 });
 

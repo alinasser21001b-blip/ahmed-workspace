@@ -54,6 +54,22 @@ command -v node >/dev/null || fail "Node is not installed. This project needs No
 node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' \
   || fail "Node $(node -v) is too old. This project needs Node 22 or newer."
 
+# --- the workspace packages -------------------------------------------------
+#
+# `@sos/contracts` and `@sos/core` are TypeScript, and both declare
+# `"main": "./dist/index.js"`. Nothing can import them until tsc has run — not
+# the API, which dies with ERR_MODULE_NOT_FOUND before it can even listen, and
+# not Metro, which reports `Unable to resolve "@sos/core"` and refuses to bundle.
+#
+# This step was missing, and its absence was invisible to anyone who had built
+# the repository before: `dist` was simply already there. On a fresh clone —
+# which is the only case this script exists to serve — nothing worked, and the
+# two errors it produced named modules rather than the missing build, so they
+# read like a broken install.
+
+say "Building the workspace packages…"
+pnpm -r --filter "./packages/**" build
+
 # --- finding the database ---------------------------------------------------
 #
 # There is no single connection string that is right everywhere. A Homebrew
@@ -168,12 +184,25 @@ pnpm db:seed
 
 API_PID=""
 WEB_PID=""
+WATCH_PIDS=""
 cleanup() {
   trap - INT TERM EXIT
   [ -n "$API_PID" ] && kill "$API_PID" 2>/dev/null || true
   [ -n "$WEB_PID" ] && kill "$WEB_PID" 2>/dev/null || true
+  for pid in $WATCH_PIDS; do kill "$pid" 2>/dev/null || true; done
 }
 trap cleanup INT TERM EXIT
+
+# The packages are compiled, so an edit to one is invisible until tsc runs
+# again. `@sos/core` is the authorization layer; a stale copy of it would mean
+# testing a permission change against the previous permission rules, and getting
+# a confident, wrong answer. Watching costs two idle processes and removes that
+# entirely.
+for package in contracts core; do
+  ( cd "packages/$package" && exec pnpm exec tsc -p tsconfig.json --watch --preserveWatchOutput ) \
+    >/dev/null 2>&1 &
+  WATCH_PIDS="$WATCH_PIDS $!"
+done
 
 say "Starting the API on http://localhost:${PORT}…"
 pnpm dev:api &
@@ -212,7 +241,8 @@ cat <<BANNER
 
     password: correct-horse-battery
 
-  Both servers reload on save. Ctrl-C stops them together.
+  Everything reloads on save — the screens, the API, and the
+  policy packages. Ctrl-C stops them all together.
 ──────────────────────────────────────────────────────────────
 
 BANNER

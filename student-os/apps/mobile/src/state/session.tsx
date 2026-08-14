@@ -66,6 +66,10 @@ export const API_BASE_URL: string = resolveApiBaseUrl({
   // crosses Expo's config serialisation and does not always arrive as declared.
   configured: Constants.expoConfig?.extra?.apiBaseUrl ?? process.env.EXPO_PUBLIC_API_URL,
   isDevelopmentBuild: __DEV__,
+  // Read here rather than inside the resolver so the rule stays testable without
+  // a browser, and so native — which has no page — passes null rather than
+  // whatever a polyfill decided `location` should be.
+  origin: Platform.OS === 'web' ? (globalThis.location?.origin ?? null) : null,
 });
 
 interface SessionValue {

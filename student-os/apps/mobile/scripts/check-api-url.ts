@@ -1,7 +1,9 @@
 import {
   ApiBaseUrlError,
   isLoopbackApiUrl,
+  isSameOriginConfig,
   resolveApiBaseUrl,
+  SAME_ORIGIN,
 } from '../src/config/api-base-url.js';
 
 /**
@@ -22,6 +24,19 @@ import {
  */
 
 const url = process.env.EXPO_PUBLIC_API_URL;
+
+/*
+ * The one thing this check cannot resolve, because the answer does not exist
+ * yet: `same-origin` is decided in the browser, from the page's own address. So
+ * it is confirmed as a valid setting and left there — there is no host to be
+ * wrong about, which is the reason for choosing it.
+ */
+if (isSameOriginConfig(url)) {
+  process.stdout.write(
+    `  API address for this build: the origin the page is served from (${SAME_ORIGIN})\n`,
+  );
+  process.exit(0);
+}
 
 try {
   const resolved = resolveApiBaseUrl({ configured: url, isDevelopmentBuild: false });
