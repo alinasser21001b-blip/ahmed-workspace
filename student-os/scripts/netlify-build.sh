@@ -36,6 +36,10 @@ pnpm build
 # that the bundle above is not the one that quietly points at localhost.
 pnpm --filter @sos/mobile build:web
 
+# The API function, bundled into something a file tracer cannot get wrong. See
+# scripts/bundle-function.mjs for why this cannot be left to Netlify.
+node scripts/bundle-function.mjs
+
 # --- the schema -------------------------------------------------------------
 #
 # Migrations belong here, not on the first request.

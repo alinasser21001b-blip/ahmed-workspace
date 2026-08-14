@@ -1,6 +1,9 @@
 {
   // The deployment glue, typechecked.
   //
+  // `api/` holds the source; `functions/` holds the generated bundle, which is
+  // build output and is not committed or checked.
+  //
   // It is not part of `pnpm -r typecheck` because it is not a workspace
   // package, and it cannot simply be appended to that command either: the
   // function imports the API's BUILT output, so `apps/api/dist` has to exist
@@ -18,5 +21,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["functions/**/*.mts"]
+  "include": ["api/**/*.mts"]
 }

@@ -19,9 +19,15 @@
   NODE_VERSION = "22"
 
 [functions]
-  node_bundler = "esbuild"
-  # The migration runner reads these at boot. They are data, not code, so the
-  # bundler has no reason to know about them unless told.
+  # No `node_bundler` here on purpose. Netlify packages v2 functions with nft
+  # regardless of what this says — asking for esbuild produced an artifact
+  # reporting `bundler: nft`, with every API dependency left as an unresolvable
+  # bare import. The function is therefore bundled before Netlify sees it, by
+  # `scripts/bundle-function.mjs`, and what lands here is a single file that
+  # imports nothing but Node builtins. There is nothing left for a file tracer
+  # to get wrong.
+  #
+  # The migration SQL is data rather than code, so no bundler would find it.
   included_files = ["apps/api/migrations/**"]
 
 # The API. Declared here as well as in the function's own `path` config so the

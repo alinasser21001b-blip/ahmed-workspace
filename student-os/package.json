@@ -25,7 +25,9 @@
     "test:rtl": "node apps/mobile/e2e/rtl-audit.mjs",
     "test:messaging": "node apps/mobile/e2e/messaging.mjs",
     "demo:seed": "pnpm --filter @sos/api demo:seed",
-    "test:classrooms": "node apps/mobile/e2e/classroom-journey.mjs"
+    "test:classrooms": "node apps/mobile/e2e/classroom-journey.mjs",
+    "package:function": "node scripts/bundle-function.mjs",
+    "verify:function": "pnpm build && node scripts/bundle-function.mjs && node scripts/verify-function-package.mjs"
   },
   "dependencies": {
     "@netlify/blobs": "^10.0.10",
@@ -34,7 +36,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
+    "@netlify/zip-it-and-ship-it": "^15.3.4",
     "@types/node": "^22.20.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "playwright": "^1.62.1",
