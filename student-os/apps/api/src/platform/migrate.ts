@@ -23,6 +23,26 @@ import { getPool } from './db.js';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../migrations');
 
+/**
+ * Where the .sql files are.
+ *
+ * Derived from this module's own location, which is right in every case where
+ * the module is where it was compiled to — and wrong in exactly one: a bundled
+ * deployment, where the compiled output has been inlined somewhere else
+ * entirely and the .sql files travel separately as data. A host in that
+ * position sets this once at boot.
+ *
+ * It is module state rather than a parameter because `isSchemaCurrent` is
+ * called by the readiness probe, which has no way to pass anything in — and a
+ * readiness probe that answers "not ready" forever because it is counting files
+ * in a directory that does not exist is a bad way to find this out.
+ */
+let migrationsDir = MIGRATIONS_DIR;
+
+export function setMigrationsDir(dir: string): void {
+  migrationsDir = dir;
+}
+
 /** Arbitrary but fixed: the key for pg_advisory_lock. */
 const LOCK_KEY = 8_675_309;
 
@@ -46,7 +66,7 @@ function checksum(contents: string): string {
   return createHash('sha256').update(contents).digest('hex').slice(0, 32);
 }
 
-export async function listMigrationFiles(dir = MIGRATIONS_DIR): Promise<string[]> {
+export async function listMigrationFiles(dir = migrationsDir): Promise<string[]> {
   const entries = await readdir(dir);
   return entries.filter((f) => f.endsWith('.sql')).sort();
 }
@@ -59,7 +79,7 @@ export interface MigrateResult {
 export async function migrate(
   options: { dir?: string; log?: (message: string) => void } = {},
 ): Promise<MigrateResult> {
-  const dir = options.dir ?? MIGRATIONS_DIR;
+  const dir = options.dir ?? migrationsDir;
   const log = options.log ?? (() => {});
   const pool = getPool();
 

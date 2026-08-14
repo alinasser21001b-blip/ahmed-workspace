@@ -1,0 +1,51 @@
+# Public deployment.
+#
+# One site serves both halves of the product: the Expo web export as static
+# files on the CDN, and the Fastify API as a single function behind the same
+# origin. Same origin on purpose — the client's API address is then the site's
+# own URL, which removes CORS from the picture entirely and, more importantly,
+# removes the class of bug where the two halves are deployed to addresses that
+# disagree.
+#
+# `pnpm dev` remains the way to run this locally; nothing here changes it.
+
+[build]
+  command = "bash scripts/netlify-build.sh"
+  publish = "apps/mobile/dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  # The lockfile pins pnpm; corepack honours `packageManager` in package.json.
+  NODE_VERSION = "22"
+
+[functions]
+  node_bundler = "esbuild"
+  # The migration runner reads these at boot. They are data, not code, so the
+  # bundler has no reason to know about them unless told.
+  included_files = ["apps/api/migrations/**"]
+
+# The API. Declared here as well as in the function's own `path` config so the
+# routing does not depend on which of the two Netlify consults first — and
+# ordered before the SPA fallback, which would otherwise answer `/v1/auth/login`
+# with the HTML shell and a 200, the single most confusing failure available.
+[[redirects]]
+  from = "/v1/*"
+  to = "/.netlify/functions/api/v1/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/health"
+  to = "/.netlify/functions/api/health"
+  status = 200
+
+[[redirects]]
+  from = "/health/*"
+  to = "/.netlify/functions/api/health/:splat"
+  status = 200
+
+# The client is a single-page app (`web.output: "single"`), so every other path
+# is a client-side route and must be served the same document.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

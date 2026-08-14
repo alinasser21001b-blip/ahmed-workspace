@@ -16,7 +16,7 @@
   "scripts": {
     "build": "pnpm -r --filter \"./packages/**\" build && pnpm --filter @sos/api build",
     "dev": "bash scripts/dev.sh",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p netlify/tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "pnpm -r test",
     "test:unit": "pnpm -r test:unit",
@@ -31,6 +31,11 @@
     "test:messaging": "node apps/mobile/e2e/messaging.mjs",
     "demo:seed": "pnpm --filter @sos/api demo:seed",
     "test:classrooms": "node apps/mobile/e2e/classroom-journey.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.0.10",
+    "@netlify/database": "^1.0.4",
+    "@netlify/functions": "^5.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

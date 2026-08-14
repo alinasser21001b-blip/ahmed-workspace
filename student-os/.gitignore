@@ -15,3 +15,6 @@ web-build/
 
 # Local storage driver output — uploads must never be committed.
 .storage/
+
+# Netlify CLI/build state — never user code.
+.netlify/
