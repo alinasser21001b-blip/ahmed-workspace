@@ -15,6 +15,7 @@
   },
   "scripts": {
     "build": "pnpm -r --filter \"./packages/**\" build && pnpm --filter @sos/api build",
+    "dev": "bash scripts/dev.sh",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "test": "pnpm -r test",
