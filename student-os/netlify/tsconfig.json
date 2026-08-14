@@ -1,4 +1,15 @@
 {
+  // The deployment glue, typechecked.
+  //
+  // It is not part of `pnpm -r typecheck` because it is not a workspace
+  // package, and it cannot simply be appended to that command either: the
+  // function imports the API's BUILT output, so `apps/api/dist` has to exist
+  // before this runs. That is what `typecheck:deploy` is for — it builds first,
+  // and it is one script rather than an ordering rule someone has to remember.
+  //
+  // Types come from `dist` rather than `src` because `dist` is what the
+  // deployed function actually imports. Typechecking against the sources would
+  // be checking something other than the thing that runs.
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "../tsconfig.base.json",
   "compilerOptions": {

@@ -16,7 +16,8 @@
   "scripts": {
     "build": "pnpm -r --filter \"./packages/**\" build && pnpm --filter @sos/api build",
     "dev": "bash scripts/dev.sh",
-    "typecheck": "pnpm -r typecheck && tsc -p netlify/tsconfig.json --noEmit",
+    "typecheck": "pnpm -r typecheck && pnpm typecheck:deploy",
+    "typecheck:deploy": "pnpm --filter @sos/api build && tsc -p netlify/tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "pnpm -r test",
     "test:unit": "pnpm -r test:unit",

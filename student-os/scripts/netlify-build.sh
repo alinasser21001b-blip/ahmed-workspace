@@ -35,3 +35,43 @@ pnpm build
 # `build:web` refuses to run without EXPO_PUBLIC_API_URL, which is the guarantee
 # that the bundle above is not the one that quietly points at localhost.
 pnpm --filter @sos/mobile build:web
+
+# --- the schema -------------------------------------------------------------
+#
+# Migrations belong here, not on the first request.
+#
+# The function does run them at boot, and that is a correct fallback — the
+# migrator takes an advisory lock and commits each migration on its own, so
+# concurrent cold starts serialise safely. What it is not is *fast*: building
+# twelve migrations into an empty database, from a cold instance, against a
+# database that is itself waking up, has to finish inside a single invocation's
+# budget. When it does not, the request dies mid-way and the caller gets a
+# platform error page rather than anything the app can explain — which is
+# exactly as opaque as it sounds from the outside.
+#
+# Doing it here instead means it happens once, with no timeout over it, and a
+# failure stops the deploy loudly rather than surfacing later as a sign-in that
+# does not work.
+#
+# `NETLIFY_DATABASE_URL` is provided by the database extension. If it is absent
+# — the very first build, before the database exists — this is skipped and the
+# function's own fallback covers it.
+# Unpooled where it is offered: these are schema changes, and a connection
+# pooler in front of DDL is a known source of confusing failures.
+DEPLOY_DATABASE_URL="${NETLIFY_DATABASE_URL_UNPOOLED:-${NETLIFY_DATABASE_URL:-}}"
+
+if [ -n "$DEPLOY_DATABASE_URL" ]; then
+  printf '\nMigrating and seeding the deployed database\n\n'
+  # JWT_SECRET is validated at config load but is only ever used to sign tokens,
+  # which nothing here does. A throwaway value keeps the real signing key scoped
+  # to the functions that actually need it rather than widening it to builds.
+  DATABASE_URL="$DEPLOY_DATABASE_URL" \
+  JWT_SECRET="build-step-only-never-signs-anything-0123456789" \
+    pnpm db:migrate
+
+  DATABASE_URL="$DEPLOY_DATABASE_URL" \
+  JWT_SECRET="build-step-only-never-signs-anything-0123456789" \
+    pnpm db:seed
+else
+  printf '\nNo database URL at build time; the function will migrate on first request.\n\n'
+fi

@@ -193,8 +193,50 @@ function toHeaders(source: Record<string, number | string | string[] | undefined
   return headers;
 }
 
+/**
+ * Strips anything that should not travel to a browser.
+ *
+ * The reason below is deliberately shown to the caller, because a deployment
+ * that fails at boot is otherwise completely opaque from the outside — which is
+ * how a broken sign-in stayed unexplained for two rounds. Database errors do
+ * not normally carry the connection string, but "do not normally" is not a
+ * guarantee worth relying on when the audience is the public internet.
+ */
+function redactSecrets(message: string): string {
+  return message.replace(/postgres(?:ql)?:\/\/\S+/gi, 'postgres://[redacted]');
+}
+
+/**
+ * The API's own error envelope, for failures that never reached the API.
+ *
+ * Without this, a throw in `boot` becomes the platform's HTML error page. The
+ * client cannot parse that into anything it recognises, so it falls back to
+ * "we could not complete that" — a sentence that describes every possible
+ * failure and identifies none of them. An adapter should never let the
+ * platform's error page stand in for the API's.
+ */
+function bootFailure(error: unknown): Response {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('[boot] the API failed to start', error);
+  return new Response(
+    JSON.stringify({
+      error: {
+        code: 'SERVICE_UNAVAILABLE',
+        message: `The API failed to start: ${redactSecrets(message)}`,
+      },
+    }),
+    { status: 503, headers: { 'content-type': 'application/json; charset=utf-8' } },
+  );
+}
+
 export default async function handler(request: Request): Promise<Response> {
-  const app = await getApp();
+  let app: App;
+  try {
+    app = await getApp();
+  } catch (error) {
+    return bootFailure(error);
+  }
+
   const url = new URL(request.url);
 
   /*
