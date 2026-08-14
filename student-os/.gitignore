@@ -21,3 +21,8 @@ web-build/
 
 # Build output: the packaged API function, produced by scripts/bundle-function.mjs.
 netlify/functions/
+
+# Database backups — real user data, and never in a repository.
+backups/
+*.dump
+*.dump.sha256
