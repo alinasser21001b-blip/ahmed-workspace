@@ -4,6 +4,7 @@ import {
   insertLearningEventPerTopic,
   updateTopicWeakness,
   upsertTopicProgress,
+  type TopicProgressRow,
 } from './signals.repository.js';
 
 /**
@@ -52,7 +53,16 @@ export type SignalKind =
   | 'correction_proposed'
   | 'correction_accepted'
   | 'source_added'
-  | 'academic_discussion_participated';
+  | 'academic_discussion_participated'
+  /*
+   * Practice (Phase 5d). `practice_question_answered` is one observation and is
+   * seeded `is_meaningful = false`; `quiz_started` and `quiz_completed` have
+   * been rows since 0005 and only now have a producer. The meaningful unit is
+   * the completed attempt, not the tap.
+   */
+  | 'practice_question_answered'
+  | 'quiz_started'
+  | 'quiz_completed';
 
 export interface SignalInput {
   userId: string;
@@ -120,9 +130,12 @@ export async function recordForContent(
 /**
  * Rolls answer activity up into the per-topic learning signal.
  *
- * `learning_progress` is the input to `computeWeakness` in `@sos/core`, which
- * has been unit-tested and uncalled since Phase 0. This is what finally gives
- * it data.
+ * `learning_progress` is the input to `computeWeakness` in `@sos/core`. Between
+ * Phase 5 and Phase 5d this function had no call site at all, so the table had
+ * three readers and no reachable writer and every one of them returned zero.
+ * `practice.service` is the caller that finally gives it data, and it is the
+ * only one: progress moves because a graded observation was recorded, never
+ * because something was viewed, liked or saved.
  *
  * `weakness_score` and `confidence` are deliberately NOT computed here: the
  * formula lives in `@sos/core` where it is pure and testable, and the service
@@ -132,8 +145,8 @@ export async function recordForContent(
 export async function touchTopicProgress(
   client: Sql,
   input: { userId: string; topicId: string; seen: number; correct: number },
-): Promise<void> {
-  await upsertTopicProgress(input, client);
+): Promise<TopicProgressRow> {
+  return upsertTopicProgress(input, client);
 }
 
 /** Stores a weakness signal computed in `@sos/core`. */

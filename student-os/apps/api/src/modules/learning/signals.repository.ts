@@ -41,22 +41,39 @@ export async function insertLearningEventPerTopic(
   );
 }
 
-/** Accumulates answer activity for one student on one topic. */
+export interface TopicProgressRow {
+  questions_seen: number;
+  questions_correct: number;
+  last_activity_at: Date | null;
+}
+
+/**
+ * Accumulates answer activity for one student on one topic.
+ *
+ * Returns the row as it now stands. The caller needs those counts immediately —
+ * `computeWeakness` runs on them and writes the result back in the same
+ * transaction — and `RETURNING` gives them without a second read that could see
+ * a different value under a concurrent answer.
+ */
 export async function upsertTopicProgress(
   input: { userId: string; topicId: string; seen: number; correct: number },
   client?: Sql,
-): Promise<void> {
-  await queryOne(
+): Promise<TopicProgressRow> {
+  const row = await queryOne<TopicProgressRow>(
     `INSERT INTO learning_progress (user_id, topic_id, questions_seen, questions_correct, last_activity_at)
      VALUES ($1, $2, $3, $4, now())
      ON CONFLICT (user_id, topic_id) DO UPDATE SET
        questions_seen    = learning_progress.questions_seen + EXCLUDED.questions_seen,
        questions_correct = learning_progress.questions_correct + EXCLUDED.questions_correct,
        last_activity_at  = now(),
-       updated_at        = now()`,
+       updated_at        = now()
+     RETURNING questions_seen, questions_correct, last_activity_at`,
     [input.userId, input.topicId, input.seen, input.correct],
     client,
   );
+  // The upsert always writes a row; a null here would mean the statement did
+  // not run, which is a bug rather than an empty result.
+  return row!;
 }
 
 /**

@@ -15,6 +15,7 @@ import { academicRoutes } from '../modules/academic/academic.routes.js';
 import { authRoutes } from '../modules/auth/auth.routes.js';
 import { adminRoutes } from '../modules/admin/admin.routes.js';
 import { classroomRoutes } from '../modules/classrooms/classrooms.routes.js';
+import { practiceRoutes } from '../modules/learning/practice.routes.js';
 import { contentRoutes } from '../modules/content/content.routes.js';
 import { filesRoutes } from '../modules/files/files.routes.js';
 import { groupsRoutes } from '../modules/groups/groups.routes.js';
@@ -134,6 +135,7 @@ export async function buildApp() {
   await app.register(messagingRoutes, { prefix: '/v1' });
   await app.register(knowledgeRoutes, { prefix: '/v1' });
   await app.register(classroomRoutes, { prefix: '/v1' });
+  await app.register(practiceRoutes, { prefix: '/v1' });
   await app.register(adminRoutes, { prefix: '/v1' });
   await app.register(realtimeRoutes, { prefix: '/v1' });
 

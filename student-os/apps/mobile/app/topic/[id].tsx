@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Button } from '../../src/components/Button';
 import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { PostCard } from '../../src/components/PostCard';
 import { Text } from '../../src/components/Text';
@@ -103,11 +104,35 @@ export default function TopicScreen(): React.JSX.Element {
         </View>
       </View>
 
+      {/*
+        The only place in the product that asks the student a question.
+        Rendered from `canPractice`, which the server projects — the client
+        cannot know which quizzes are published in which of this student's
+        courses, and a button that 404s is the dead control Phase 3 ruled out.
+      */}
+      {topic.viewer.canPractice ? (
+        <Button
+          label={t('practice.action')}
+          variant="learning"
+          fullWidth
+          onPress={() => router.push(`/practice/${topic.id}`)}
+        />
+      ) : null}
+
       {topic.viewer.questionsSeen > 0 ? (
         <Card>
-          <Text variant="caption" tone="muted">
-            {topic.viewer.questionsCorrect}/{topic.viewer.questionsSeen}
-          </Text>
+          <View style={{ gap: theme.spacing.xs }}>
+            <Text variant="bodyStrong">
+              {t('practice.score', {
+                correct: topic.viewer.questionsCorrect,
+                seen: topic.viewer.questionsSeen,
+              })}
+            </Text>
+            {/* A count, never a verdict — the same framing the Learn tab uses. */}
+            <Text variant="micro" tone="muted">
+              {t('practice.signalNote')}
+            </Text>
+          </View>
         </Card>
       ) : null}
 

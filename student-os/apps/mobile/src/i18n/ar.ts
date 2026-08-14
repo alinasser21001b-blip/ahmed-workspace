@@ -138,6 +138,31 @@ export const ar = {
   'topic.knowledge.empty.title': 'لا توجد معرفة منشورة بعد',
   'topic.knowledge.empty.body': 'كن أول من يشارك شرحاً أو ملخصاً عن هذا الموضوع.',
   'topic.filter.all': 'الكل',
+
+  // --- practice (Phase 5d)
+  //
+  // The wording is deliberately not "اختبار". A test is something you pass or
+  // fail and that goes on a record; this is a student checking what they know,
+  // and the copy has to say so or the numbers underneath it read as a grade.
+  'practice.action': 'اختبر فهمك',
+  'practice.title': 'اختبر فهمك',
+  'practice.progress': 'سؤال {current} من {total}',
+  'practice.check': 'تحقّق',
+  'practice.next': 'السؤال التالي',
+  'practice.finish': 'إنهاء',
+  'practice.correct': 'إجابة صحيحة',
+  'practice.incorrect': 'إجابة غير صحيحة',
+  'practice.correctAnswer': 'الإجابة الصحيحة',
+  'practice.multiHint': 'اختر كل الإجابات الصحيحة',
+  'practice.done.title': 'انتهيت من هذه المجموعة',
+  'practice.done.body': 'تحدّثت إشارتك في هذا الموضوع، وستظهر في تبويب التعلّم وفي موضوعك.',
+  'practice.score': 'أجبت بشكل صحيح عن {correct} من {seen}',
+  'practice.lowConfidence': 'عيّنة صغيرة — ليست نتيجة مؤكدة',
+  'practice.signalNote': 'هذه إشارة نشاط دراسي، وليست تقييماً لمستواك.',
+  'practice.empty.title': 'لا توجد أسئلة هنا بعد',
+  'practice.empty.body': 'لم يُنشر تدريب على هذا الموضوع في مقرراتك حتى الآن.',
+  'practice.allAnswered': 'أجبت عن كل الأسئلة المتاحة في هذه المجموعة.',
+
   'learn.focus': 'مواضيع تحتاج مراجعة',
   'learn.focus.lowConfidence': 'عيّنة صغيرة — ليست نتيجة مؤكدة',
   'learn.interests': 'اهتماماتك',
