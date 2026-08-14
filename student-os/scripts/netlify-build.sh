@@ -57,12 +57,29 @@ node scripts/bundle-function.mjs
 # failure stops the deploy loudly rather than surfacing later as a sign-in that
 # does not work.
 #
-# `NETLIFY_DATABASE_URL` is provided by the database extension. If it is absent
-# — the very first build, before the database exists — this is skipped and the
-# function's own fallback covers it.
-# Unpooled where it is offered: these are schema changes, and a connection
-# pooler in front of DDL is a known source of confusing failures.
-DEPLOY_DATABASE_URL="${NETLIFY_DATABASE_URL_UNPOOLED:-${NETLIFY_DATABASE_URL:-}}"
+# Which variable holds the connection string.
+#
+# `NETLIFY_DB_URL` is the one the current contract uses, and that is not a
+# preference: `@netlify/database@1.1.0` reads exactly that key and nothing else
+# — `getConnectionString()` calls `env.get("NETLIFY_DB_URL")` and throws
+# `MissingDatabaseConnectionError` when it is unset.
+#
+# This script previously checked only `NETLIFY_DATABASE_URL` and
+# `NETLIFY_DATABASE_URL_UNPOOLED`, names the contract does not use. Neither is
+# ever set, so the condition below was always false, and every build printed
+# "no database URL" and skipped the migrations — silently, in the branch of an
+# `if` that looks like it is handling a rare first-build case. The older names
+# are still tried, after the current one, for a deployment that predates the
+# rename; unpooled is preferred where offered because these are schema changes
+# and a connection pooler in front of DDL is a known source of confusing
+# failures.
+DEPLOY_DATABASE_URL="${NETLIFY_DB_URL:-${NETLIFY_DATABASE_URL_UNPOOLED:-${NETLIFY_DATABASE_URL:-}}}"
+
+# Which key was found, never what is in it — this line goes to a build log.
+for candidate in NETLIFY_DB_URL NETLIFY_DATABASE_URL_UNPOOLED NETLIFY_DATABASE_URL; do
+  eval "value=\${$candidate:-}"
+  if [ -n "$value" ]; then printf '  database connection string found in %s\n' "$candidate"; break; fi
+done
 
 if [ -n "$DEPLOY_DATABASE_URL" ]; then
   printf '\nMigrating and seeding the deployed database\n\n'
