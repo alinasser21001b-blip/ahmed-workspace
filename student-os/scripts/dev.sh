@@ -32,7 +32,6 @@ if [ -f apps/api/.env ]; then
 fi
 
 export NODE_ENV="${NODE_ENV:-development}"
-export DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/studentos_dev}"
 export JWT_SECRET="${JWT_SECRET:-local-development-secret-that-is-long-enough-0123456789}"
 export PORT="${PORT:-4000}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
@@ -55,26 +54,90 @@ command -v node >/dev/null || fail "Node is not installed. This project needs No
 node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)' \
   || fail "Node $(node -v) is too old. This project needs Node 22 or newer."
 
-# Is anything listening? Deliberately a bare TCP check using Node's built-in
-# `net`, and NOT the `pg` client: `pg` belongs to apps/api and does not resolve
-# from the repository root, so requiring it here reported "cannot reach
-# PostgreSQL" on a machine where PostgreSQL was running perfectly. A check that
-# can fail for a reason other than the one it names is worse than no check.
-if ! node -e "
-  const net = require('node:net');
-  const url = new URL(process.env.DATABASE_URL);
-  const socket = net.connect(Number(url.port || 5432), url.hostname);
-  socket.setTimeout(4000);
-  socket.on('connect', () => { socket.end(); process.exit(0); });
-  socket.on('timeout', () => process.exit(1));
-  socket.on('error', () => process.exit(1));
-" 2>/dev/null; then
-  fail "Nothing is listening for PostgreSQL at the address in DATABASE_URL.
+# --- finding the database ---------------------------------------------------
+#
+# There is no single connection string that is right everywhere. A Homebrew
+# PostgreSQL on macOS trusts the logged-in user and has no `postgres` role at
+# all; a Debian package wants `postgres`/`postgres`; a container might want
+# something else again. Hardcoding one of them means the script works on the
+# machine it was written on and nowhere else — which is exactly what happened:
+# the first version defaulted to the Debian string and could not have worked on
+# a Mac.
+#
+# So candidates are tried in order and the first that actually connects wins.
+# `DATABASE_URL` from the environment always wins outright.
 
-    ${DATABASE_URL%%\?*}
+DB_NAME="${DB_NAME:-studentos_dev}"
+DB_TEST_NAME="${DB_TEST_NAME:-studentos_test}"
 
-  Start PostgreSQL and run this again, or point DATABASE_URL elsewhere."
+# The probe runs from apps/api, where `pg` resolves. The earlier version ran it
+# from the repository root, where it does not, and so reported "cannot reach
+# PostgreSQL" on a machine where PostgreSQL was running perfectly.
+probe() {
+  ( cd apps/api && node -e "
+    const { Client } = require('pg');
+    const client = new Client({ connectionString: process.argv[1], connectionTimeoutMillis: 4000 });
+    client.connect().then(() => client.end()).then(
+      () => process.exit(0),
+      () => process.exit(1),
+    );
+  " "$1" ) >/dev/null 2>&1
+}
+
+if [ -n "${DATABASE_URL:-}" ]; then
+  CANDIDATES="$DATABASE_URL"
+else
+  CANDIDATES="postgres://localhost:5432/${DB_NAME}
+postgres://${USER:-postgres}@localhost:5432/${DB_NAME}
+postgres://postgres:postgres@localhost:5432/${DB_NAME}
+postgres://postgres@localhost:5432/${DB_NAME}"
 fi
+
+FOUND=""
+ADMIN=""
+while IFS= read -r candidate; do
+  [ -z "$candidate" ] && continue
+  if probe "$candidate"; then FOUND="$candidate"; break; fi
+  # The server may be up with the database simply not created yet. Ask the
+  # maintenance database, which always exists, using the same credentials.
+  maintenance="${candidate%/*}/postgres"
+  if [ -z "$ADMIN" ] && probe "$maintenance"; then ADMIN="$maintenance"; fi
+done <<EOF
+$CANDIDATES
+EOF
+
+if [ -z "$FOUND" ] && [ -n "$ADMIN" ]; then
+  say "Creating the databases…"
+  for db in "$DB_NAME" "$DB_TEST_NAME"; do
+    ( cd apps/api && node -e "
+      const { Client } = require('pg');
+      const client = new Client({ connectionString: process.argv[1] });
+      client.connect()
+        .then(() => client.query('CREATE DATABASE \"' + process.argv[2] + '\"'))
+        .catch((error) => { if (error.code !== '42P04') throw error; })
+        .then(() => client.end())
+        .then(() => process.exit(0), (error) => { console.error(error.message); process.exit(1); });
+    " "$ADMIN" "$db" ) || fail "Could not create the database \"$db\"."
+    printf '  created %s\n' "$db"
+  done
+  FOUND="${ADMIN%/*}/${DB_NAME}"
+fi
+
+if [ -z "$FOUND" ]; then
+  fail "Could not connect to PostgreSQL.
+
+  Tried:
+$(printf '    %s\n' $CANDIDATES)
+
+  Make sure PostgreSQL is running:
+
+    macOS    brew services start postgresql@16
+    Linux    sudo service postgresql start
+
+  Or set DATABASE_URL yourself and run this again."
+fi
+
+export DATABASE_URL="$FOUND"
 
 # --- database ---------------------------------------------------------------
 #

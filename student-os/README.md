@@ -66,12 +66,15 @@ Requires Node 22+, pnpm, and a running PostgreSQL 16.
 
 ```bash
 pnpm install
-createdb studentos_dev && createdb studentos_test
 pnpm dev
 ```
 
-`pnpm dev` migrates the database, seeds the academic hierarchy and a small demo
-cohort, then starts the API and the web client together. Open the URL it
+`pnpm dev` finds your PostgreSQL, **creates the databases if they do not exist**,
+migrates them, seeds the academic hierarchy and a small demo cohort, then starts
+the API and the web client together. There is no connection string to configure:
+it tries the usual local ones — a Homebrew install that trusts your login user, a
+Debian one that wants `postgres`/`postgres` — and uses the first that answers.
+Set `DATABASE_URL` yourself and that wins instead. Open the URL it
 prints — **http://localhost:8081** — and sign in with any of the accounts it
 lists (password `correct-horse-battery`):
 
