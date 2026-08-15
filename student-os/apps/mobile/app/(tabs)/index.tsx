@@ -102,7 +102,10 @@ export default function Home(): React.JSX.Element {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t('nav.create')}
+          // `compose.title`, not `nav.create`: this glyph opens the composer,
+          // and sharing a label with the Create tab makes both ambiguous to a
+          // screen reader and to any test that addresses them by name.
+          accessibilityLabel={t('compose.title')}
           onPress={() => router.push('/compose')}
           hitSlop={8}
           style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
