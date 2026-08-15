@@ -124,7 +124,7 @@ export default function Learn(): React.JSX.Element {
             >
               <View style={{ flex: 1, gap: 2 }}>
                 <Text variant="bodyStrong">{t('classrooms.title')}</Text>
-                <Text variant="micro" tone="muted">
+                <Text variant="metadata" tone="muted">
                   {t('classrooms.empty.body')}
                 </Text>
               </View>
@@ -186,7 +186,7 @@ export default function Learn(): React.JSX.Element {
                         {topic.name}
                       </Text>
                       {topic.subjectName ? (
-                        <Text variant="micro" tone="muted" bidi="auto">
+                        <Text variant="metadata" tone="muted" bidi="auto">
                           {topic.subjectName}
                         </Text>
                       ) : null}

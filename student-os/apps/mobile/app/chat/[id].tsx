@@ -259,11 +259,11 @@ export default function ConversationScreen(): React.JSX.Element {
               {conversation.title}
             </Text>
             {typingUsers.length > 0 ? (
-              <Text variant="micro" tone="primary">
+              <Text variant="metadata" tone="primary">
                 {t('chat.typing')}
               </Text>
             ) : connection !== 'open' ? (
-              <Text variant="micro" tone="muted">
+              <Text variant="metadata" tone="muted">
                 {t(connection === 'connecting' ? 'chat.connecting' : 'chat.offline')}
               </Text>
             ) : null}
@@ -295,7 +295,7 @@ export default function ConversationScreen(): React.JSX.Element {
                 onPress={() => void loadOlder()}
                 style={{ paddingVertical: theme.spacing.md, alignItems: 'center' }}
               >
-                <Text variant="micro" tone="muted">
+                <Text variant="metadata" tone="muted">
                   {loadingOlder ? t('state.loading') : t('action.loadMore')}
                 </Text>
               </Pressable>
@@ -305,7 +305,7 @@ export default function ConversationScreen(): React.JSX.Element {
             if (item.kind === 'separator') {
               return (
                 <View style={{ alignItems: 'center', paddingVertical: theme.spacing.sm }}>
-                  <Text variant="micro" tone="muted">
+                  <Text variant="metadata" tone="muted">
                     {item.label}
                   </Text>
                 </View>
@@ -323,7 +323,7 @@ export default function ConversationScreen(): React.JSX.Element {
                   }}
                 >
                   <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.primary }} />
-                  <Text variant="micro" tone="primary">
+                  <Text variant="metadata" tone="primary">
                     {item.label}
                   </Text>
                   <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.primary }} />
@@ -346,7 +346,7 @@ export default function ConversationScreen(): React.JSX.Element {
                 }}
               >
                 {!mine && conversation.kind === 'group' && item.authorName ? (
-                  <Text variant="micro" tone={mine ? 'inverse' : 'muted'} bidi="auto">
+                  <Text variant="metadata" tone={mine ? 'inverse' : 'muted'} bidi="auto">
                     {item.authorName}
                   </Text>
                 ) : null}
@@ -362,7 +362,7 @@ export default function ConversationScreen(): React.JSX.Element {
                   <View
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end' }}
                   >
-                    <Text variant="micro" tone="inverse">
+                    <Text variant="metadata" tone="inverse">
                       {item.state === 'failed'
                         ? t('chat.failed')
                         : item.state === 'sending' || item.state === 'queued'

@@ -169,6 +169,7 @@ export const ar = {
   'practice.correct': 'إجابة صحيحة',
   'practice.incorrect': 'إجابة غير صحيحة',
   'practice.correctAnswer': 'الإجابة الصحيحة',
+  'practice.youChose': 'اخترت',
   'practice.multiHint': 'اختر كل الإجابات الصحيحة',
   'practice.done.title': 'انتهيت من هذه المجموعة',
   'practice.done.body': 'تحدّثت إشارتك في هذا الموضوع، وستظهر في تبويب التعلّم وفي موضوعك.',

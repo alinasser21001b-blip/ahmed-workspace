@@ -13,14 +13,21 @@ import { Text } from './Text';
 /**
  * Button.
  *
- * `learning` is a distinct variant, not a colour override: study actions
- * ("continue lecture", "take quiz") must be visually separable from social
- * actions ("post", "follow") everywhere in the product. That distinction is
- * one of the few things that keeps this from reading as a social app with
- * coursework bolted on.
+ * `dominant` is the one filled ink control a context is allowed — Practise,
+ * Start, Continue, Submit. It replaces the former `learning` variant, which
+ * was teal.
+ *
+ * That change is deliberate and is the point of the colour system: teal now
+ * means provenance and citation exclusively, so a study action can no longer
+ * borrow it. Separating study actions from social actions is still the goal;
+ * it is now carried by hierarchy — one dominant action per context — rather
+ * than by giving coursework its own hue.
+ *
+ * Only one `dominant` button should be visible in a context at a time. A
+ * second filled control is a design bug, not a variant choice.
  */
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'learning' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'dominant' | 'danger';
 
 export interface ButtonProps extends Omit<PressableProps, 'children' | 'style'> {
   label: string;
@@ -48,7 +55,7 @@ export function Button({
     primary: { background: theme.colors.primary, border: theme.colors.primary, label: 'inverse' },
     secondary: { background: theme.colors.surface, border: theme.colors.border, label: 'default' },
     ghost: { background: 'transparent', border: 'transparent', label: 'primary' },
-    learning: { background: theme.colors.learning, border: theme.colors.learning, label: 'inverse' },
+    dominant: { background: theme.colors.text, border: theme.colors.text, label: 'inverse' },
     danger: { background: theme.colors.danger, border: theme.colors.danger, label: 'inverse' },
   };
   const surface = surfaces[variant];

@@ -321,7 +321,7 @@ function CommentRow({
       <Avatar name={comment.author.displayName} size={32} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text variant="label" bidi="auto">{comment.author.displayName}</Text>
-        <Text variant="micro" tone="muted">
+        <Text variant="metadata" tone="muted">
           {formatRelative(comment.createdAt, locale)}
         </Text>
         <Text variant="body" style={{ marginTop: theme.spacing.xs }} bidi="auto">

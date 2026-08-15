@@ -76,7 +76,12 @@ export function Input({
           {error}
         </Text>
       ) : success ? (
-        <Text variant="caption" tone="learning" accessibilityLiveRegion="polite">
+        // `provenance` is the one sanctioned exception to "teal is never
+        // success": a fact verified against the server, which in practice is
+        // handle availability. If `success` is ever used for a generic
+        // confirmation, that use must not be teal — see
+        // `docs/design-handoff/07-COLOUR.md`.
+        <Text variant="caption" tone="provenance" accessibilityLiveRegion="polite">
           {success}
         </Text>
       ) : hint ? (

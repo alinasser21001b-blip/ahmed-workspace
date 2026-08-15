@@ -181,7 +181,7 @@ export default function GroupDetail(): React.JSX.Element {
                 {t('groups.members.count', { count: group.memberCount })}
               </Text>
             )}
-            {group.courseName ? <Badge label={group.courseName} tone="learning" /> : null}
+            {group.courseName ? <Badge label={group.courseName} tone="structure" /> : null}
             {group.communityName ? <Badge label={group.communityName} tone="primary" /> : null}
           </View>
 
@@ -192,7 +192,7 @@ export default function GroupDetail(): React.JSX.Element {
           {isMember && group.viewer.canLeave ? (
             <Button label={t('groups.leave')} variant="secondary" onPress={() => void leave()} loading={acting} />
           ) : isMember && group.viewer.role === 'owner' ? (
-            <Text variant="micro" tone="muted">
+            <Text variant="metadata" tone="muted">
               {t('groups.leave.ownerBlocked')}
             </Text>
           ) : group.viewer.membershipStatus === 'pending' ? (
@@ -219,7 +219,7 @@ export default function GroupDetail(): React.JSX.Element {
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text variant="label" bidi="auto">{request.profile.displayName}</Text>
                   {request.message ? (
-                    <Text variant="micro" tone="muted" numberOfLines={2}>
+                    <Text variant="metadata" tone="muted" numberOfLines={2}>
                       {request.message}
                     </Text>
                   ) : null}
@@ -258,7 +258,7 @@ export default function GroupDetail(): React.JSX.Element {
                 <Avatar name={member.profile.displayName} size={36} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text variant="label" bidi="auto">{member.profile.displayName}</Text>
-                  <Text variant="micro" tone="muted">
+                  <Text variant="metadata" tone="muted">
                     @{member.profile.handle}
                   </Text>
                 </View>

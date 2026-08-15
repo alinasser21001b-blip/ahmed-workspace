@@ -158,6 +158,7 @@ export const en: Record<keyof typeof ar, string> = {
   'practice.correct': 'Correct',
   'practice.incorrect': 'Not correct',
   'practice.correctAnswer': 'The correct answer',
+  'practice.youChose': 'You chose',
   'practice.multiHint': 'Select every correct answer',
   'practice.done.title': 'That’s the whole set',
   'practice.done.body':

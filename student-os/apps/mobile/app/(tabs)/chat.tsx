@@ -102,7 +102,7 @@ export default function Chat(): React.JSX.Element {
             {/* Connection state is shown, never hidden: a student who cannot
                 see why a message has not sent assumes the product lost it. */}
             {connection !== 'open' ? (
-              <Text variant="micro" tone="muted">
+              <Text variant="metadata" tone="muted">
                 {t(connection === 'connecting' ? 'chat.connecting' : 'chat.offline')}
               </Text>
             ) : null}
@@ -132,7 +132,7 @@ export default function Chat(): React.JSX.Element {
                     {item.title}
                   </Text>
                   {item.lastMessageAt ? (
-                    <Text variant="micro" tone="muted">
+                    <Text variant="metadata" tone="muted">
                       {formatRelative(item.lastMessageAt, locale)}
                     </Text>
                   ) : null}

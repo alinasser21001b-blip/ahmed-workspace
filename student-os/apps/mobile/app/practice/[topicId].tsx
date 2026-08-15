@@ -2,6 +2,7 @@ import type { PracticeAnswerResult, PracticeQuestion, PracticeSession } from '@s
 import { ApiError } from '../../src/api/client';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
@@ -158,7 +159,7 @@ export default function PracticeScreen(): React.JSX.Element {
         <Text variant="heading" numberOfLines={1} bidi="auto">
           {session.topicName}
         </Text>
-        <Text variant="micro" tone="muted">
+        <Text variant="metadata" tone="muted">
           {t('practice.title')}
         </Text>
       </View>
@@ -183,11 +184,11 @@ export default function PracticeScreen(): React.JSX.Element {
           })}
         </Text>
         {progress.lowConfidence ? (
-          <Text variant="micro" tone="muted">
+          <Text variant="metadata" tone="muted">
             {t('practice.lowConfidence')}
           </Text>
         ) : null}
-        <Text variant="micro" tone="muted">
+        <Text variant="metadata" tone="muted">
           {t('practice.signalNote')}
         </Text>
       </View>
@@ -213,7 +214,7 @@ export default function PracticeScreen(): React.JSX.Element {
           {signalCard}
           <Button
             label={t('practice.finish')}
-            variant="learning"
+            variant="dominant"
             fullWidth
             onPress={() => router.back()}
           />
@@ -234,7 +235,7 @@ export default function PracticeScreen(): React.JSX.Element {
       >
         {header}
 
-        <Text variant="micro" tone="muted">
+        <Text variant="metadata" tone="muted">
           {t('practice.progress', {
             current: session.questions.length - remaining + 1,
             total: session.questions.length,
@@ -245,7 +246,7 @@ export default function PracticeScreen(): React.JSX.Element {
           {question.prompt}
         </Text>
         {isMulti ? (
-          <Text variant="micro" tone="muted">
+          <Text variant="metadata" tone="muted">
             {t('practice.multiHint')}
           </Text>
         ) : null}
@@ -261,29 +262,86 @@ export default function PracticeScreen(): React.JSX.Element {
              * one was right next to what they chose, or the feedback is a
              * scoreline rather than a correction.
              */
+            /*
+             * Correctness is not a colour.
+             *
+             * The correct option is ink — the same weight the dominant action
+             * carries — never teal, which means provenance and nothing else.
+             * The option a student chose wrongly is `challenged`, which states
+             * that a claim does not hold, and is distinct from `danger`, which
+             * is reserved for actions that destroy something.
+             *
+             * Colour is never the only carrier. Every marked option also gets
+             * a fill, a glyph and a word, so the screen survives greyscale and
+             * deuteranopia — see `docs/design-handoff/07-COLOUR.md`.
+             */
             const border = result
               ? isKey
-                ? theme.colors.learning
+                ? theme.colors.text
                 : isSelected
-                  ? theme.colors.danger
+                  ? theme.colors.challenged
                   : theme.colors.border
               : isSelected
-                ? theme.colors.learning
+                ? theme.colors.text
                 : theme.colors.border;
+
+            const marked = result ? isKey || isSelected : isSelected;
+
+            // Announce the verdict as part of the option, so a screen reader
+            // reaches it in reading order rather than only in a separate panel.
+            const stateWord = result
+              ? isKey
+                ? t('practice.correct')
+                : isSelected
+                  ? t('practice.youChose')
+                  : null
+              : null;
 
             return (
               <Pressable
                 key={option.id}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: isSelected, disabled: result !== null }}
-                accessibilityLabel={option.label}
+                accessibilityLabel={stateWord ? `${option.label}, ${stateWord}` : option.label}
                 disabled={result !== null}
                 onPress={() => toggle(option.id)}
               >
-                <Card style={{ borderColor: border, borderWidth: 2 }}>
-                  <Text variant="body" bidi="auto">
-                    {option.label}
-                  </Text>
+                <Card
+                  style={{
+                    borderColor: border,
+                    borderWidth: 2,
+                    backgroundColor: marked ? theme.colors.surfaceSelected : theme.colors.surface,
+                  }}
+                >
+                  <View
+                    style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.sm }}
+                  >
+                    {result && isKey ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={theme.colors.text}
+                        accessibilityElementsHidden
+                        importantForAccessibility="no"
+                      />
+                    ) : null}
+                    <Text
+                      variant="body"
+                      bidi="auto"
+                      style={{ flex: 1, fontWeight: marked ? '500' : '400' }}
+                    >
+                      {option.label}
+                    </Text>
+                  </View>
+                  {stateWord ? (
+                    <Text
+                      variant="metadata"
+                      tone={isKey ? 'default' : 'challenged'}
+                      style={{ marginTop: theme.spacing.xs }}
+                    >
+                      {stateWord}
+                    </Text>
+                  ) : null}
                 </Card>
               </Pressable>
             );
@@ -292,7 +350,7 @@ export default function PracticeScreen(): React.JSX.Element {
 
         {result ? (
           <View style={{ gap: theme.spacing.sm }}>
-            <Text variant="bodyStrong" tone={result.isCorrect ? 'learning' : 'danger'}>
+            <Text variant="bodyStrong" tone={result.isCorrect ? 'default' : 'challenged'}>
               {result.isCorrect ? t('practice.correct') : t('practice.incorrect')}
             </Text>
             {result.explanation ? (
@@ -305,7 +363,7 @@ export default function PracticeScreen(): React.JSX.Element {
               label={
                 index + 1 >= session.questions.length ? t('practice.finish') : t('practice.next')
               }
-              variant="learning"
+              variant="dominant"
               fullWidth
               onPress={advance}
             />
@@ -313,7 +371,7 @@ export default function PracticeScreen(): React.JSX.Element {
         ) : (
           <Button
             label={t('practice.check')}
-            variant="learning"
+            variant="dominant"
             fullWidth
             loading={submitting}
             disabled={selected.length === 0}

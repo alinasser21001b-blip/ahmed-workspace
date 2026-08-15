@@ -119,14 +119,14 @@ export default function DeleteAccountScreen(): React.JSX.Element {
             }}
           />
           {confirmation.length > 0 && confirmation !== 'DELETE' ? (
-            <Text variant="micro" tone="danger">
+            <Text variant="metadata" tone="danger">
               {t('settings.deleteAccount.wrongConfirmation')}
             </Text>
           ) : null}
         </View>
 
         {error ? (
-          <Text variant="micro" tone="danger">
+          <Text variant="metadata" tone="danger">
             {error}
           </Text>
         ) : null}

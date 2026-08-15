@@ -107,7 +107,7 @@ export default function BlockedAccountsScreen(): React.JSX.Element {
                 <Text variant="bodyStrong" bidi="auto">
                   {item.profile.displayName}
                 </Text>
-                <Text variant="micro" tone="muted">
+                <Text variant="metadata" tone="muted">
                   {t('blocked.blockedSince', {
                     date: new Date(item.blockedAt).toLocaleDateString(locale),
                   })}

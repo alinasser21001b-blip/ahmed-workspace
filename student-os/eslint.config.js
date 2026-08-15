@@ -19,6 +19,11 @@ export default tseslint.config(
       // dependencies. Linting it says nothing about this codebase and drowns
       // anything that does.
       'netlify/functions/**',
+      // The frozen design handoff's visual reference. `support.js` is a browser
+      // artifact exported by the design tool, not source we author or ship —
+      // it is evidence of what was approved. Linting it reports 88 browser
+      // globals and says nothing about this codebase.
+      'docs/design-handoff/reference/**',
     ],
   },
   js.configs.recommended,

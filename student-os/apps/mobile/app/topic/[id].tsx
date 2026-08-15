@@ -97,7 +97,7 @@ export default function TopicScreen(): React.JSX.Element {
             {topic.name}
           </Text>
           {/* Where this sits academically — the answer to "what am I studying?" */}
-          <Text variant="micro" tone="muted" bidi="auto">
+          <Text variant="metadata" tone="muted" bidi="auto">
             {topic.courseName} · {topic.subjectName}
             {topic.parentTopicName ? ` · ${topic.parentTopicName}` : ''}
           </Text>
@@ -113,7 +113,7 @@ export default function TopicScreen(): React.JSX.Element {
       {topic.viewer.canPractice ? (
         <Button
           label={t('practice.action')}
-          variant="learning"
+          variant="dominant"
           fullWidth
           onPress={() => router.push(`/practice/${topic.id}`)}
         />
@@ -129,7 +129,7 @@ export default function TopicScreen(): React.JSX.Element {
               })}
             </Text>
             {/* A count, never a verdict — the same framing the Learn tab uses. */}
-            <Text variant="micro" tone="muted">
+            <Text variant="metadata" tone="muted">
               {t('practice.signalNote')}
             </Text>
           </View>
@@ -160,14 +160,14 @@ export default function TopicScreen(): React.JSX.Element {
               <Badge
                 key={`${rel.id}-${rel.relation}`}
                 label={rel.name}
-                tone="learning"
+                tone="structure"
                 onPress={() => router.push(`/topic/${rel.id}`)}
               />
             ))}
           </View>
           {/* Where the edge came from, stated rather than implied. A count is
               not an assertion, and the student is told which this is. */}
-          <Text variant="micro" tone="muted">
+          <Text variant="metadata" tone="muted">
             {topic.related.some((rel) => rel.source === 'derived')
               ? t('topic.related.derived')
               : t('topic.related.curated')}

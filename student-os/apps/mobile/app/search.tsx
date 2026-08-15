@@ -150,7 +150,7 @@ export default function Search(): React.JSX.Element {
                         <Avatar name={person.displayName} size={36} />
                         <View style={{ flex: 1, gap: 2 }}>
                           <Text variant="label" bidi="auto">{person.displayName}</Text>
-                          <Text variant="micro" tone="muted">
+                          <Text variant="metadata" tone="muted">
                             @{person.handle}
                             {person.stageName ? ` · ${person.stageName}` : ''}
                           </Text>
@@ -174,7 +174,7 @@ export default function Search(): React.JSX.Element {
                     >
                       <View style={{ gap: theme.spacing.xs }}>
                         <Text variant="label" bidi="auto">{group.name}</Text>
-                        <Text variant="micro" tone="muted">
+                        <Text variant="metadata" tone="muted">
                           {t('groups.members.count', { count: group.memberCount })}
                         </Text>
                       </View>
@@ -198,7 +198,7 @@ export default function Search(): React.JSX.Element {
                         <Text variant="body" numberOfLines={3} bidi="auto">
                           {hit.body}
                         </Text>
-                        <Text variant="micro" tone="muted" bidi="auto">
+                        <Text variant="metadata" tone="muted" bidi="auto">
                           {hit.author.displayName}
                         </Text>
                       </View>
