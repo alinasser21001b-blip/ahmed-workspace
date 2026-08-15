@@ -25,7 +25,7 @@
  *   API_URL=http://localhost:4000 pnpm --filter @sos/api demo:seed
  */
 
-import { closePool } from '../src/platform/db.js';
+import { closePool, queryOne } from '../src/platform/db.js';
 import { bootstrapPlatformAdmin } from './bootstrap-admin.js';
 
 const API = process.env.API_URL ?? 'http://localhost:4000';
@@ -165,6 +165,142 @@ const topicId = (fragment: string): string[] => {
   const match = topics.find((t) => t.nameEn.toLowerCase().includes(fragment.toLowerCase()));
   return match ? [match.id] : [];
 };
+
+// --- practice questions -----------------------------------------------------
+//
+// The SECOND and last exception to "everything goes through the API", and it is
+// the same kind as the administrator bootstrap: there is no route to go through.
+// Phase 5d ships the practice loop — a student answering questions and the
+// signal that produces — not a quiz composer, so the only way to put questions
+// in front of the demo cohort is to write the rows an authoring path eventually
+// will.
+//
+// They are written exactly as that path would: `published_at` set, every
+// question carrying the topic edge that lets performance roll up, and the key
+// living only in `quiz_options.is_correct` where the grader reads it. Nothing
+// here writes `learning_progress` — that has to come from the student
+// answering, or the demo would be showing a number the product did not earn.
+
+interface SeedQuestion {
+  prompt: string;
+  explanation: string;
+  options: { label: string; correct: boolean }[];
+}
+
+async function practiceSet(
+  title: string,
+  topicFragment: string,
+  questions: SeedQuestion[],
+): Promise<void> {
+  const [topic] = topicId(topicFragment);
+  if (!topic) {
+    log(`  (no topic matching "${topicFragment}" — skipping the practice set)`);
+    return;
+  }
+
+  const quiz = await queryOne<{ id: string }>(
+    `INSERT INTO quizzes (course_id, title, visibility, question_count, published_at)
+     VALUES ($1, $2, 'course', $3, now())
+     RETURNING id`,
+    [pediatrics.id, title, questions.length],
+  );
+
+  for (const [ordinal, question] of questions.entries()) {
+    const row = await queryOne<{ id: string }>(
+      `INSERT INTO quiz_questions (quiz_id, topic_id, kind, prompt, explanation, points, ordinal)
+       VALUES ($1, $2, 'mcq_single', $3, $4, 1, $5)
+       RETURNING id`,
+      [quiz!.id, topic, question.prompt, question.explanation, ordinal],
+    );
+    for (const [index, option] of question.options.entries()) {
+      await queryOne(
+        `INSERT INTO quiz_options (question_id, label, is_correct, ordinal)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [row!.id, option.label, option.correct, index],
+      );
+    }
+  }
+
+  log(`  practice: “${title}” — ${questions.length} questions on ${topicFragment}`);
+}
+
+await practiceSet('تدريب: المتلازمة الكلوية', 'nephrotic', [
+  {
+    prompt: 'ما العلامة المخبرية الأساسية في المتلازمة الكلوية؟',
+    explanation: 'البيلة البروتينية الشديدة (> 3.5 غم/24 ساعة) هي المعيار المُعرِّف.',
+    options: [
+      { label: 'بيلة بروتينية شديدة', correct: true },
+      { label: 'بيلة دموية عيانية', correct: false },
+      { label: 'ارتفاع الكرياتينين حصراً', correct: false },
+    ],
+  },
+  {
+    prompt: 'أي مما يلي يُتوقَّع في تحليل الدم لمريض المتلازمة الكلوية؟',
+    explanation: 'نقص ألبومين الدم نتيجة الفقد البولي، مع ارتفاع الشحوم تعويضياً.',
+    options: [
+      { label: 'نقص ألبومين الدم', correct: true },
+      { label: 'ارتفاع ألبومين الدم', correct: false },
+      { label: 'نقص الشحوم الثلاثية', correct: false },
+    ],
+  },
+  {
+    prompt: 'ما أشيع سبب للمتلازمة الكلوية عند الأطفال؟',
+    explanation: 'داء التغيّر الأدنى، ويستجيب عادةً للستيرويدات.',
+    options: [
+      { label: 'داء التغيّر الأدنى', correct: true },
+      { label: 'اعتلال الكلية بالـ IgA', correct: false },
+      { label: 'التهاب الكبيبات التالي للعقديات', correct: false },
+    ],
+  },
+  {
+    prompt: 'ما الخط العلاجي الأول المعتاد؟',
+    explanation: 'البريدنيزولون؛ عدم الاستجابة بعد ٤ أسابيع يستدعي إعادة التقييم.',
+    options: [
+      { label: 'البريدنيزولون', correct: true },
+      { label: 'المضادات الحيوية', correct: false },
+      { label: 'غسيل الكلى الفوري', correct: false },
+    ],
+  },
+  {
+    prompt: 'أي اختلاط يجب ترقّبه بسبب فقد مضادات التخثر الطبيعية؟',
+    explanation: 'فرط التخثر — فقد الأنتي‑ثرومبين III في البول يرفع خطر الخثار.',
+    options: [
+      { label: 'الخثار الوريدي', correct: true },
+      { label: 'فقر الدم المنجلي', correct: false },
+      { label: 'نقص الصفيحات المناعي', correct: false },
+    ],
+  },
+]);
+
+await practiceSet('تدريب: اليرقان الوليدي', 'jaundice', [
+  {
+    prompt: 'متى يُعتبر اليرقان الوليدي مَرَضياً لا فيزيولوجياً؟',
+    explanation: 'الظهور خلال الـ ٢٤ ساعة الأولى يستدعي التقصّي دائماً.',
+    options: [
+      { label: 'إذا ظهر خلال أول ٢٤ ساعة', correct: true },
+      { label: 'إذا ظهر في اليوم الثالث', correct: false },
+      { label: 'إذا زال خلال أسبوع', correct: false },
+    ],
+  },
+  {
+    prompt: 'ما الخطر الرئيسي لفرط بيليروبين الدم غير المقترن الشديد؟',
+    explanation: 'اليرقان النووي — ترسّب البيليروبين في النوى القاعدية.',
+    options: [
+      { label: 'اليرقان النووي', correct: true },
+      { label: 'الفشل الكلوي', correct: false },
+      { label: 'التهاب الكبد المزمن', correct: false },
+    ],
+  },
+  {
+    prompt: 'ما العلاج الأولي المعتاد قبل بلوغ عتبة تبديل الدم؟',
+    explanation: 'المعالجة الضوئية، وفق مخططات العتبات حسب العمر بالساعات.',
+    options: [
+      { label: 'المعالجة الضوئية', correct: true },
+      { label: 'إيقاف الرضاعة نهائياً', correct: false },
+      { label: 'الستيرويدات', correct: false },
+    ],
+  },
+]);
 
 // --- students ---------------------------------------------------------------
 
@@ -749,6 +885,13 @@ log('join request to approve, membership of the unlisted group that @omar');
 log('must not be able to find, and ownership of the classroom — so they see');
 log('the join code, the draft lecture and the material-authoring control that');
 log('@zainab and @omar do not.');
+log('');
+log('');
+log('For the learning loop: open a topic with practice on it and tap');
+log('“اختبر فهمك”. Answer a few wrong on purpose, then look at the Learn');
+log('tab — the topic appears under “مواضيع تحتاج مراجعة”, and the same');
+log('signal now feeds the home feed’s weak-topic weighting. Nothing on');
+log('those screens has any number in it until a student answers something.');
 log('');
 log(`Classroom  /classrooms/${classroom.id}`);
 log(`Lecture    /lecture/${nephrotic.id}`);

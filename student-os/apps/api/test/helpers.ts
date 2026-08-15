@@ -369,3 +369,87 @@ export async function readFeed(
   }
   return response.json();
 }
+
+// --- Phase 5d helpers -------------------------------------------------------
+
+export interface SeededQuestion {
+  topicId: string;
+  prompt: string;
+  kind?: 'mcq_single' | 'mcq_multi' | 'true_false';
+  /** Exactly the labels the student will see, with the key marked. */
+  options: { label: string; correct: boolean }[];
+  explanation?: string;
+  points?: number;
+}
+
+/**
+ * A published quiz with questions, written directly.
+ *
+ * Direct SQL because there is no authoring route to go through: Phase 5d ships
+ * the practice loop, not a quiz composer, and inventing one here would test a
+ * surface that does not exist. The rows are exactly what an authoring path
+ * would write — `published_at` set, questions carrying the topic edge, options
+ * carrying the key — so the read path under test is the real one.
+ *
+ * The key lives only in `quiz_options.is_correct`. No test asserts correctness
+ * by recomputing it; they assert what the server decided.
+ */
+export async function seedPracticeQuiz(input: {
+  courseId: string;
+  title?: string;
+  questions: SeededQuestion[];
+}): Promise<{ quizId: string; questionIds: string[] }> {
+  const quiz = await queryOne<{ id: string }>(
+    `INSERT INTO quizzes (course_id, title, visibility, question_count, published_at)
+     VALUES ($1, $2, 'course', $3, now())
+     RETURNING id`,
+    [input.courseId, input.title ?? 'Practice set', input.questions.length],
+  );
+
+  const questionIds: string[] = [];
+  for (const [index, question] of input.questions.entries()) {
+    const row = await queryOne<{ id: string }>(
+      `INSERT INTO quiz_questions (quiz_id, topic_id, kind, prompt, explanation, points, ordinal)
+       VALUES ($1, $2, $3::quiz_question_kind, $4, $5, $6, $7)
+       RETURNING id`,
+      [
+        quiz!.id,
+        question.topicId,
+        question.kind ?? 'mcq_single',
+        question.prompt,
+        question.explanation ?? null,
+        question.points ?? 1,
+        index,
+      ],
+    );
+    questionIds.push(row!.id);
+
+    for (const [ordinal, option] of question.options.entries()) {
+      await queryOne(
+        `INSERT INTO quiz_options (question_id, label, is_correct, ordinal)
+         VALUES ($1, $2, $3, $4) RETURNING id`,
+        [row!.id, option.label, option.correct, ordinal],
+      );
+    }
+  }
+
+  return { quizId: quiz!.id, questionIds };
+}
+
+/** The stored learning signal for one student on one topic, read directly. */
+export async function readProgressRow(
+  userId: string,
+  topicId: string,
+): Promise<{
+  questions_seen: number;
+  questions_correct: number;
+  weakness_score: number | null;
+  confidence: number | null;
+  last_activity_at: Date | null;
+} | null> {
+  return queryOne(
+    `SELECT questions_seen, questions_correct, weakness_score, confidence, last_activity_at
+     FROM learning_progress WHERE user_id = $1 AND topic_id = $2`,
+    [userId, topicId],
+  );
+}

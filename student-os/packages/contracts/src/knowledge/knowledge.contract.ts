@@ -187,6 +187,15 @@ export const topicDetailSchema = z.object({
     questionsCorrect: z.number().int().nonnegative(),
     weaknessScore: z.number().nullable(),
     lastActivityAt: isoDateTimeSchema.nullable(),
+    /**
+     * Whether there is anything for this student to practise here.
+     *
+     * Projected by the server rather than inferred by the client, for the same
+     * reason every other capability flag is: the client cannot know which
+     * quizzes are published in which of this student's courses, and a Practice
+     * button that 404s is the dead control the product ruled out in Phase 3.
+     */
+    canPractice: z.boolean(),
   }),
 });
 export type TopicDetail = z.infer<typeof topicDetailSchema>;

@@ -7,6 +7,7 @@ import {
 } from '@sos/core';
 import { errors } from '../../platform/errors.js';
 import * as content from '../content/content.service.js';
+import * as practiceRepo from '../learning/practice.repository.js';
 import * as repo from './topics.repository.js';
 
 /**
@@ -37,7 +38,7 @@ export async function getTopic(
    * KNOWLEDGE inside the topic, and those counts run the feed's predicate.
    */
   const scopes = visibilityScopesFor(actor);
-  const [subtopics, related, counts, progress] = await Promise.all([
+  const [subtopics, related, counts, progress, canPractice] = await Promise.all([
     repo.listSubtopics(topicId),
     repo.listRelated(topicId, 12),
     repo.knowledgeCounts(topicId, {
@@ -53,6 +54,7 @@ export async function getTopic(
       excludedUserIds: scopes.excludedUserIds,
     }),
     repo.viewerProgress(actor.userId, topicId),
+    practiceRepo.hasPracticableQuestions(scopes.courseIds, topicId),
   ]);
 
   return {
@@ -89,6 +91,7 @@ export async function getTopic(
       questionsCorrect: progress?.questions_correct ?? 0,
       weaknessScore: progress?.weakness_score ?? null,
       lastActivityAt: progress?.last_activity_at?.toISOString() ?? null,
+      canPractice,
     },
   };
 }

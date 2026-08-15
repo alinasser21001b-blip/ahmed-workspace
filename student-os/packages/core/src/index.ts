@@ -7,6 +7,7 @@ export * from './policy/membership.policy.js';
 export * from './policy/classroom.policy.js';
 export * from './messaging/message-state.js';
 export * from './learning/weakness.js';
+export * from './learning/grading.js';
 export * from './ranking/feed-ranking.js';
 export * from './pagination/cursor.js';
 export * from './text/arabic.js';
