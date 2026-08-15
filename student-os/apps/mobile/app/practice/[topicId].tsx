@@ -1,68 +1,88 @@
-import type { PracticeAnswerResult, PracticeQuestion, PracticeSession } from '@sos/contracts';
-import { ApiError } from '../../src/api/client';
+import type { PracticeAnswerResult, PracticeSession } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
-import { Pressable, ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../../src/components/Button';
-import { DirectionalIcon } from '../../src/components/DirectionalIcon';
-import { Text } from '../../src/components/Text';
-import { Card } from '../../src/components/surfaces';
+import { ScrollView, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DominantAction, SecondaryAction } from '../../src/components/editorial';
+import { EvidenceDelta } from '../../src/components/evidence';
+import {
+  AnswerOption,
+  FeedbackPanel,
+  PracticeHeader,
+  type SegmentState,
+} from '../../src/components/practice';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
-import { useI18n } from '../../src/i18n/index';
+import { Text } from '../../src/components/Text';
+import { ApiError, NetworkError } from '../../src/api/client';
+import { localizeDigits, useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 /**
- * Practice — the one screen where the product asks instead of tells.
+ * Practice — the focus mode, implementing the state machine from
+ * 13-PRACTICE.md exactly.
  *
- * Everything else in the app shows a student what other people know. This is
- * the only place it finds out what THEY know, and it is the reason the Learn
- * tab and the topic page have numbers on them at all.
+ *   loading → idle ⇄ answer_selected → submitting → feedback_correct
+ *                                        │       └→ feedback_incorrect
+ *                                        └→ submit_failed → retry
+ *   feedback → next → idle | complete
  *
- * Three things are deliberate and worth not undoing:
+ * Invariants the types below make unrepresentable: no verdict without a
+ * submission, no double submit (the control is inert in flight), no changing
+ * an answer after reveal.
  *
- *  1. **No score, no streak, no timer.** The screen reports one thing — how
- *     many questions on this topic the student has answered correctly — and it
- *     labels that a study signal rather than a result. A points total would
- *     turn the honest number underneath into a game, and the whole loop exists
- *     to make that number trustworthy.
- *  2. **Correctness comes from the server, always.** The screen has no key to
- *     check against; it sends the selection and renders what comes back. That
- *     is not a limitation to work around.
- *  3. **Answered questions stay answered.** Resuming shows the ones already
- *     done as done — the API refuses a second answer, and a UI that let a
- *     student retry would be promising something it cannot deliver.
+ * Three things carried over from the previous implementation and still
+ * deliberate: no score/streak/timer; correctness always comes from the
+ * server; answered questions stay answered — resume opens at the first
+ * unanswered question and never re-asks.
  */
 
-type Status = 'loading' | 'ready' | 'empty' | 'error';
+type Phase =
+  | { kind: 'loading' }
+  | { kind: 'load_failed'; offline: boolean }
+  | { kind: 'empty' }
+  | { kind: 'idle' }
+  | { kind: 'submitting' }
+  | { kind: 'feedback'; result: PracticeAnswerResult }
+  | { kind: 'submit_failed' }
+  | { kind: 'complete' };
 
 export default function PracticeScreen(): React.JSX.Element {
   const { topicId } = useLocalSearchParams<{ topicId: string }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { api } = useSession();
 
   const [session, setSession] = useState<PracticeSession | null>(null);
-  const [status, setStatus] = useState<Status>('loading');
+  const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
-  const [result, setResult] = useState<PracticeAnswerResult | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  /** Verdicts this session, by question id — drives the header segments. */
+  const [verdicts, setVerdicts] = useState<Record<string, boolean>>({});
+  /** The evidence pair before the answer in flight — the delta's left side. */
+  const [progressBefore, setProgressBefore] = useState<PracticeSession['progress'] | null>(null);
+  /** Where the session started, for the completion summary. */
+  const [sessionStart, setSessionStart] = useState<PracticeSession['progress'] | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
-    setStatus('loading');
+    setPhase({ kind: 'loading' });
     try {
       const started = await api.post<PracticeSession>(`/v1/topics/${topicId}/practice`);
       setSession(started);
-      // Resume where the student stopped rather than at the top.
+      setProgressBefore(started.progress);
+      setSessionStart(started.progress);
       const next = started.questions.findIndex((question) => !question.answered);
-      setIndex(next === -1 ? started.questions.length : next);
-      setStatus('ready');
-    } catch (error) {
-      // 404 is the honest "nothing published for you here" — not a failure.
-      setStatus(error instanceof ApiError && error.status === 404 ? 'empty' : 'error');
+      if (next === -1) {
+        setIndex(started.questions.length);
+        setPhase({ kind: 'complete' });
+      } else {
+        setIndex(next);
+        setPhase({ kind: 'idle' });
+      }
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 404) setPhase({ kind: 'empty' });
+      else setPhase({ kind: 'load_failed', offline: cause instanceof NetworkError });
     }
   }, [api, topicId]);
 
@@ -70,179 +90,180 @@ export default function PracticeScreen(): React.JSX.Element {
     void load();
   }, [load]);
 
-  const question: PracticeQuestion | undefined = session?.questions[index];
+  const question = session?.questions[index];
   const isMulti = question?.kind === 'mcq_multi';
+  const kind: 'single' | 'multi' | 'boolean' =
+    question?.kind === 'mcq_multi' ? 'multi' : question?.kind === 'true_false' ? 'boolean' : 'single';
 
-  const progress = result?.progress ?? session?.progress ?? null;
-  const remaining = useMemo(
-    () => (session ? session.questions.filter((q) => !q.answered).length : 0),
-    [session],
-  );
+  const segments = useMemo<SegmentState[]>(() => {
+    if (!session) return [];
+    return session.questions.map((entry, position) => {
+      if (entry.id in verdicts) return verdicts[entry.id] ? 'correct' : 'incorrect';
+      // Answered on a previous visit: shown as correct-band? No — earlier
+      // verdicts are unknown to this session; the segment states only what
+      // this session saw. Prior answers render as filled-unanswered.
+      if (entry.answered) return 'correct';
+      return position === index ? 'current' : 'unanswered';
+    });
+  }, [session, verdicts, index]);
 
   function toggle(optionId: string): void {
-    if (result) return;
+    if (phase.kind !== 'idle' && phase.kind !== 'submit_failed') return;
     setSelected((current) => {
       if (!isMulti) return [optionId];
       return current.includes(optionId)
         ? current.filter((id) => id !== optionId)
         : [...current, optionId];
     });
+    setPhase({ kind: 'idle' });
   }
 
-  async function check(): Promise<void> {
-    if (!session || !question || submitting) return;
-    setSubmitting(true);
+  async function submit(): Promise<void> {
+    if (!session || !question || phase.kind === 'submitting') return;
+    setPhase({ kind: 'submitting' });
     try {
-      const answered = await api.post<PracticeAnswerResult>(
+      const result = await api.post<PracticeAnswerResult>(
         `/v1/practice/attempts/${session.attemptId}/answers`,
         { questionId: question.id, selectedOptionIds: selected },
       );
-      setResult(answered);
+      setVerdicts((current) => ({ ...current, [question.id]: result.isCorrect }));
       setSession({
         ...session,
-        questions: session.questions.map((q) =>
-          q.id === question.id ? { ...q, answered: true } : q,
+        questions: session.questions.map((entry) =>
+          entry.id === question.id ? { ...entry, answered: true } : entry,
         ),
       });
+      setPhase({ kind: 'feedback', result });
     } catch {
-      setStatus('error');
-    } finally {
-      setSubmitting(false);
+      // Selection preserved; nothing is claimed. Retry replays idempotently.
+      setPhase({ kind: 'submit_failed' });
     }
   }
 
-  function advance(): void {
-    setResult(null);
+  function advance(result: PracticeAnswerResult): void {
+    // The after becomes the next answer's before.
+    if (result.progress) setProgressBefore(result.progress);
     setSelected([]);
-    setIndex((current) => current + 1);
+    const next = session?.questions.findIndex((entry) => !entry.answered) ?? -1;
+    if (next === -1) {
+      setIndex(session ? session.questions.length : 0);
+      setPhase({ kind: 'complete' });
+    } else {
+      setIndex(next);
+      setPhase({ kind: 'idle' });
+    }
   }
 
-  if (status === 'loading') {
+  const exit = (): void => router.back();
+  const openTopic = (): void => {
+    if (topicId) router.replace(`/topic/${topicId}`);
+  };
+
+  // ---- full-screen terminal states ----------------------------------------
+
+  if (phase.kind === 'loading') {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
         <LoadingState />
       </SafeAreaView>
     );
   }
-
-  if (status === 'error') {
+  if (phase.kind === 'load_failed') {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <ErrorState onRetry={() => void load()} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+        <ErrorState
+          {...(phase.offline ? { message: t('state.offline') } : {})}
+          onRetry={() => void load()}
+        />
       </SafeAreaView>
     );
   }
-
-  if (status === 'empty' || !session) {
+  if (phase.kind === 'empty' || !session) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
         <EmptyState
           title={t('practice.empty.title')}
           body={t('practice.empty.body')}
-          action={{ label: t('action.back'), onPress: () => router.back() }}
+          action={{ label: t('action.back'), onPress: exit }}
         />
       </SafeAreaView>
     );
   }
 
-  const header = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('action.back')}
-        onPress={() => router.back()}
-        hitSlop={8}
-      >
-        <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
-      </Pressable>
-      <View style={{ flex: 1 }}>
-        <Text variant="heading" numberOfLines={1} bidi="auto">
-          {session.topicName}
-        </Text>
-        <Text variant="metadata" tone="muted">
-          {t('practice.title')}
-        </Text>
-      </View>
-    </View>
-  );
+  // ---- completion -----------------------------------------------------------
 
-  /*
-   * The signal, stated as a signal.
-   *
-   * `lowConfidence` comes from the API rather than being inferred from the
-   * count here: the threshold lives in `@sos/core` with the formula, and a
-   * client that carried its own copy would eventually disagree with the Learn
-   * tab about the same student.
-   */
-  const signalCard = progress ? (
-    <Card>
-      <View style={{ gap: theme.spacing.xs }}>
-        <Text variant="bodyStrong">
-          {t('practice.score', {
-            correct: progress.questionsCorrect,
-            seen: progress.questionsSeen,
-          })}
-        </Text>
-        {progress.lowConfidence ? (
-          <Text variant="metadata" tone="muted">
-            {t('practice.lowConfidence')}
-          </Text>
-        ) : null}
-        <Text variant="metadata" tone="muted">
-          {t('practice.signalNote')}
-        </Text>
-      </View>
-    </Card>
-  ) : null;
-
-  // Every question answered — either just now, or on a previous visit.
-  if (!question) {
+  if (phase.kind === 'complete' || !question) {
+    const answeredThisSession = Object.keys(verdicts).length;
+    const latest = progressBefore;
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+        <PracticeHeader
+          total={session.questions.length}
+          index={session.questions.length - 1}
+          segments={segments}
+          onExit={exit}
+        />
         <ScrollView
-          contentContainerStyle={{
-            padding: theme.spacing.lg,
-            gap: theme.spacing.lg,
-            flexGrow: 1,
-          }}
+          contentContainerStyle={{ padding: theme.spacing.xl, gap: theme.spacing.lg, flexGrow: 1 }}
         >
-          {header}
-          <Text variant="bodyStrong">{t('practice.done.title')}</Text>
-          <Text variant="body" tone="muted">
-            {t('practice.done.body')}
+          <Text variant="title">{t('practice.complete')}</Text>
+          {answeredThisSession > 0 ? (
+            <Text variant="body" tone="secondary">
+              {t('practice.score', {
+                correct: localizeDigits(locale, Object.values(verdicts).filter(Boolean).length),
+                seen: localizeDigits(locale, answeredThisSession),
+              })}
+            </Text>
+          ) : (
+            <Text variant="body" tone="secondary">
+              {t('practice.allAnswered')}
+            </Text>
+          )}
+          {sessionStart && latest && answeredThisSession > 0 ? (
+            <EvidenceDelta
+              before={{ correct: sessionStart.questionsCorrect, answered: sessionStart.questionsSeen }}
+              after={{ correct: latest.questionsCorrect, answered: latest.questionsSeen }}
+            />
+          ) : null}
+          {latest?.lowConfidence ? (
+            <Text variant="metadata" tone="muted">
+              {t('practice.stillSmallSample')}
+            </Text>
+          ) : null}
+          <Text variant="metadata" tone="muted">
+            {t('practice.signalNote')}
           </Text>
-          {signalCard}
-          <Button
-            label={t('practice.finish')}
-            variant="dominant"
-            fullWidth
-            onPress={() => router.back()}
-          />
+          <View style={{ flex: 1 }} />
+          <DominantAction label={t('practice.backToTopic')} onPress={openTopic} />
         </ScrollView>
-      </SafeAreaView>
+      </View>
     );
   }
 
+  // ---- the question ---------------------------------------------------------
+
+  const revealed = phase.kind === 'feedback';
+  const result = phase.kind === 'feedback' ? phase.result : null;
+  const remaining = session.questions.filter((entry) => !entry.answered).length;
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+      <PracticeHeader
+        total={session.questions.length}
+        index={index}
+        segments={segments}
+        onExit={exit}
+      />
+
       <ScrollView
         contentContainerStyle={{
-          padding: theme.spacing.lg,
-          paddingBottom: theme.spacing.xxxl,
+          padding: theme.spacing.xl,
+          paddingBottom: theme.spacing.xl,
           gap: theme.spacing.lg,
-          flexGrow: 1,
         }}
       >
-        {header}
-
-        <Text variant="metadata" tone="muted">
-          {t('practice.progress', {
-            current: session.questions.length - remaining + 1,
-            total: session.questions.length,
-          })}
-        </Text>
-
-        <Text variant="bodyStrong" bidi="auto">
+        {/* The stem — the largest text on screen at every step. */}
+        <Text variant="title" bidi="auto" style={{ fontWeight: '600' }}>
           {question.prompt}
         </Text>
         {isMulti ? (
@@ -252,133 +273,85 @@ export default function PracticeScreen(): React.JSX.Element {
         ) : null}
 
         <View style={{ gap: theme.spacing.sm }}>
-          {question.options.map((option) => {
-            const isSelected = selected.includes(option.id);
-            const isKey = result?.correctOptionIds.includes(option.id) ?? false;
-
-            /*
-             * After the verdict the key is marked on the option itself, not
-             * only in a banner. A student who picked wrong needs to see WHICH
-             * one was right next to what they chose, or the feedback is a
-             * scoreline rather than a correction.
-             */
-            /*
-             * Correctness is not a colour.
-             *
-             * The correct option is ink — the same weight the dominant action
-             * carries — never teal, which means provenance and nothing else.
-             * The option a student chose wrongly is `challenged`, which states
-             * that a claim does not hold, and is distinct from `danger`, which
-             * is reserved for actions that destroy something.
-             *
-             * Colour is never the only carrier. Every marked option also gets
-             * a fill, a glyph and a word, so the screen survives greyscale and
-             * deuteranopia — see `docs/design-handoff/07-COLOUR.md`.
-             */
-            const border = result
-              ? isKey
-                ? theme.colors.text
-                : isSelected
-                  ? theme.colors.challenged
-                  : theme.colors.border
-              : isSelected
-                ? theme.colors.text
-                : theme.colors.border;
-
-            const marked = result ? isKey || isSelected : isSelected;
-
-            // Announce the verdict as part of the option, so a screen reader
-            // reaches it in reading order rather than only in a separate panel.
-            const stateWord = result
-              ? isKey
-                ? t('practice.correct')
-                : isSelected
-                  ? t('practice.youChose')
-                  : null
-              : null;
-
-            return (
-              <Pressable
-                key={option.id}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: isSelected, disabled: result !== null }}
-                accessibilityLabel={stateWord ? `${option.label}, ${stateWord}` : option.label}
-                disabled={result !== null}
-                onPress={() => toggle(option.id)}
-              >
-                <Card
-                  style={{
-                    borderColor: border,
-                    borderWidth: 2,
-                    backgroundColor: marked ? theme.colors.surfaceSelected : theme.colors.surface,
-                  }}
-                >
-                  <View
-                    style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.sm }}
-                  >
-                    {result && isKey ? (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={20}
-                        color={theme.colors.text}
-                        accessibilityElementsHidden
-                        importantForAccessibility="no"
-                      />
-                    ) : null}
-                    <Text
-                      variant="body"
-                      bidi="auto"
-                      style={{ flex: 1, fontWeight: marked ? '500' : '400' }}
-                    >
-                      {option.label}
-                    </Text>
-                  </View>
-                  {stateWord ? (
-                    <Text
-                      variant="metadata"
-                      tone={isKey ? 'default' : 'challenged'}
-                      style={{ marginTop: theme.spacing.xs }}
-                    >
-                      {stateWord}
-                    </Text>
-                  ) : null}
-                </Card>
-              </Pressable>
-            );
-          })}
+          {question.options.map((option, optionIndex) => (
+            <AnswerOption
+              key={option.id}
+              index={optionIndex}
+              label={option.label}
+              kind={kind}
+              selected={selected.includes(option.id)}
+              revealed={revealed}
+              isCorrect={result?.correctOptionIds.includes(option.id) ?? false}
+              wasChosen={selected.includes(option.id)}
+              onPress={() => toggle(option.id)}
+            />
+          ))}
         </View>
 
         {result ? (
-          <View style={{ gap: theme.spacing.sm }}>
-            <Text variant="bodyStrong" tone={result.isCorrect ? 'default' : 'challenged'}>
-              {result.isCorrect ? t('practice.correct') : t('practice.incorrect')}
+          <FeedbackPanel
+            isCorrect={result.isCorrect}
+            explanation={result.explanation}
+            progressBefore={
+              progressBefore
+                ? { correct: progressBefore.questionsCorrect, answered: progressBefore.questionsSeen }
+                : null
+            }
+            progressAfter={
+              result.progress
+                ? { correct: result.progress.questionsCorrect, answered: result.progress.questionsSeen }
+                : null
+            }
+            lowConfidence={result.progress?.lowConfidence ?? false}
+            alreadyAnswered={result.alreadyAnswered}
+            hasTopic={result.progress !== null}
+          />
+        ) : null}
+
+        {phase.kind === 'submit_failed' ? (
+          <View
+            accessibilityLiveRegion="polite"
+            style={{
+              borderStartWidth: 2,
+              borderStartColor: theme.colors.challenged,
+              paddingStart: 11,
+            }}
+          >
+            <Text variant="metadata" tone="challenged">
+              {t('practice.submitFailed')}
             </Text>
-            {result.explanation ? (
-              <Text variant="body" tone="muted" bidi="auto">
-                {result.explanation}
-              </Text>
-            ) : null}
-            {signalCard}
-            <Button
-              label={
-                index + 1 >= session.questions.length ? t('practice.finish') : t('practice.next')
-              }
-              variant="dominant"
-              fullWidth
-              onPress={advance}
-            />
           </View>
+        ) : null}
+      </ScrollView>
+
+      {/* Pinned footer with the bottom inset. */}
+      <View
+        style={{
+          padding: theme.spacing.xl,
+          paddingBottom: theme.spacing.lg + insets.bottom,
+          gap: theme.spacing.md,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border,
+        }}
+      >
+        {result ? (
+          <>
+            <DominantAction
+              label={remaining > 0 ? t('practice.next') : t('practice.finish')}
+              onPress={() => advance(result)}
+            />
+            <SecondaryAction label={t('practice.openTopic')} onPress={openTopic} />
+          </>
+        ) : phase.kind === 'submit_failed' ? (
+          <DominantAction label={t('practice.retry')} onPress={() => void submit()} />
         ) : (
-          <Button
-            label={t('practice.check')}
-            variant="dominant"
-            fullWidth
-            loading={submitting}
-            disabled={selected.length === 0}
-            onPress={() => void check()}
+          <DominantAction
+            label={isMulti ? t('practice.checkMulti') : t('practice.checkAnswer')}
+            onPress={() => void submit()}
+            loading={phase.kind === 'submitting'}
           />
         )}
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }

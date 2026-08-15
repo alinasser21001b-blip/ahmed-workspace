@@ -1,25 +1,37 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ContentItem, Profile } from '@sos/contracts';
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PostCard } from '../../src/components/PostCard';
+import { Hairline, MetadataLine, SectionHeader } from '../../src/components/editorial';
+import { ContentGrammar } from '../../src/components/knowledge/ContentGrammar';
+import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
 import { Text } from '../../src/components/Text';
-import { Avatar } from '../../src/components/surfaces';
-import { EmptyState, ErrorState, LoadingState, Skeleton } from '../../src/components/states';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useFeed } from '../../src/state/useFeed';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 /**
- * Home — the cohort feed (§55).
+ * Home — per 11-HOME.md.
  *
- * The list is virtualised from the start. A feed that renders every item is
- * fine at twenty posts and unusable at two hundred, and retrofitting
- * virtualisation means rewriting every row component.
+ * Header (Student OS · date · cohort) → 2 px rule → section groups → tab bar.
+ * Sections are classification statements, not engagement buckets:
+ * "Classified to your topics" and "Under challenge". Each item is a
+ * ContentGrammar row separated by hairlines. No cards. The eleven-pill badge
+ * stack is gone.
+ *
+ * Home has no dominant action; reading is the action. The resume band exists
+ * in the design only for an open practice attempt, and no endpoint exposes
+ * open attempts today, so the suppression rule resolves to "never shown" —
+ * an honest absence, not an omission.
  */
+
+type Row =
+  | { kind: 'section'; key: string; title: string; tone: 'structure' | 'challenged' }
+  | { kind: 'item'; key: string; item: ContentItem };
+
 export default function Home(): React.JSX.Element {
   const { t, locale } = useI18n();
   const theme = useTheme();
@@ -35,75 +47,78 @@ export default function Home(): React.JSX.Element {
       .catch(() => setProfile(null));
   }, [api]);
 
-  /**
-   * Reports a view once an item has actually been on screen. Tied to
-   * viewability rather than to render, so scrolling past something at speed
-   * does not count as having seen it.
-   */
   const onViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: { item: ContentItem }[] }) => {
+    ({ viewableItems }: { viewableItems: { item: Row }[] }) => {
       for (const entry of viewableItems) {
-        if (entry.item.viewer.hasViewed) continue;
-        void api
-          .post(`/v1/content/${entry.item.id}/view`, {})
-          .catch(() => {/* a dropped view signal is not worth surfacing */});
+        if (entry.item.kind !== 'item' || entry.item.item.viewer.hasViewed) continue;
+        void api.post(`/v1/content/${entry.item.item.id}/view`, {}).catch(() => {
+          /* a dropped view signal is not worth surfacing */
+        });
       }
     },
     [api],
   );
 
+  const rows = useMemo<Row[]>(() => {
+    const challenged = feed.items.filter((item) => item.signals.provenance === 'disputed');
+    const classified = feed.items.filter((item) => item.signals.provenance !== 'disputed');
+    const list: Row[] = [];
+    if (classified.length > 0) {
+      list.push({ kind: 'section', key: 'section-classified', title: t('feed.classified'), tone: 'structure' });
+      for (const item of classified) list.push({ kind: 'item', key: item.id, item });
+    }
+    if (challenged.length > 0) {
+      list.push({ kind: 'section', key: 'section-challenged', title: t('feed.underChallenge'), tone: 'challenged' });
+      for (const item of challenged) list.push({ kind: 'item', key: item.id, item });
+    }
+    return list;
+  }, [feed.items, t]);
+
+  const today = new Date().toLocaleDateString(locale === 'ar' ? 'ar' : 'en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+
   const header = (
-    <View style={{ gap: theme.spacing.lg, paddingBottom: theme.spacing.lg }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-        {profile ? (
-          <>
-            <Avatar name={profile.displayName} size={44} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text variant="heading">{t('home.greeting', { name: profile.displayName })}</Text>
-              <Text variant="caption" tone="muted">
-                {[profile.academic.collegeName, profile.academic.stageName]
-                  .filter(Boolean)
-                  .join(locale === 'ar' ? ' — ' : ' · ')}
-              </Text>
-            </View>
-          </>
-        ) : (
-          <>
-            <Skeleton height={44} width={44} radiusKey="lg" />
-            <View style={{ flex: 1, gap: theme.spacing.xs }}>
-              <Skeleton height={18} width="60%" />
-              <Skeleton height={14} width="40%" />
-            </View>
-          </>
-        )}
+    <View style={{ gap: theme.spacing.md, paddingBottom: theme.spacing.sm }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.md }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text accessibilityRole="header" variant="display">
+            Student OS
+          </Text>
+          <MetadataLine
+            parts={[today, profile?.academic.stageName ?? null, profile?.academic.collegeName ?? null]}
+          />
+        </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t('nav.search')}
+          accessibilityLabel={t('search.placeholder')}
           onPress={() => router.push('/search')}
           hitSlop={8}
+          style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Ionicons name="search-outline" size={24} color={theme.colors.primary} />
+          <Ionicons name="search-outline" size={22} color={theme.colors.text} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={t('compose.title')}
+          accessibilityLabel={t('nav.create')}
           onPress={() => router.push('/compose')}
           hitSlop={8}
+          style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
         >
-          <Ionicons name="create-outline" size={24} color={theme.colors.primary} />
+          <Ionicons name="create-outline" size={22} color={theme.colors.text} />
         </Pressable>
       </View>
-      <Text variant="heading">{t('home.section.feed')}</Text>
+      <View style={{ height: 2, backgroundColor: theme.colors.text }} />
     </View>
   );
 
   if (feed.status === 'loading') {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
-        <View style={{ padding: theme.spacing.lg, flex: 1 }}>
-          {header}
-          <LoadingState />
-        </View>
+        <View style={{ padding: theme.spacing.xl }}>{header}</View>
+        <LoadingState />
       </SafeAreaView>
     );
   }
@@ -111,9 +126,8 @@ export default function Home(): React.JSX.Element {
   if (feed.status === 'error') {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
-        <View style={{ padding: theme.spacing.lg, flex: 1 }}>
-          <ErrorState onRetry={() => void feed.refresh()} />
-        </View>
+        <View style={{ padding: theme.spacing.xl }}>{header}</View>
+        <ErrorState onRetry={() => void feed.refresh()} />
       </SafeAreaView>
     );
   }
@@ -121,50 +135,54 @@ export default function Home(): React.JSX.Element {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <FlatList
-        data={feed.items}
-        keyExtractor={(item) => item.id}
+        data={rows}
+        keyExtractor={(row) => row.key}
         contentContainerStyle={{
-          padding: theme.spacing.lg,
-          paddingBottom: theme.spacing.xxxl,
-          gap: theme.spacing.md,
-          flexGrow: 1,
+          paddingHorizontal: 20,
+          paddingTop: theme.spacing.lg,
+          paddingBottom: theme.spacing.xxl,
         }}
         ListHeaderComponent={header}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={{ itemVisiblePercentThreshold: 60, minimumViewTime: 800 }}
+        renderItem={({ item: row, index }) => {
+          if (row.kind === 'section') {
+            return (
+              <View
+                style={{
+                  paddingTop: index === 0 ? theme.spacing.sm : theme.spacing.xl,
+                  paddingBottom: theme.spacing.xs,
+                }}
+              >
+                <SectionHeader title={row.title} tone={row.tone} />
+              </View>
+            );
+          }
+          return (
+            <View>
+              <ContentGrammar
+                item={row.item}
+                density="feed"
+                onPress={() => router.push(`/post/${row.item.id}`)}
+                onPressAuthor={() => router.push(`/profile/${row.item.author.handle}`)}
+              />
+              <Hairline />
+            </View>
+          );
+        }}
         ListEmptyComponent={
-          <View style={{ flex: 1, minHeight: 280 }}>
-            <EmptyState
-              title={t('feed.empty.title')}
-              body={t('feed.empty.body')}
-              action={{ label: t('feed.empty.action'), onPress: () => router.push('/compose') }}
-            />
-          </View>
-        }
-        renderItem={({ item }) => (
-          <PostCard
-            item={item}
-            onPress={() => router.push(`/post/${item.id}`)}
-            onComment={() => router.push(`/post/${item.id}`)}
-            onToggleReaction={() => void feed.toggleReaction(item)}
-            onToggleBookmark={() => void feed.toggleBookmark(item)}
+          <EmptyState
+            title={t('feed.empty.title')}
+            body={t('feed.empty.body')}
+            action={{ label: t('feed.empty.action'), onPress: () => router.push('/compose') }}
           />
-        )}
+        }
         refreshControl={
           <RefreshControl
             refreshing={feed.status === 'refreshing'}
             onRefresh={() => void feed.refresh()}
-            tintColor={theme.colors.primary}
+            tintColor={theme.colors.text}
           />
-        }
-        onEndReached={() => void feed.loadMore()}
-        onEndReachedThreshold={0.6}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 60, minimumViewTime: 800 }}
-        ListFooterComponent={
-          feed.status === 'loadingMore' ? (
-            <View style={{ paddingVertical: theme.spacing.xl }}>
-              <Skeleton height={120} radiusKey="lg" />
-            </View>
-          ) : null
         }
       />
     </SafeAreaView>

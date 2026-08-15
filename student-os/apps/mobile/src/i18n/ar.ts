@@ -427,4 +427,57 @@ export const ar = {
   'moderation.sexual_harassment': 'لا يمكن نشر مضايقات ذات طابع جنسي.',
   'moderation.self_harm_encouragement': 'لا يمكن تشجيع شخص على إيذاء نفسه.',
   'moderation.spam': 'يبدو هذا كمحتوى ترويجي غير مرغوب.',
+
+  // --- final design: evidence, relations, provenance -------------------------
+  'evidence.notAnswered': 'لم تُجب بعد',
+  'evidence.fraction': '{correct} من {answered}',
+  'evidence.fractionA11y': 'أجبت بشكل صحيح عن {correct} من {answered}',
+  'evidence.deltaA11y': 'كانت {beforeCorrect} من {beforeAnswered}، وأصبحت {afterCorrect} من {afterAnswered}',
+  'relation.partOf': 'جزء من',
+  'relation.types': 'أنواعه',
+  'relation.seenWith': 'يظهر مع',
+  'relation.appearsIn': 'يظهر أيضاً في',
+  'relation.derivedNote': 'الخط المتقطع = مستخلص من محتوى الدفعة، وليس منسّقاً يدوياً',
+  'knowledge.underChallenge': 'قيد الاعتراض — هناك تصحيح مقترح',
+  'profile.instructor': 'تدريسي',
+
+  // --- final design: home ----------------------------------------------------
+  'feed.classified': 'مصنَّف ضمن مواضيعك',
+  'feed.underChallenge': 'قيد الاعتراض',
+
+  // --- final design: learn ---------------------------------------------------
+  'learn.builtFrom': 'مبني فقط على الأسئلة التي أجبت عنها.',
+  'learn.readyToPractise': 'جاهز للتدريب',
+  'learn.suggestDifficulty': 'إجاباتك الأخيرة تشير إلى صعوبة',
+  'learn.notEnoughEvidence': 'لا توجد أدلة كافية للحكم',
+  'learn.smallSample': 'عيّنة أصغر من أن يُستنتج منها شيء.',
+  'learn.privateToYou': 'إشارات نشاط دراسي، وليست تقييماً. تظهر لك وحدك.',
+  'learn.start': 'ابدأ',
+
+  // --- final design: topic ---------------------------------------------------
+  'topic.howItConnects': 'كيف يرتبط',
+  'topic.knowledgeHere': 'المعرفة هنا',
+  'topic.practise': 'تدرّب',
+  'topic.answeredHere': 'أجبت هنا عن {answered} — منها {correct} صحيحة',
+
+  // --- final design: practice ------------------------------------------------
+  'practice.counter': '{current} من {total}',
+  'practice.exit': 'إغلاق التدريب',
+  'practice.checkAnswer': 'تحقّق من الإجابة',
+  'practice.checkMulti': 'تحقّق من الإجابات',
+  'practice.whyRight': 'لماذا هذه صحيحة',
+  'practice.why': 'السبب',
+  'practice.whatChanged': 'ما الذي تغيّر',
+  'practice.answeredOnTopic': 'إجابة على هذا الموضوع',
+  'practice.stillSmallSample': 'ما تزال عيّنة صغيرة. سؤال واحد لا يغيّر ما يمكن قوله عن الموضوع.',
+  'practice.noTopicAttached': 'هذا السؤال غير مرتبط بموضوع، لذلك لم يتغيّر شيء.',
+  'practice.alreadyAnswered': 'أُجيب عنه سابقاً — لم يتغيّر شيء.',
+  'practice.submitFailed': 'لم تصلنا إجابتك. لم يُسجَّل شيء.',
+  'practice.retry': 'إعادة المحاولة',
+  'practice.openTopic': 'افتح الموضوع',
+  'practice.backToTopic': 'العودة إلى الموضوع',
+  'practice.complete': 'انتهت الجلسة',
+  'practice.a11yCorrectAnswer': 'الإجابة الصحيحة',
+  'practice.a11yYourAnswerIncorrect': 'إجابتك، غير صحيحة',
+
 } as const;

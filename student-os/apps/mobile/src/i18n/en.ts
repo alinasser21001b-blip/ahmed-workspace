@@ -411,4 +411,57 @@ export const en: Record<keyof typeof ar, string> = {
   'moderation.sexual_harassment': 'Sexual harassment cannot be posted.',
   'moderation.self_harm_encouragement': 'Encouraging self-harm cannot be posted.',
   'moderation.spam': 'That looks like unwanted promotional content.',
+
+  // --- final design: evidence, relations, provenance -------------------------
+  'evidence.notAnswered': 'Not answered yet',
+  'evidence.fraction': '{correct} of {answered}',
+  'evidence.fractionA11y': '{correct} of {answered} answered correctly',
+  'evidence.deltaA11y': 'was {beforeCorrect} of {beforeAnswered}, now {afterCorrect} of {afterAnswered}',
+  'relation.partOf': 'Part of',
+  'relation.types': 'Types',
+  'relation.seenWith': 'Seen with',
+  'relation.appearsIn': 'Also appears in',
+  'relation.derivedNote': 'dashed = found in cohort content, not curated',
+  'knowledge.underChallenge': 'Under challenge — a correction is pending',
+  'profile.instructor': 'instructor',
+
+  // --- final design: home ----------------------------------------------------
+  'feed.classified': 'Classified to your topics',
+  'feed.underChallenge': 'Under challenge',
+
+  // --- final design: learn ---------------------------------------------------
+  'learn.builtFrom': 'Built only from questions you have answered.',
+  'learn.readyToPractise': 'Ready to practise',
+  'learn.suggestDifficulty': 'Recent answers suggest difficulty',
+  'learn.notEnoughEvidence': 'Not enough evidence to say',
+  'learn.smallSample': 'Too small a sample to conclude anything either way.',
+  'learn.privateToYou': 'Study-activity signals, not a grade. Private to you.',
+  'learn.start': 'Start',
+
+  // --- final design: topic ---------------------------------------------------
+  'topic.howItConnects': 'How it connects',
+  'topic.knowledgeHere': 'Knowledge here',
+  'topic.practise': 'Practise',
+  'topic.answeredHere': 'You have answered {answered} here — {correct} correct',
+
+  // --- final design: practice ------------------------------------------------
+  'practice.counter': '{current} of {total}',
+  'practice.exit': 'Close practice',
+  'practice.checkAnswer': 'Check answer',
+  'practice.checkMulti': 'Check answers',
+  'practice.whyRight': 'Why this is right',
+  'practice.why': 'Why',
+  'practice.whatChanged': 'What this changed',
+  'practice.answeredOnTopic': 'answered on this topic',
+  'practice.stillSmallSample': 'Still a small sample. One question does not change what can be said about the topic.',
+  'practice.noTopicAttached': 'This question is not attached to a topic, so nothing was updated.',
+  'practice.alreadyAnswered': 'Already answered — nothing was updated.',
+  'practice.submitFailed': 'That answer did not reach us. Nothing was recorded.',
+  'practice.retry': 'Retry',
+  'practice.openTopic': 'Open topic',
+  'practice.backToTopic': 'Back to topic',
+  'practice.complete': 'Session complete',
+  'practice.a11yCorrectAnswer': 'correct answer',
+  'practice.a11yYourAnswerIncorrect': 'your answer, incorrect',
+
 };
