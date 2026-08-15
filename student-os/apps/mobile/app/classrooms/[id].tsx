@@ -1,25 +1,34 @@
 import type { ClassroomDetail, ClassroomMember, LectureSummary } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, View } from 'react-native';
+import { FlatList, RefreshControl, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../../src/components/Button';
-import { DirectionalIcon } from '../../src/components/DirectionalIcon';
-import { Avatar, Badge, Card, SectionHeader } from '../../src/components/surfaces';
-import { Text } from '../../src/components/Text';
+import {
+  DominantAction,
+  Hairline,
+  MetadataLine,
+  SectionHeader,
+  TopBar,
+} from '../../src/components/editorial';
+import { ClassroomActivityRow, MemberAvatarRow, RoleLabel } from '../../src/components/rows';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
-import { useI18n, type TranslationKey } from '../../src/i18n/index';
+import { Text } from '../../src/components/Text';
+import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 /**
- * A classroom.
+ * Classroom — per 14-CLASSROOM.md.
  *
- * The screen has two shapes and the server decides which: a member sees the
- * lectures and the roster, a non-member sees the room's identity and a way in.
- * That split is `viewer.canRead`, projected by the API — the client does not
- * infer it, so there is no arrangement of state in which it draws a lecture
- * list it is not allowed to have.
+ * Two shapes, and the server chooses: `viewer.canRead === false` means the
+ * roster and the lectures are never fetched, so the non-member view is a
+ * genuinely different screen with less in it rather than a blurred version of
+ * the member view. Getting that wrong leaks the lecture list.
+ *
+ * A classroom's academic content is its lecture sequence, so numbered lecture
+ * rows are the screen. Roles are one structure-coloured label and counts are
+ * metadata text — the count-pills this design retired are exactly what made
+ * the old version read as a roster.
  */
 export default function ClassroomScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,8 +49,7 @@ export default function ClassroomScreen(): React.JSX.Element {
         const detail = await api.get<ClassroomDetail>(`/v1/classrooms/${id}`);
         setClassroom(detail);
 
-        // Only fetched when the server says this viewer may read them. Asking
-        // anyway would produce a 404 the user never caused.
+        // Only fetched when the server says this viewer may read them.
         if (detail.viewer.canRead) {
           const [lecturePage, memberPage] = await Promise.all([
             api.get<{ items: LectureSummary[] }>(`/v1/classrooms/${id}/lectures`),
@@ -72,6 +80,8 @@ export default function ClassroomScreen(): React.JSX.Element {
         method: 'PUT',
         body: { joinCode: null },
       });
+      // Joining does not navigate — it refetches in place and the member view
+      // replaces the join view.
       await load('refresh');
     } catch {
       setStatus('error');
@@ -96,115 +106,135 @@ export default function ClassroomScreen(): React.JSX.Element {
     );
   }
 
+  const isMember = classroom.viewer.canRead;
+  const mostRecent = lectures[lectures.length - 1];
+  const roleLabel = classroom.viewer.canTeach
+    ? t('classroom.youAreTeacher')
+    : classroom.viewer.isMember
+      ? t('classroom.youAreStudent')
+      : null;
+
   const header = (
-    <View style={{ gap: theme.spacing.lg, paddingBottom: theme.spacing.lg }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('action.back')}
-          onPress={() => router.back()}
-          hitSlop={8}
-        >
-          <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text variant="heading" numberOfLines={2} bidi="auto">
-            {classroom.title}
-          </Text>
-          <Text variant="metadata" tone="muted" bidi="auto">
-            {classroom.courseName}
-            {classroom.instructor ? ` · ${classroom.instructor.displayName}` : ''}
-          </Text>
-        </View>
-      </View>
+    <View style={{ gap: theme.spacing.xl, paddingBottom: theme.spacing.lg }}>
+      <TopBar
+        title={classroom.title}
+        crumb={classroom.courseName ?? undefined}
+        onBack={() => router.back()}
+      />
+
+      {roleLabel ? <RoleLabel label={roleLabel} /> : null}
 
       {classroom.description ? (
-        <Text variant="body" bidi="auto">
+        <Text variant="body" tone="secondary" bidi="auto">
           {classroom.description}
         </Text>
       ) : null}
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-        <Badge label={`${t('classrooms.members')} · ${classroom.memberCount}`} tone="neutral" />
-        <Badge label={`${t('classrooms.lectures')} · ${classroom.lectureCount}`} tone="neutral" />
-        {classroom.viewer.role ? (
-          <Badge
-            label={t(`classrooms.role.${classroom.viewer.role}` as TranslationKey)}
-            tone="primary"
-          />
-        ) : null}
-        {classroom.isArchived ? <Badge label={t('classrooms.archived')} tone="warning" /> : null}
-      </View>
+      <MetadataLine
+        parts={[
+          t('classroom.members.count', { count: classroom.memberCount }),
+          classroom.instructor?.displayName ?? null,
+          classroom.isArchived ? t('classrooms.archived') : null,
+        ]}
+      />
 
-      {/* Teaching staff only — the server sends null to everyone else. */}
+      {/* Teaching staff only — the server sends null to everyone else. The
+          code stays LTR in both languages: a code shown right-to-left is a
+          code the student did not type. */}
       {classroom.joinCode ? (
-        <Card>
-          <View style={{ gap: theme.spacing.xs }}>
-            <Text variant="label">{t('classrooms.joinCode')}</Text>
-            <Text variant="display" style={{ letterSpacing: 2 }} bidi="auto">
-              {classroom.joinCode}
-            </Text>
-          </View>
-        </Card>
-      ) : null}
-
-      {classroom.viewer.canJoin ? (
-        <Button
-          label={t('classrooms.join')}
-          variant="dominant"
-          fullWidth
-          loading={joining}
-          onPress={() => void join()}
-        />
-      ) : null}
-
-      {!classroom.viewer.canRead ? (
-        <Text variant="caption" tone="muted">
-          {t('classrooms.notMember')}
-        </Text>
-      ) : null}
-
-      {classroom.viewer.canRead && members.length > 0 ? (
-        <View style={{ gap: theme.spacing.sm }}>
-          <SectionHeader title={t('classrooms.members')} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.md }}>
-            {members.slice(0, 12).map((member) => (
-              <View key={member.user.userId} style={{ alignItems: 'center', width: 64 }}>
-                <Avatar name={member.user.displayName} size={40} />
-                <Text variant="metadata" tone="muted" numberOfLines={1} bidi="auto">
-                  {member.user.displayName}
-                </Text>
-              </View>
-            ))}
-          </View>
+        <View style={{ gap: theme.spacing.xxs }}>
+          <SectionHeader title={t('classroom.joinCodePrompt')} />
+          <Text
+            variant="numeric"
+            style={{ letterSpacing: 2, writingDirection: 'ltr', textAlign: 'left' }}
+          >
+            {classroom.joinCode}
+          </Text>
         </View>
       ) : null}
 
-      {classroom.viewer.canRead ? <SectionHeader title={t('classrooms.lectures')} /> : null}
+      {isMember ? (
+        <>
+          {members.length > 0 ? (
+            <View style={{ gap: theme.spacing.sm }}>
+              <SectionHeader
+                title={t('classrooms.members')}
+                {...(members.length < classroom.memberCount
+                  ? { trailing: t('classroom.seeAll') }
+                  : {})}
+              />
+              <MemberAvatarRow members={members} total={classroom.memberCount} />
+            </View>
+          ) : null}
+
+          {/* The one dominant action a member sees. */}
+          {mostRecent ? (
+            <View
+              style={{
+                backgroundColor: theme.colors.text,
+                borderRadius: theme.radius.md,
+                padding: theme.spacing.lg,
+                gap: theme.spacing.md,
+              }}
+            >
+              <View style={{ gap: theme.spacing.xxs }}>
+                <Text variant="metadata" style={{ color: theme.colors.borderStrong }}>
+                  {t('classroom.mostRecent')}
+                </Text>
+                <Text variant="bodyStrong" tone="inverse" bidi="auto">
+                  {mostRecent.title}
+                </Text>
+              </View>
+              <DominantAction
+                label={t('classroom.openLecture')}
+                onPress={() => router.push(`/lecture/${mostRecent.id}`)}
+                inverse
+                inline
+              />
+            </View>
+          ) : null}
+
+          <SectionHeader title={t('classrooms.lectures')} />
+        </>
+      ) : (
+        // The non-member view: identity, counts, an explanation, and the way in.
+        <View style={{ gap: theme.spacing.lg }}>
+          <Text variant="body" tone="secondary">
+            {t('classroom.membersOnly')}
+          </Text>
+          {classroom.viewer.canJoin ? (
+            <DominantAction
+              label={t('classrooms.join')}
+              onPress={() => void join()}
+              loading={joining}
+            />
+          ) : null}
+        </View>
+      )}
     </View>
   );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <FlatList
-        data={classroom.viewer.canRead ? lectures : []}
+        data={isMember ? lectures : []}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{
-          padding: theme.spacing.lg,
+          padding: theme.spacing.xl,
           paddingBottom: theme.spacing.xxxl,
-          gap: theme.spacing.md,
           flexGrow: 1,
         }}
         ListHeaderComponent={header}
+        ListFooterComponent={isMember && lectures.length > 0 ? <Hairline /> : null}
         refreshControl={
           <RefreshControl
             refreshing={status === 'refreshing'}
             onRefresh={() => void load('refresh')}
-            tintColor={theme.colors.primary}
+            tintColor={theme.colors.text}
           />
         }
         ListEmptyComponent={
-          classroom.viewer.canRead ? (
+          isMember ? (
             <View style={{ minHeight: 180 }}>
               <EmptyState
                 title={t('classrooms.lectures.empty.title')}
@@ -213,35 +243,12 @@ export default function ClassroomScreen(): React.JSX.Element {
             </View>
           ) : null
         }
-        renderItem={({ item }) => (
-          <Card onPress={() => router.push(`/lecture/${item.id}`)} accessibilityLabel={item.title}>
-            <View style={{ gap: theme.spacing.xs }}>
-              <Text variant="bodyStrong" bidi="auto">
-                {item.title}
-              </Text>
-              {item.description ? (
-                <Text variant="caption" tone="muted" numberOfLines={2} bidi="auto">
-                  {item.description}
-                </Text>
-              ) : null}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-                {item.materialCount > 0 ? (
-                  <Badge
-                    label={`${t('lecture.materials')} · ${item.materialCount}`}
-                    tone="neutral"
-                  />
-                ) : null}
-                {item.durationMinutes ? (
-                  <Badge
-                    label={`${item.durationMinutes} ${t('lecture.duration')}`}
-                    tone="neutral"
-                  />
-                ) : null}
-                {/* Only teaching staff ever receive an unpublished lecture. */}
-                {!item.publishedAt ? <Badge label={t('lecture.draft')} tone="warning" /> : null}
-              </View>
-            </View>
-          </Card>
+        renderItem={({ item, index }) => (
+          <ClassroomActivityRow
+            lecture={item}
+            index={index}
+            onPress={() => router.push(`/lecture/${item.id}`)}
+          />
         )}
       />
     </SafeAreaView>

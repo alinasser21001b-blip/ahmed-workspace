@@ -1,29 +1,39 @@
 import type { SearchResults } from '@sos/contracts';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
-import { DirectionalIcon } from '../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MetadataLine, SectionHeader, TopBar } from '../src/components/editorial';
+import { AcademicRow } from '../src/components/rows';
+import { Avatar } from '../src/components/surfaces';
 import { Text } from '../src/components/Text';
-import { Avatar, Badge, Card, SectionHeader } from '../src/components/surfaces';
-import { EmptyState, LoadingState } from '../src/components/states';
-import { useI18n } from '../src/i18n/index';
+import { localizeDigits, useI18n } from '../src/i18n/index';
 import { useSession } from '../src/state/session';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 /**
- * Search (§32).
+ * Search — per 16-SEARCH.md.
  *
- * Debounced, and cancelled on every keystroke — an in-flight request for a
- * stale query that lands after a newer one would flip the results back to what
- * the student was typing two letters ago.
+ * One language, four objects: a section heading naming the type, then rows of
+ * a title plus one metadata line. The heading carries the type, so a row never
+ * repeats it, and there is no second card system.
+ *
+ * Only the four result classes the contract actually returns are rendered.
+ * Topics and classrooms are specified in the handoff and BLOCKED — no endpoint
+ * exists — so they are stated as unavailable rather than faked. That line is
+ * the honest version of the product's largest gap.
+ *
+ * The empty-result advice says "try a shorter word" rather than "try different
+ * keywords", because the index is trigram-based: prefix matching works and
+ * root matching does not, so shorter is the advice that actually helps.
  */
 
 const DEBOUNCE_MS = 300;
 const MIN_QUERY = 2;
 
 export default function Search(): React.JSX.Element {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const theme = useTheme();
   const { api } = useSession();
 
@@ -69,168 +79,207 @@ export default function Search(): React.JSX.Element {
     (results?.groups.length ?? 0) +
     (results?.communities.length ?? 0);
 
+  const term = query.trim();
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: theme.spacing.md,
-          padding: theme.spacing.lg,
-        }}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('action.back')}
-          onPress={() => router.back()}
-          hitSlop={8}
-        >
-          <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
-        </Pressable>
-        <TextInput
-          accessibilityLabel={t('search.placeholder')}
-          placeholder={t('search.placeholder')}
-          placeholderTextColor={theme.colors.textMuted}
-          value={query}
-          onChangeText={setQuery}
-          autoFocus
-          returnKeyType="search"
+      {/* The field is pinned: results scroll under it, it never scrolls away. */}
+      <View style={{ paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md, gap: theme.spacing.md }}>
+        <TopBar title={t('nav.search')} onBack={() => router.back()} rule={false} />
+        <View
           style={{
-            flex: 1,
-            minHeight: 44,
-            borderRadius: theme.radius.pill,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            backgroundColor: theme.colors.surface,
-            color: theme.colors.text,
-            paddingHorizontal: theme.spacing.lg,
-            fontSize: 16,
-            textAlign: theme.isRTL ? 'right' : 'left',
-            writingDirection: theme.isRTL ? 'rtl' : 'ltr',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.sm,
+            borderWidth: 1.5,
+            borderColor: theme.colors.borderStrong,
+            borderRadius: theme.radius.sm,
+            paddingHorizontal: theme.spacing.md,
+            minHeight: 50,
           }}
-        />
+        >
+          <Ionicons name="search-outline" size={18} color={theme.colors.textMuted} />
+          <TextInput
+            accessibilityRole="search"
+            accessibilityLabel={t('search.placeholder')}
+            placeholder={t('search.placeholder')}
+            placeholderTextColor={theme.colors.textFaint}
+            value={query}
+            onChangeText={setQuery}
+            autoFocus
+            returnKeyType="search"
+            style={{
+              flex: 1,
+              color: theme.colors.text,
+              fontSize: 16,
+              lineHeight: 22,
+              // The typed script decides the field's direction.
+              textAlign: theme.isRTL ? 'right' : 'left',
+            }}
+          />
+          {query.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('action.clear')}
+              onPress={() => setQuery('')}
+              hitSlop={10}
+              style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="close-circle" size={18} color={theme.colors.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <ScrollView
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          paddingHorizontal: theme.spacing.lg,
+          paddingHorizontal: theme.spacing.xl,
+          paddingTop: theme.spacing.lg,
           paddingBottom: theme.spacing.xxxl,
           gap: theme.spacing.xl,
-          flexGrow: 1,
         }}
-        keyboardShouldPersistTaps="handled"
       >
-        {query.trim().length < MIN_QUERY ? (
-          <Text variant="caption" tone="muted">
-            {t('search.hint')}
+        {/* Results announce politely — never assertively, which would
+            interrupt a student mid-read on every keystroke. */}
+        <View accessibilityLiveRegion="polite">
+          {term.length > 0 && term.length < MIN_QUERY ? (
+            <Text variant="metadata" tone="muted">
+              {t('search.minQuery')}
+            </Text>
+          ) : null}
+
+          {results && total === 0 && !searching ? (
+            <View style={{ gap: theme.spacing.xs }}>
+              <Text variant="bodyStrong" bidi="auto">
+                {t('search.noResultsFor', { query: term })}
+              </Text>
+              <Text variant="body" tone="secondary">
+                {t('search.tryShorter')}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        {results && results.people.length > 0 ? (
+          <View>
+            <SectionHeader
+              title={t('search.people')}
+              trailing={localizeDigits(locale, results.people.length)}
+            />
+            {results.people.map((person) => (
+              <AcademicRow
+                key={person.userId}
+                minHeight={56}
+                chevron
+                onPress={() => router.push(`/profile/${person.handle}`)}
+                accessibilityLabel={`${person.displayName}, @${person.handle}`}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
+                  <Avatar name={person.displayName} size={36} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text variant="body" numberOfLines={1} bidi="auto">
+                      {person.displayName}
+                    </Text>
+                    {/* The handle is a Latin run and stays isolated in Arabic. */}
+                    <MetadataLine parts={[`@${person.handle}`, person.stageName]} bidi="auto" />
+                  </View>
+                </View>
+              </AcademicRow>
+            ))}
+          </View>
+        ) : null}
+
+        {results && results.groups.length > 0 ? (
+          <View>
+            <SectionHeader
+              title={t('search.studyGroups')}
+              trailing={localizeDigits(locale, results.groups.length)}
+            />
+            {results.groups.map((group) => (
+              <AcademicRow
+                key={group.id}
+                chevron
+                onPress={() => router.push(`/group/${group.id}`)}
+                accessibilityLabel={`${group.name}, ${t('classroom.members.count', { count: group.memberCount })}`}
+              >
+                <View style={{ gap: 2 }}>
+                  <Text variant="body" numberOfLines={1} bidi="auto">
+                    {group.name}
+                  </Text>
+                  <MetadataLine
+                    parts={[t('classroom.members.count', { count: group.memberCount })]}
+                  />
+                </View>
+              </AcademicRow>
+            ))}
+          </View>
+        ) : null}
+
+        {results && results.communities.length > 0 ? (
+          <View>
+            <SectionHeader
+              title={t('search.communities')}
+              trailing={localizeDigits(locale, results.communities.length)}
+            />
+            {results.communities.map((community) => (
+              <AcademicRow key={community.id} chevron accessibilityLabel={community.name}>
+                <View style={{ gap: 2 }}>
+                  <Text variant="body" numberOfLines={1} bidi="auto">
+                    {community.name}
+                  </Text>
+                  <MetadataLine
+                    parts={[community.isOfficial ? t('search.official') : null]}
+                    tone="structure"
+                  />
+                </View>
+              </AcademicRow>
+            ))}
+          </View>
+        ) : null}
+
+        {results && results.content.length > 0 ? (
+          <View>
+            <SectionHeader
+              title={t('search.knowledge')}
+              trailing={localizeDigits(locale, results.content.length)}
+            />
+            {results.content.map((entry) => (
+              <Pressable
+                key={entry.id}
+                accessibilityRole="button"
+                onPress={() => router.push(`/post/${entry.id}`)}
+                style={{ borderTopWidth: 1, borderTopColor: theme.colors.border }}
+              >
+                {/*
+                 * Knowledge is the only result type in the editorial voice,
+                 * because it is the only one whose content IS what you are
+                 * reading. The search endpoint returns a reduced shape, so
+                 * this renders body + author directly rather than pretending
+                 * to a full ContentGrammar it does not have the fields for.
+                 */}
+                <View style={{ paddingVertical: theme.spacing.md, gap: theme.spacing.xs }}>
+                  <Text variant="bodyStrong" numberOfLines={3} bidi="auto" style={{ fontWeight: '500' }}>
+                    {entry.body ?? ''}
+                  </Text>
+                  <MetadataLine parts={[entry.author.displayName, entry.author.stageName]} bidi="auto" />
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        {/*
+         * Stated, not hidden. Topics are the most navigable object in the
+         * product and are unreachable from the screen whose only job is
+         * navigation — the handoff calls this the largest gap, so the screen
+         * says so rather than quietly omitting a section.
+         */}
+        {results && total > 0 ? (
+          <Text variant="metadata" tone="muted">
+            {t('search.deferredTopics')}
           </Text>
-        ) : searching && !results ? (
-          <View style={{ minHeight: 200 }}>
-            <LoadingState />
-          </View>
-        ) : total === 0 ? (
-          <View style={{ flex: 1, minHeight: 240 }}>
-            <EmptyState title={t('search.empty.title')} body={t('search.empty.body')} />
-          </View>
-        ) : (
-          <>
-            {results!.people.length > 0 ? (
-              <View>
-                <SectionHeader title={t('search.section.people')} />
-                <View style={{ gap: theme.spacing.sm }}>
-                  {results!.people.map((person) => (
-                    <Card
-                      key={person.userId}
-                      onPress={() => router.push(`/profile/${person.handle}`)}
-                      accessibilityLabel={person.displayName}
-                    >
-                      <View
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}
-                      >
-                        <Avatar name={person.displayName} size={36} />
-                        <View style={{ flex: 1, gap: 2 }}>
-                          <Text variant="label" bidi="auto">{person.displayName}</Text>
-                          <Text variant="metadata" tone="muted">
-                            @{person.handle}
-                            {person.stageName ? ` · ${person.stageName}` : ''}
-                          </Text>
-                        </View>
-                      </View>
-                    </Card>
-                  ))}
-                </View>
-              </View>
-            ) : null}
-
-            {results!.groups.length > 0 ? (
-              <View>
-                <SectionHeader title={t('search.section.groups')} />
-                <View style={{ gap: theme.spacing.sm }}>
-                  {results!.groups.map((group) => (
-                    <Card
-                      key={group.id}
-                      onPress={() => router.push(`/group/${group.id}`)}
-                      accessibilityLabel={group.name}
-                    >
-                      <View style={{ gap: theme.spacing.xs }}>
-                        <Text variant="label" bidi="auto">{group.name}</Text>
-                        <Text variant="metadata" tone="muted">
-                          {t('groups.members.count', { count: group.memberCount })}
-                        </Text>
-                      </View>
-                    </Card>
-                  ))}
-                </View>
-              </View>
-            ) : null}
-
-            {results!.content.length > 0 ? (
-              <View>
-                <SectionHeader title={t('search.section.content')} />
-                <View style={{ gap: theme.spacing.sm }}>
-                  {results!.content.map((hit) => (
-                    <Card
-                      key={hit.id}
-                      onPress={() => router.push(`/post/${hit.id}`)}
-                      accessibilityLabel={hit.body ?? ''}
-                    >
-                      <View style={{ gap: theme.spacing.xs }}>
-                        <Text variant="body" numberOfLines={3} bidi="auto">
-                          {hit.body}
-                        </Text>
-                        <Text variant="metadata" tone="muted" bidi="auto">
-                          {hit.author.displayName}
-                        </Text>
-                      </View>
-                    </Card>
-                  ))}
-                </View>
-              </View>
-            ) : null}
-
-            {results!.communities.length > 0 ? (
-              <View>
-                <SectionHeader title={t('search.section.communities')} />
-                <View style={{ gap: theme.spacing.sm }}>
-                  {results!.communities.map((community) => (
-                    <Card key={community.id}>
-                      <View
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}
-                      >
-                        <Text variant="label" style={{ flex: 1 }}>
-                          {community.name}
-                        </Text>
-                        {community.isOfficial ? (
-                          <Badge label={t('communities.title')} tone="primary" />
-                        ) : null}
-                      </View>
-                    </Card>
-                  ))}
-                </View>
-              </View>
-            ) : null}
-          </>
-        )}
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

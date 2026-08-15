@@ -2,7 +2,7 @@ import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { ApiError, NetworkError } from '../../src/api/client';
-import { Button } from '../../src/components/Button';
+import { DominantAction } from '../../src/components/editorial';
 import { Input } from '../../src/components/Input';
 import { Text } from '../../src/components/Text';
 import { Screen } from '../../src/components/states';
@@ -73,23 +73,21 @@ export default function SignIn(): React.JSX.Element {
           {...(error ? { error } : {})}
         />
         <Link href="/(auth)/forgot-password" asChild>
-          <Text variant="label" tone="primary" accessibilityRole="link">
+          <Text variant="label" tone="secondary" accessibilityRole="link">
             {t('auth.forgotPassword.link')}
           </Text>
         </Link>
       </View>
 
-      <Button
+      <DominantAction
         label={t('auth.signIn.title')}
         onPress={() => void submit()}
         loading={submitting}
         disabled={!canSubmit}
-        size="lg"
-        fullWidth
       />
 
       <Link href="/(auth)/sign-up" asChild>
-        <Text variant="label" tone="primary" align="center" accessibilityRole="link">
+        <Text variant="label" tone="secondary" align="center" accessibilityRole="link">
           {t('auth.noAccount')}
         </Text>
       </Link>

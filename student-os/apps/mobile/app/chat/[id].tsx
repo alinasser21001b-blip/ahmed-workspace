@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { DirectionalIcon } from '../../src/components/DirectionalIcon';
+import { MessageBubble, UnreadDivider } from '../../src/components/messaging';
 import { Text } from '../../src/components/Text';
 import { Avatar } from '../../src/components/surfaces';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
@@ -250,6 +251,10 @@ export default function ConversationScreen(): React.JSX.Element {
             accessibilityLabel={t('action.back')}
             onPress={() => router.back()}
             hitSlop={8}
+            // hitSlop alone is not a target: it does not exist for a switch
+            // control, a stylus, or the accessibility inspector. The box has
+            // to actually be 44.
+            style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
           >
             <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
           </Pressable>
@@ -263,8 +268,16 @@ export default function ConversationScreen(): React.JSX.Element {
                 {t('chat.typing')}
               </Text>
             ) : connection !== 'open' ? (
-              <Text variant="metadata" tone="muted">
-                {t(connection === 'connecting' ? 'chat.connecting' : 'chat.offline')}
+              /*
+               * Not "you are offline". The socket being shut is not the same
+               * fact as the device having no connection, and on the current
+               * production host the socket never opens at all — so the old
+               * copy would permanently tell an online student that they were
+               * offline and that their messages were waiting, when both were
+               * false and the messages had already sent over HTTP.
+               */
+              <Text variant="metadata" tone="attention">
+                {t('chat.connection.down')}
               </Text>
             ) : null}
           </View>
@@ -314,74 +327,26 @@ export default function ConversationScreen(): React.JSX.Element {
 
             if (item.kind === 'unread') {
               return (
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: theme.spacing.sm,
-                    paddingVertical: theme.spacing.xs,
-                  }}
-                >
-                  <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.primary }} />
-                  <Text variant="metadata" tone="primary">
-                    {item.label}
-                  </Text>
-                  <View style={{ flex: 1, height: 1, backgroundColor: theme.colors.primary }} />
+                <View style={{ paddingVertical: theme.spacing.xs }}>
+                  <UnreadDivider />
                 </View>
               );
             }
 
             const mine = item.senderId === user?.id;
             return (
-              <View
-                style={{
-                  alignSelf: mine ? 'flex-end' : 'flex-start',
-                  maxWidth: '85%',
-                  backgroundColor: mine ? theme.colors.primary : theme.colors.surface,
-                  borderRadius: theme.radius.lg,
-                  paddingHorizontal: theme.spacing.md,
-                  paddingVertical: theme.spacing.sm,
-                  gap: 2,
-                  opacity: item.state === 'sending' || item.state === 'queued' ? 0.6 : 1,
-                }}
-              >
-                {!mine && conversation.kind === 'group' && item.authorName ? (
-                  <Text variant="metadata" tone={mine ? 'inverse' : 'muted'} bidi="auto">
-                    {item.authorName}
-                  </Text>
-                ) : null}
-                <Text
-                  variant="body"
-                  tone={mine ? 'inverse' : 'default'}
-                  bidi="auto"
-                  style={item.deleted ? { fontStyle: 'italic' } : undefined}
-                >
-                  {item.deleted ? t('chat.deleted') : item.body}
-                </Text>
-                {mine ? (
-                  <View
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end' }}
-                  >
-                    <Text variant="metadata" tone="inverse">
-                      {item.state === 'failed'
-                        ? t('chat.failed')
-                        : item.state === 'sending' || item.state === 'queued'
-                          ? t('chat.state.sending')
-                          : t('chat.state.sent')}
-                    </Text>
-                    {item.state === 'failed' && item.clientMessageId ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={t('chat.retry')}
-                        onPress={() => outbox.retry(item.clientMessageId!)}
-                        hitSlop={8}
-                      >
-                        <Ionicons name="refresh" size={14} color={theme.colors.textInverse} />
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
+              <MessageBubble
+                body={item.body ?? ''}
+                own={mine}
+                senderName={
+                  !mine && conversation.kind === 'group' ? (item.authorName ?? null) : null
+                }
+                state={item.state}
+                deleted={item.deleted}
+                {...(item.clientMessageId
+                  ? { onRetry: () => outbox.retry(item.clientMessageId as string) }
+                  : {})}
+              />
             );
           }}
         />
@@ -433,8 +398,10 @@ export default function ConversationScreen(): React.JSX.Element {
                 borderRadius: 22,
                 alignItems: 'center',
                 justifyContent: 'center',
+                // Ink, like every other dominant action in this design. Send
+                // was the last indigo fill left in the product.
                 backgroundColor:
-                  draft.trim().length === 0 ? theme.colors.surface : theme.colors.primary,
+                  draft.trim().length === 0 ? theme.colors.surface : theme.colors.text,
               }}
             >
               <Ionicons
@@ -456,8 +423,10 @@ export default function ConversationScreen(): React.JSX.Element {
           </View>
         ) : (
           <View style={{ padding: theme.spacing.lg }}>
-            <Text variant="caption" tone="muted" align="center">
-              {t('chat.readOnly')}
+            {/* Removed, not disabled: a disabled composer invites a tap that
+                will never work. The reason replaces it. */}
+            <Text variant="body" tone="secondary" align="center">
+              {t('chat.readOnlyReason')}
             </Text>
           </View>
         )}

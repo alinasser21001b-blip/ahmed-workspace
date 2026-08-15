@@ -3,16 +3,22 @@ import type { ContentItem, FeedPage, Profile, Relationship } from '@sos/contract
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
-import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionSheet, ConfirmDialog } from '../../src/components/ActionSheet';
-import { Button } from '../../src/components/Button';
-import { PostCard } from '../../src/components/PostCard';
 import { ReportSheet } from '../../src/components/ReportSheet';
+import {
+  DominantAction,
+  Hairline,
+  MetadataLine,
+  SectionHeader,
+  SecondaryAction,
+  TopBar,
+} from '../../src/components/editorial';
+import { ContentGrammar } from '../../src/components/knowledge/ContentGrammar';
 import { Text } from '../../src/components/Text';
-import { Avatar, Badge, Card } from '../../src/components/surfaces';
+import { Avatar, Badge } from '../../src/components/surfaces';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
-import { useI18n } from '../../src/i18n/index';
+import { localizeDigits, useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
@@ -113,91 +119,145 @@ export default function ProfileScreen(): React.JSX.Element {
     );
   }
 
+  const isSelf = profile.viewer?.isSelf ?? false;
+  const blocked = relationship?.isBlocked ?? false;
+
   const header = (
-    <View style={{ gap: theme.spacing.lg, paddingBottom: theme.spacing.lg }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('action.back')}
-          onPress={() => router.back()}
-          hitSlop={8}
-        >
-          <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
-        </Pressable>
-        <Text variant="heading" style={{ flex: 1 }} numberOfLines={1} bidi="auto">
-          {profile.displayName}
-        </Text>
-        {profile.viewer?.isSelf ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.title')}
-            onPress={() => router.push('/settings')}
-            hitSlop={8}
-          >
-            <Ionicons name="settings-outline" size={22} color={theme.colors.text} />
-          </Pressable>
-        ) : profile.viewer && !profile.viewer.isSelf ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('action.more')}
-            onPress={() => setMenuOpen(true)}
-            hitSlop={8}
-          >
-            <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.text} />
-          </Pressable>
-        ) : null}
+    <View style={{ gap: theme.spacing.xl, paddingBottom: theme.spacing.lg }}>
+      <TopBar
+        title={profile.displayName}
+        onBack={() => router.back()}
+        rule={false}
+        trailing={
+          isSelf ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.title')}
+              onPress={() => router.push('/settings')}
+              hitSlop={8}
+              style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="settings-outline" size={22} color={theme.colors.text} />
+            </Pressable>
+          ) : profile.viewer ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('profile.more')}
+              onPress={() => setMenuOpen(true)}
+              hitSlop={8}
+              style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.text} />
+            </Pressable>
+          ) : null
+        }
+      />
+
+      {/* Identity, then context, then work. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.lg }}>
+        <Avatar name={profile.displayName} size={56} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs }}>
+            <Text variant="title" bidi="auto" style={{ flexShrink: 1 }}>
+              {profile.displayName}
+            </Text>
+            {profile.verificationLevel === 'instructor' ? (
+              <Ionicons
+                name="ribbon-outline"
+                size={16}
+                color={theme.colors.structure}
+                accessibilityLabel={t('profile.verifiedInstructor')}
+              />
+            ) : null}
+          </View>
+          {/* The handle is a Latin run and stays isolated beside an Arabic name. */}
+          <MetadataLine
+            parts={[`@${profile.handle}`, profile.academic.collegeName, profile.academic.stageName]}
+            bidi="auto"
+          />
+        </View>
       </View>
 
-      <Card>
-        <View style={{ gap: theme.spacing.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-            <Avatar name={profile.displayName} size={56} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text variant="bodyStrong" bidi="auto">{profile.displayName}</Text>
-              <Text variant="caption" tone="muted">
-                @{profile.handle}
-              </Text>
-              <Text variant="metadata" tone="muted">
-                {[profile.academic.collegeName, profile.academic.stageName]
-                  .filter(Boolean)
-                  .join(locale === 'ar' ? ' — ' : ' · ')}
-              </Text>
-            </View>
+      {profile.bio ? (
+        <Text variant="body" tone="secondary" bidi="auto">
+          {profile.bio}
+        </Text>
+      ) : null}
+
+      <View style={{ height: 2, backgroundColor: theme.colors.text }} />
+
+      {/*
+       * The only number on a profile. `followerCount` and `followingCount` are
+       * real fields and are deliberately not shown: a popularity metric beside
+       * a contribution metric lets the popularity one win, which is the drift
+       * into a vanity page this contract is written against.
+       */}
+      <View
+        accessibilityLabel={`${localizeDigits(locale, profile.contributionScore)}, ${t('profile.contributionScore')}`}
+        style={{ gap: 2 }}
+      >
+        <Text variant="numeric" style={{ fontSize: 22, lineHeight: 30, fontWeight: '600' }}>
+          {localizeDigits(locale, profile.contributionScore)}
+        </Text>
+        <Text variant="metadata" tone="muted">
+          {t('profile.contributionScore')}
+        </Text>
+      </View>
+
+      {profile.interests.length > 0 ? (
+        <View style={{ gap: theme.spacing.sm }}>
+          <SectionHeader title={t('profile.interests')} />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
+            {profile.interests.slice(0, 6).map((topic) => (
+              <Badge
+                key={topic.id}
+                label={locale === 'ar' ? topic.nameAr : topic.nameEn}
+                tone="structure"
+                onPress={() => router.push(`/topic/${topic.id}`)}
+              />
+            ))}
           </View>
+        </View>
+      ) : null}
 
-          {profile.bio ? <Text variant="body" bidi="auto">{profile.bio}</Text> : null}
-
-          {profile.interests.length > 0 ? (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-              {profile.interests.slice(0, 6).map((topic) => (
-                <Badge
-                  key={topic.id}
-                  label={locale === 'ar' ? topic.nameAr : topic.nameEn}
-                  tone="structure"
-                />
-              ))}
-            </View>
-          ) : null}
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xl }}>
-            <View>
-              <Text variant="heading">{profile.contributionScore}</Text>
-              <Text variant="metadata" tone="muted">
-                {t('profile.contributionScore')}
-              </Text>
-            </View>
+      {/* Relationship actions announce their result politely. */}
+      <View accessibilityLiveRegion="polite">
+        {blocked ? (
+          <View style={{ gap: theme.spacing.md }}>
+            <Text variant="body" tone="secondary">
+              {t('social.blockedPerson')}
+            </Text>
+            <SecondaryAction
+              label={t('profile.unblock', { handle: profile.handle })}
+              onPress={() => void toggleBlock()}
+              disabled={acting}
+            />
           </View>
-
-          {profile.viewer && !profile.viewer.isSelf && relationship ? (
-            <Button
-              label={relationship.isFollowing ? t('groups.leave') : t('groups.join')}
-              variant={relationship.isFollowing ? 'secondary' : 'primary'}
+        ) : isSelf ? (
+          <SecondaryAction
+            label={t('profile.editProfile')}
+            onPress={() => router.push('/settings')}
+          />
+        ) : relationship ? (
+          // Not following → a filled Follow. Following → an outlined
+          // "Following"; there is no dominant action on a profile you follow.
+          relationship.isFollowing ? (
+            <SecondaryAction
+              label={t('social.following')}
+              onPress={() => void toggleFollow()}
+              disabled={acting}
+            />
+          ) : (
+            <DominantAction
+              label={t('social.follow')}
               onPress={() => void toggleFollow()}
               loading={acting}
             />
-          ) : null}
-        </View>
-      </Card>
+          )
+        ) : null}
+      </View>
+
+      <SectionHeader title={t('profile.posts')} />
     </View>
   );
 
@@ -241,24 +301,42 @@ export default function ProfileScreen(): React.JSX.Element {
         onClose={() => setReportOpen(false)}
         targetType="profile"
         targetId={profile.userId}
+        {...(profile.viewer && !profile.viewer.isSelf && !blocked
+          ? { onBlock: () => setBlockConfirmOpen(true) }
+          : {})}
       />
       <FlatList
-        data={posts}
+        data={blocked ? [] : posts}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{
-          padding: theme.spacing.lg,
+          padding: theme.spacing.xl,
           paddingBottom: theme.spacing.xxxl,
-          gap: theme.spacing.md,
           flexGrow: 1,
         }}
         ListHeaderComponent={header}
         ListEmptyComponent={
           <View style={{ minHeight: 180 }}>
-            <EmptyState title={t('feed.empty.title')} body={t('feed.empty.body')} />
+            <EmptyState
+              title={t('profile.noPosts')}
+              body={t('feed.empty.body')}
+              {...(isSelf
+                ? {
+                    action: {
+                      label: t('profile.writeSomething'),
+                      onPress: () => router.push('/compose'),
+                    },
+                  }
+                : {})}
+            />
           </View>
         }
+        ItemSeparatorComponent={Hairline}
         renderItem={({ item }) => (
-          <PostCard item={item} onPress={() => router.push(`/post/${item.id}`)} />
+          <ContentGrammar
+            item={item}
+            density="profile"
+            onPress={() => router.push(`/post/${item.id}`)}
+          />
         )}
       />
     </SafeAreaView>

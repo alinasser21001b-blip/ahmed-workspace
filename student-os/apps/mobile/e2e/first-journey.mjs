@@ -198,7 +198,7 @@ try {
   await page.getByLabel('منشور جديد').last().click();
   await settle('15-composer');
   check(
-    await page.getByText('من يمكنه الرؤية').last().isVisible(),
+    await page.getByText('من يمكنه رؤية هذا').last().isVisible(),
     'the composer makes the audience an explicit choice',
   );
 
@@ -282,7 +282,14 @@ try {
   await page.waitForTimeout(1500);
   await visibleText('الرئيسية').click();
   await page.waitForTimeout(1500);
-  await page.getByLabel('بحث').last().click();
+  // Exact label, not a substring. `بحث` is a substring of the Messages
+  // screen's own people-search control, and that screen is mounted in the tab
+  // navigator while Home covers it — so a loose match resolved to a control
+  // that could never be clicked.
+  await page
+    .getByLabel('ابحث عن زملاء أو منشورات أو مجموعات…', { exact: true })
+    .first()
+    .click();
   await settle('24-search-empty');
   await page.getByLabel('ابحث عن زملاء أو منشورات أو مجموعات…').last().fill('الكلى');
   await page.waitForTimeout(2000);
