@@ -86,7 +86,23 @@ export const reportReasonSchema = z.enum([
 ]);
 export type ReportReason = z.infer<typeof reportReasonSchema>;
 
-export const reportTargetSchema = z.enum(['content', 'comment', 'profile', 'group', 'community']);
+/**
+ * What can be reported.
+ *
+ * `message` was added for App Review Guideline 1.2: a direct message is where
+ * harassment is most private and least visible to anyone else, so an app that
+ * can report a public post but not a DM has the reporting capability pointed
+ * away from the problem.
+ */
+export const reportTargetSchema = z.enum([
+  'content',
+  'comment',
+  'message',
+  'profile',
+  'group',
+  'community',
+]);
+export type ReportTargetType = z.infer<typeof reportTargetSchema>;
 
 export const createReportRequestSchema = z.object({
   targetType: reportTargetSchema,

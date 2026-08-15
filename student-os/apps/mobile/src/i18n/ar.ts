@@ -19,6 +19,8 @@ export const ar = {
   'action.retry': 'إعادة المحاولة',
   'action.done': 'تم',
   'action.skip': 'تخطّي',
+  'action.more': 'المزيد',
+  'error.generic': 'حدث خطأ ما. حاول مرة أخرى.',
 
   // --- states
   'state.loading': 'جارٍ التحميل…',
@@ -302,13 +304,6 @@ export const ar = {
   'compose.uploading': 'جارٍ الرفع…',
   'compose.error.tooLarge': 'الصورة أكبر من الحد المسموح',
   'compose.error.unsupported': 'نوع الملف غير مدعوم',
-  'report.title': 'سبب الإبلاغ',
-  'report.reason.spam': 'محتوى غير مرغوب',
-  'report.reason.harassment': 'تحرش أو إساءة',
-  'report.reason.misinformation': 'معلومات مضللة',
-  'report.reason.academic_dishonesty': 'غش أكاديمي',
-  'report.reason.other': 'أخرى',
-  'report.submitted': 'تم استلام البلاغ',
 
   // --- phase 3: community
   'groups.tab.mine': 'مجموعاتي',
@@ -361,4 +356,60 @@ export const ar = {
   // --- phase status
   'phase.comingSoon.title': 'قيد الإنشاء',
   'phase.comingSoon.body': 'هذه المرحلة قادمة في التحديث القادم.',
+
+  // --- settings, support, and account (App Store readiness)
+  'settings.title': 'الإعدادات',
+  'settings.account': 'الحساب',
+  'settings.support': 'الدعم والخصوصية',
+  'settings.support.help': 'المساعدة والدعم',
+  'settings.support.privacy': 'سياسة الخصوصية',
+  'settings.support.terms': 'شروط الاستخدام',
+  'settings.blocked': 'الحسابات المحظورة',
+  'settings.signOut': 'تسجيل الخروج',
+  'settings.deleteAccount': 'حذف الحساب',
+  'settings.deleteAccount.body':
+    'سيؤدي هذا إلى حذف حسابك نهائيًا: ملفك الشخصي، منشوراتك، تعليقاتك، رسائلك، وسجل تعلّمك. لا يمكن التراجع عن هذا الإجراء.',
+  'settings.deleteAccount.confirmTitle': 'حذف الحساب نهائيًا؟',
+  'settings.deleteAccount.confirmBody':
+    'اكتب كلمة DELETE وأدخل كلمة مرورك للتأكيد. لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.',
+  'settings.deleteAccount.password': 'كلمة المرور',
+  'settings.deleteAccount.confirmField': 'اكتب DELETE للتأكيد',
+  'settings.deleteAccount.submit': 'حذف الحساب نهائيًا',
+  'settings.deleteAccount.success': 'تم حذف حسابك.',
+  'settings.deleteAccount.wrongConfirmation': 'اكتب DELETE بالضبط للمتابعة.',
+
+  'blocked.empty.title': 'لا يوجد حسابات محظورة',
+  'blocked.empty.body': 'الحسابات التي تحظرها ستظهر هنا.',
+  'blocked.unblock': 'إلغاء الحظر',
+  'blocked.blockedSince': 'محظور منذ {date}',
+
+  'profile.block': 'حظر @{handle}',
+  'profile.unblock': 'إلغاء حظر @{handle}',
+  'profile.block.confirmTitle': 'حظر @{handle}؟',
+  'profile.block.confirmBody':
+    'لن يتمكن @{handle} من مراسلتك أو متابعتك أو رؤية محتواك الخاص. لن يُعلَم @{handle} بأنك حظرته.',
+  'profile.report': 'الإبلاغ عن @{handle}',
+
+  'report.title': 'الإبلاغ عن المحتوى',
+  'report.reason.title': 'سبب الإبلاغ',
+  'report.reason.spam': 'رسائل مزعجة',
+  'report.reason.harassment': 'مضايقة',
+  'report.reason.hate': 'خطاب كراهية',
+  'report.reason.sexual': 'محتوى جنسي غير لائق',
+  'report.reason.violence': 'عنف أو تهديد',
+  'report.reason.misinformation': 'معلومات مضللة',
+  'report.reason.academic_dishonesty': 'غش أكاديمي',
+  'report.reason.copyright': 'انتهاك حقوق النشر',
+  'report.reason.other': 'سبب آخر',
+  'report.details.placeholder': 'تفاصيل إضافية (اختياري)',
+  'report.submit': 'إرسال البلاغ',
+  'report.submitted.title': 'تم استلام بلاغك',
+  'report.submitted.body': 'سيراجع فريقنا هذا البلاغ.',
+  'report.alreadyFiled': 'لقد أبلغت عن هذا من قبل.',
+
+  'moderation.slur': 'يحتوي هذا النص على لغة غير مسموح بها.',
+  'moderation.threat': 'لا يمكن نشر تهديدات بالعنف.',
+  'moderation.sexual_harassment': 'لا يمكن نشر مضايقات ذات طابع جنسي.',
+  'moderation.self_harm_encouragement': 'لا يمكن تشجيع شخص على إيذاء نفسه.',
+  'moderation.spam': 'يبدو هذا كمحتوى ترويجي غير مرغوب.',
 } as const;

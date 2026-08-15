@@ -63,6 +63,8 @@ export const contentRoutes: FastifyPluginAsyncZod = async (app) => {
           201: contentItemSchema,
           403: errorEnvelopeSchema,
           412: errorEnvelopeSchema,
+          // The moderation gate refused it (Guideline 1.2).
+          422: errorEnvelopeSchema,
         },
       },
     },
@@ -250,7 +252,11 @@ export const contentRoutes: FastifyPluginAsyncZod = async (app) => {
         summary: 'Add a comment or reply',
         params: z.object({ contentId: uuidSchema }),
         body: createCommentRequestSchema,
-        response: { 201: commentSchema, 404: errorEnvelopeSchema },
+        response: {
+          201: commentSchema,
+          404: errorEnvelopeSchema,
+          422: errorEnvelopeSchema,
+        },
       },
     },
     async (request, reply) => {

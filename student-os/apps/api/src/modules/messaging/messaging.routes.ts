@@ -120,6 +120,7 @@ export const messagingRoutes: FastifyPluginAsyncZod = async (app) => {
           201: sendMessageResponseSchema,
           403: errorEnvelopeSchema,
           404: errorEnvelopeSchema,
+          422: errorEnvelopeSchema,
         },
       },
     },

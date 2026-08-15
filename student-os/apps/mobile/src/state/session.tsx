@@ -92,6 +92,15 @@ interface SessionValue {
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /**
+   * Drops the local session without calling `/v1/auth/logout`.
+   *
+   * For account deletion: the server has already revoked every session and
+   * deleted the account inside the same transaction, so a logout call would
+   * hit credentials that no longer resolve to anyone. This only clears what
+   * `signOut` clears locally — the token store and in-memory state.
+   */
+  forgetLocalSession: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -239,6 +248,7 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
         const me = await api.get<AuthUser>('/v1/auth/me');
         setUser(me);
       },
+      forgetLocalSession: clearSession,
     }),
     [status, user, api, adopt, clearSession],
   );

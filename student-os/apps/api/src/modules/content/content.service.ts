@@ -28,6 +28,7 @@ import {
 import { withTransaction } from '../../platform/db.js';
 import { errors } from '../../platform/errors.js';
 import { recordAnalytics } from '../analytics/events.service.js';
+import * as moderation_gate from '../moderation/moderation.service.js';
 import * as files from '../files/files.service.js';
 import { signMediaUrl } from '../files/signed-url.js';
 import * as profiles from '../users/users.repository.js';
@@ -268,6 +269,27 @@ export async function createPost(
     throw errors.forbidden('not_enrolled');
   }
 
+  /*
+   * The moderation gate (App Review Guideline 1.2 — "a method for filtering
+   * objectionable material from being posted to the app").
+   *
+   * Here, on the server, before the row exists, and after every permission
+   * check so that a refusal never tells someone their post would otherwise have
+   * been allowed into a container they cannot see. A client-side warning would
+   * satisfy nothing: `POST /v1/content` is a public HTTP endpoint and the app is
+   * not the only thing that can call it.
+   *
+   * A `review` verdict does NOT stop the post. It is created and queued for a
+   * moderator, because this is a medical cohort and content that merely looks
+   * alarming — forensic pathology, psychiatry, toxicology — is the curriculum.
+   */
+  const moderation = await moderation_gate.gate({
+    userId: actor.userId,
+    surface: 'post',
+    audience: visibility === 'private' ? 'private' : 'public',
+    text: input.body,
+  });
+
   const contentId = await withTransaction(async (client) => {
     const created = await repo.insertContent(
       {
@@ -323,6 +345,18 @@ export async function createPost(
 
     return created.id;
   });
+
+  // A flagged post exists; the queue entry is what makes it reachable by a
+  // moderator. Written after the commit, because before it there is no id.
+  if (moderation.flagged) {
+    await moderation_gate.linkFlaggedTarget({
+      userId: actor.userId,
+      surface: 'post',
+      contentHash: moderation.contentHash,
+      targetKind: 'content',
+      targetId: contentId,
+    });
+  }
 
   const row = await repo.findContentById(contentId, actor.userId);
   if (!row) throw errors.internal();

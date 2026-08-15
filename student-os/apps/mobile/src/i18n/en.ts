@@ -20,6 +20,8 @@ export const en: Record<keyof typeof ar, string> = {
   'action.retry': 'Try again',
   'action.done': 'Done',
   'action.skip': 'Skip',
+  'action.more': 'More',
+  'error.generic': 'Something went wrong. Please try again.',
 
   'state.loading': 'Loading…',
   'state.error.title': 'Something went wrong',
@@ -288,13 +290,6 @@ export const en: Record<keyof typeof ar, string> = {
   'compose.uploading': 'Uploading…',
   'compose.error.tooLarge': 'That image is larger than the limit',
   'compose.error.unsupported': 'That file type is not supported',
-  'report.title': 'Reason for reporting',
-  'report.reason.spam': 'Spam',
-  'report.reason.harassment': 'Harassment or abuse',
-  'report.reason.misinformation': 'Misinformation',
-  'report.reason.academic_dishonesty': 'Academic dishonesty',
-  'report.reason.other': 'Other',
-  'report.submitted': 'Report received',
 
   // --- phase 3: community
   'groups.tab.mine': 'My groups',
@@ -346,4 +341,59 @@ export const en: Record<keyof typeof ar, string> = {
 
   'phase.comingSoon.title': 'Coming soon',
   'phase.comingSoon.body': 'This part of the product ships in an upcoming phase.',
+
+  'settings.title': 'Settings',
+  'settings.account': 'Account',
+  'settings.support': 'Support & privacy',
+  'settings.support.help': 'Help & support',
+  'settings.support.privacy': 'Privacy policy',
+  'settings.support.terms': 'Terms of use',
+  'settings.blocked': 'Blocked accounts',
+  'settings.signOut': 'Sign out',
+  'settings.deleteAccount': 'Delete account',
+  'settings.deleteAccount.body':
+    'This permanently deletes your account: your profile, posts, comments, messages, and learning record. This cannot be undone.',
+  'settings.deleteAccount.confirmTitle': 'Permanently delete your account?',
+  'settings.deleteAccount.confirmBody':
+    'Type DELETE and enter your password to confirm. This cannot be undone once submitted.',
+  'settings.deleteAccount.password': 'Password',
+  'settings.deleteAccount.confirmField': 'Type DELETE to confirm',
+  'settings.deleteAccount.submit': 'Permanently delete account',
+  'settings.deleteAccount.success': 'Your account has been deleted.',
+  'settings.deleteAccount.wrongConfirmation': 'Type DELETE exactly to continue.',
+
+  'blocked.empty.title': 'No blocked accounts',
+  'blocked.empty.body': 'Accounts you block will show up here.',
+  'blocked.unblock': 'Unblock',
+  'blocked.blockedSince': 'Blocked since {date}',
+
+  'profile.block': 'Block @{handle}',
+  'profile.unblock': 'Unblock @{handle}',
+  'profile.block.confirmTitle': 'Block @{handle}?',
+  'profile.block.confirmBody':
+    'They won’t be able to message you, follow you, or see your private content. @{handle} won’t be notified.',
+  'profile.report': 'Report @{handle}',
+
+  'report.title': 'Report content',
+  'report.reason.title': 'Reason for reporting',
+  'report.reason.spam': 'Spam',
+  'report.reason.harassment': 'Harassment',
+  'report.reason.hate': 'Hate speech',
+  'report.reason.sexual': 'Inappropriate sexual content',
+  'report.reason.violence': 'Violence or threats',
+  'report.reason.misinformation': 'Misinformation',
+  'report.reason.academic_dishonesty': 'Academic dishonesty',
+  'report.reason.copyright': 'Copyright violation',
+  'report.reason.other': 'Something else',
+  'report.details.placeholder': 'Additional details (optional)',
+  'report.submit': 'Submit report',
+  'report.submitted.title': 'Report received',
+  'report.submitted.body': 'Our team will review this.',
+  'report.alreadyFiled': 'You already reported this.',
+
+  'moderation.slur': 'That text contains language we do not allow.',
+  'moderation.threat': 'Threats of violence cannot be posted.',
+  'moderation.sexual_harassment': 'Sexual harassment cannot be posted.',
+  'moderation.self_harm_encouragement': 'Encouraging self-harm cannot be posted.',
+  'moderation.spam': 'That looks like unwanted promotional content.',
 };

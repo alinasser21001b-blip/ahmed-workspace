@@ -11,6 +11,7 @@ import {
 import { withTransaction } from '../../platform/db.js';
 import { errors } from '../../platform/errors.js';
 import { recordAnalytics, recordLearningEvent } from '../analytics/events.service.js';
+import * as moderationGate from '../moderation/moderation.service.js';
 import * as repo from './comments.repository.js';
 import * as contentRepo from './content.repository.js';
 
@@ -85,6 +86,19 @@ export async function createComment(
   if (!ref || !canViewContent(actor, ref).allowed) throw errors.notFound('content');
 
   /*
+   * The same gate the post path runs, on the same server, for the same reason
+   * (Guideline 1.2). A comment is UGC on someone else's content and is the
+   * surface where targeted abuse actually happens — the audience is `public`
+   * because a comment is as visible as the item it hangs off.
+   */
+  const moderation = await moderationGate.gate({
+    userId: actor.userId,
+    surface: 'comment',
+    audience: 'public',
+    text: input.body,
+  });
+
+  /*
    * Threads are one level deep. A reply to a reply attaches to the same
    * top-level comment rather than nesting further: unbounded nesting is
    * unreadable on a phone and turns every thread read into a recursive query.
@@ -131,6 +145,16 @@ export async function createComment(
 
     return created.id;
   });
+
+  if (moderation.flagged) {
+    await moderationGate.linkFlaggedTarget({
+      userId: actor.userId,
+      surface: 'comment',
+      contentHash: moderation.contentHash,
+      targetKind: 'comment',
+      targetId: commentId,
+    });
+  }
 
   const row = await repo.findCommentById(commentId, actor.userId);
   if (!row) throw errors.internal();
