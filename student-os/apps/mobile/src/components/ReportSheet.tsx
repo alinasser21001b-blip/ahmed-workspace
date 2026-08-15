@@ -1,8 +1,10 @@
 import type { CreateReportRequest, ReportReason, ReportTargetType } from '@sos/contracts';
 import { useState } from 'react';
-import { Modal, Pressable, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '../api/client';
-import { Button } from './Button';
+import { DominantAction, SectionHeader, SecondaryAction } from './editorial';
 import { Text } from './Text';
 import type { TranslationKey } from '../i18n/index';
 import { useI18n } from '../i18n/index';
@@ -35,11 +37,19 @@ export function ReportSheet({
   onClose,
   targetType,
   targetId,
+  onBlock,
 }: {
   visible: boolean;
   onClose: () => void;
   targetType: ReportTargetType;
   targetId: string;
+  /**
+   * Offered on the confirmation. Reporting does not hide the content for the
+   * reporter — blocking does — so the surface that just took a report is the
+   * right place to offer it. Omitted where blocking makes no sense (a post's
+   * own report sheet has no person to block from here).
+   */
+  onBlock?: (() => void) | undefined;
 }): React.JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
@@ -78,106 +88,177 @@ export function ReportSheet({
     }
   }
 
+  const dismiss = (): void => {
+    onClose();
+    reset();
+  };
+
   return (
     <Modal
       visible={visible}
-      transparent
+      // Screen-filling, not a peek: the reason list, the detail field and the
+      // action are all reachable without dragging the surface.
+      presentationStyle="fullScreen"
       animationType="slide"
-      onRequestClose={() => {
-        onClose();
-        reset();
-      }}
+      // Deliberate dismissal only — an explicit Cancel and the system back
+      // gesture. There is no tap-outside, which would discard a typed reason.
+      onRequestClose={dismiss}
     >
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}>
-        <View
-          style={{
-            backgroundColor: theme.colors.surface,
-            borderTopLeftRadius: theme.radius.lg,
-            borderTopRightRadius: theme.radius.lg,
-            padding: theme.spacing.lg,
-            gap: theme.spacing.md,
-            maxHeight: '80%',
-          }}
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
+        <ScrollView
+          contentContainerStyle={{ padding: theme.spacing.xl, gap: theme.spacing.lg }}
+          keyboardShouldPersistTaps="handled"
         >
           {outcome === 'filed' || outcome === 'duplicate' ? (
-            <View style={{ gap: theme.spacing.sm, paddingVertical: theme.spacing.lg }}>
-              <Text variant="bodyStrong">{t('report.submitted.title')}</Text>
-              <Text variant="body" tone="muted">
+            <View style={{ gap: theme.spacing.md }} accessibilityLiveRegion="polite">
+              <Text accessibilityRole="header" variant="title">
+                {t('report.submitted.title')}
+              </Text>
+              <Text variant="body" tone="secondary">
                 {outcome === 'duplicate' ? t('report.alreadyFiled') : t('report.submitted.body')}
               </Text>
-              <Button
-                label={t('action.done')}
-                onPress={() => {
-                  onClose();
-                  reset();
-                }}
-              />
+              {/* Reporting does not hide the content; blocking does, so the
+                  confirmation offers it rather than leaving the person to
+                  find it. */}
+              {onBlock ? (
+                <>
+                  <Text variant="body" tone="secondary">
+                    {t('report.alsoBlock')}
+                  </Text>
+                  <SecondaryAction
+                    label={t('report.blockAction')}
+                    onPress={() => {
+                      dismiss();
+                      onBlock();
+                    }}
+                  />
+                </>
+              ) : null}
+              <DominantAction label={t('action.done')} onPress={dismiss} />
             </View>
           ) : (
             <>
-              <Text variant="bodyStrong">{t('report.title')}</Text>
-              <Text variant="label">{t('report.reason.title')}</Text>
-              <View style={{ gap: theme.spacing.xs }}>
-                {REASONS.map((r) => (
-                  <Pressable
-                    key={r}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: reason === r }}
-                    accessibilityLabel={t(`report.reason.${r}` as TranslationKey)}
-                    onPress={() => setReason(r)}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: theme.spacing.sm,
-                      paddingVertical: theme.spacing.xs,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 18,
-                        height: 18,
-                        borderRadius: 9,
-                        borderWidth: 2,
-                        borderColor: reason === r ? theme.colors.primary : theme.colors.border,
-                        backgroundColor: reason === r ? theme.colors.primary : 'transparent',
-                      }}
-                    />
-                    <Text variant="body">{t(`report.reason.${r}` as TranslationKey)}</Text>
-                  </Pressable>
-                ))}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  gap: theme.spacing.md,
+                }}
+              >
+                {/* Focus moves here on open, so the modal owns the screen. */}
+                {/* The modal owns focus: content behind it is inert, and a
+                    screen reader lands on this title rather than wherever it
+                    was reading before. */}
+                <Text
+                  accessibilityRole="header"
+                  accessibilityViewIsModal
+                  variant="title"
+                  style={{ flex: 1 }}
+                >
+                  {t('report.title')}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('action.cancel')}
+                  onPress={dismiss}
+                  hitSlop={10}
+                  style={{
+                    minWidth: 44,
+                    minHeight: 44,
+                    alignItems: 'flex-end',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Ionicons name="close" size={24} color={theme.colors.text} />
+                </Pressable>
               </View>
+
+              <SectionHeader title={t('report.reason.title')} />
+              <View
+                accessibilityRole="radiogroup"
+                accessibilityLabel={t('report.reason.title')}
+                style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}
+              >
+                {REASONS.map((r) => {
+                  const active = reason === r;
+                  return (
+                    <Pressable
+                      key={r}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={t(`report.reason.${r}` as TranslationKey)}
+                      onPress={() => setReason(r)}
+                      style={{
+                        borderRadius: theme.radius.pill,
+                        borderWidth: active ? 0 : 1.5,
+                        borderColor: theme.colors.borderStrong,
+                        backgroundColor: active ? theme.colors.text : 'transparent',
+                        paddingHorizontal: theme.spacing.lg,
+                        minHeight: 44,
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text
+                        variant="metadata"
+                        tone={active ? 'inverse' : 'secondary'}
+                        style={{ fontWeight: active ? '600' : '500' }}
+                      >
+                        {t(`report.reason.${r}` as TranslationKey)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
               <TextInput
+                accessibilityLabel={t('report.details.placeholder')}
                 value={details}
                 onChangeText={setDetails}
                 placeholder={t('report.details.placeholder')}
-                placeholderTextColor={theme.colors.textMuted}
+                placeholderTextColor={theme.colors.textFaint}
                 multiline
-                maxLength={2000}
+                maxLength={500}
                 style={{
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
-                  borderRadius: theme.radius.md,
-                  padding: theme.spacing.sm,
-                  minHeight: 72,
+                  borderWidth: 1.5,
+                  borderColor: theme.colors.borderStrong,
+                  borderRadius: theme.radius.sm,
+                  padding: theme.spacing.md,
+                  minHeight: 96,
                   color: theme.colors.text,
+                  textAlign: theme.isRTL ? 'right' : 'left',
+                  textAlignVertical: 'top',
                 }}
               />
+
               {outcome === 'error' ? (
-                <Text variant="metadata" tone="danger">
-                  {t('error.generic')}
-                </Text>
+                <View
+                  accessibilityLiveRegion="polite"
+                  style={{
+                    borderStartWidth: 2,
+                    borderStartColor: theme.colors.challenged,
+                    paddingStart: 11,
+                  }}
+                >
+                  <Text variant="metadata" tone="challenged">
+                    {t('error.generic')}
+                  </Text>
+                </View>
               ) : null}
-              <Button
+
+              <Text variant="metadata" tone="muted">
+                {t('report.moderatorNote')}
+              </Text>
+
+              <DominantAction
                 label={t('report.submit')}
                 disabled={!reason}
                 loading={submitting}
                 onPress={() => void submit()}
-                fullWidth
               />
             </>
           )}
-        </View>
-      </View>
+        </ScrollView>
+      </SafeAreaView>
     </Modal>
   );
 }

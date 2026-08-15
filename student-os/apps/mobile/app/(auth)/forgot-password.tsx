@@ -53,9 +53,21 @@ export default function ForgotPassword(): React.JSX.Element {
   if (sent) {
     return (
       <Screen scroll>
-        <View style={{ gap: theme.spacing.xs, marginTop: theme.spacing.xxl }}>
-          <Text variant="display">{t('auth.forgotPassword.sent.title')}</Text>
-          <Text variant="body" tone="muted">
+        {/*
+         * The sent state replaces the form on the same route, and announces
+         * itself: without a live region a screen-reader user submits and hears
+         * nothing, with no way to tell whether anything happened. The submit
+         * control is gone rather than disabled, so the same request cannot be
+         * fired repeatedly at a rate limiter the UI cannot see.
+         */}
+        <View
+          accessibilityLiveRegion="polite"
+          style={{ gap: theme.spacing.xs, marginTop: theme.spacing.xxl }}
+        >
+          <Text accessibilityRole="header" variant="display">
+            {t('auth.forgotPassword.sent.title')}
+          </Text>
+          <Text variant="body" tone="secondary">
             {t('auth.forgotPassword.sent.body')}
           </Text>
         </View>

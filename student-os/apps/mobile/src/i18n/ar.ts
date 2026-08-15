@@ -46,13 +46,13 @@ export const ar = {
   'auth.backToSignIn': 'العودة لتسجيل الدخول',
   'auth.forgotPassword.link': 'نسيت كلمة المرور؟',
   'auth.forgotPassword.title': 'إعادة تعيين كلمة المرور',
-  'auth.forgotPassword.subtitle': 'أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور.',
+  'auth.forgotPassword.subtitle': 'أدخل بريدك الإلكتروني وسنرسل لك رابط أو رمز إعادة التعيين.',
   'auth.forgotPassword.submit': 'إرسال رابط إعادة التعيين',
-  'auth.forgotPassword.sent.title': 'تحقق من بريدك الإلكتروني',
+  'auth.forgotPassword.sent.title': 'تحقّق من بريدك الإلكتروني بحثاً عن رابط أو رمز إعادة التعيين.',
   'auth.forgotPassword.sent.body':
-    'إذا كان هناك حساب مرتبط بهذا البريد الإلكتروني، فقد أُرسل إليه رابط لإعادة تعيين كلمة المرور.',
+    'إن كان هناك حساب مرتبط بهذا البريد، فقد أُرسل إليه رابط أو رمز لإعادة التعيين.',
   'auth.resetPassword.title': 'كلمة مرور جديدة',
-  'auth.resetPassword.subtitle': 'الصق الرمز من رسالة إعادة التعيين، ثم اختر كلمة مرور جديدة.',
+  'auth.resetPassword.subtitle': 'افتح رابط إعادة التعيين، أو أدخل الرمز يدوياً.',
   'auth.resetPassword.token': 'رمز إعادة التعيين',
   'auth.resetPassword.newPassword': 'كلمة المرور الجديدة',
   'auth.resetPassword.submit': 'تعيين كلمة المرور',
@@ -550,5 +550,9 @@ export const ar = {
 
   'settings.deleteAccount.survives':
     'المجموعات والقاعات التي تملكها تنتقل إلى عضو آخر، أو تُؤرشف إن لم يوجد من ينتقل إليه. البلاغات التي قدّمتها تبقى لدى الإشراف، دون اسمك.',
+
+  'report.alsoBlock': 'يمكنك أيضاً حظر هذا الشخص.',
+  'report.blockAction': 'حظر هذا الشخص',
+  'report.moderatorNote': 'يراجع البلاغ مشرف من كليتك. لن تُبلَّغ بهويته.',
 
 } as const;

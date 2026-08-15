@@ -45,13 +45,13 @@ export const en: Record<keyof typeof ar, string> = {
   'auth.backToSignIn': 'Back to sign in',
   'auth.forgotPassword.link': 'Forgot password?',
   'auth.forgotPassword.title': 'Reset your password',
-  'auth.forgotPassword.subtitle': 'Enter your email and we’ll send you a link to reset your password.',
+  'auth.forgotPassword.subtitle': 'Enter your email and we’ll send you a reset link or code.',
   'auth.forgotPassword.submit': 'Send reset link',
-  'auth.forgotPassword.sent.title': 'Check your email',
+  'auth.forgotPassword.sent.title': 'Check your email for a reset link or code.',
   'auth.forgotPassword.sent.body':
-    'If an account exists for that email address, a password reset link has been sent to it.',
+    'If an account exists for that email address, a reset link or code has been sent to it.',
   'auth.resetPassword.title': 'Choose a new password',
-  'auth.resetPassword.subtitle': 'Paste the code from the reset email, then choose a new password.',
+  'auth.resetPassword.subtitle': 'Open the reset link, or enter the reset code manually.',
   'auth.resetPassword.token': 'Reset code',
   'auth.resetPassword.newPassword': 'New password',
   'auth.resetPassword.submit': 'Set new password',
@@ -534,5 +534,9 @@ export const en: Record<keyof typeof ar, string> = {
 
   'settings.deleteAccount.survives':
     'Groups and classrooms you own pass to another member, or are archived if there is no one to pass them to. Reports you filed stay with moderation, without your name.',
+
+  'report.alsoBlock': 'You can also block this person.',
+  'report.blockAction': 'Block this person',
+  'report.moderatorNote': 'A moderator from your college reviews this. You will not be told who.',
 
 };

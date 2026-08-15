@@ -301,6 +301,9 @@ export default function ProfileScreen(): React.JSX.Element {
         onClose={() => setReportOpen(false)}
         targetType="profile"
         targetId={profile.userId}
+        {...(profile.viewer && !profile.viewer.isSelf && !blocked
+          ? { onBlock: () => setBlockConfirmOpen(true) }
+          : {})}
       />
       <FlatList
         data={blocked ? [] : posts}
