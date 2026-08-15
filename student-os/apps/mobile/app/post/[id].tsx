@@ -1,10 +1,13 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { Comment, CommentPage, ContentItem } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ActionSheet } from '../../src/components/ActionSheet';
 import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KnowledgePanel } from '../../src/components/KnowledgePanel';
+import { ReportSheet } from '../../src/components/ReportSheet';
 import { PostCard, formatRelative } from '../../src/components/PostCard';
 import { Text } from '../../src/components/Text';
 import { Avatar, Divider } from '../../src/components/surfaces';
@@ -31,6 +34,8 @@ export default function PostDetail(): React.JSX.Element {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     setStatus('loading');
@@ -162,8 +167,35 @@ export default function PostDetail(): React.JSX.Element {
           >
             <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
           </Pressable>
-          <Text variant="heading">{t('post.comments.title')}</Text>
+          <Text variant="heading" style={{ flex: 1 }}>
+            {t('post.comments.title')}
+          </Text>
+          {item && !item.viewer.isAuthor ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('action.more')}
+              onPress={() => setMenuOpen(true)}
+              hitSlop={8}
+            >
+              <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.text} />
+            </Pressable>
+          ) : null}
         </View>
+        {item ? (
+          <>
+            <ActionSheet
+              visible={menuOpen}
+              onClose={() => setMenuOpen(false)}
+              items={[{ label: t('profile.report', { handle: item.author.handle }), onPress: () => setReportOpen(true) }]}
+            />
+            <ReportSheet
+              visible={reportOpen}
+              onClose={() => setReportOpen(false)}
+              targetType="content"
+              targetId={item.id}
+            />
+          </>
+        ) : null}
 
         <ScrollView
           contentContainerStyle={{

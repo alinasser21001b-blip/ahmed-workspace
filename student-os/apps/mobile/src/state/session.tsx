@@ -90,8 +90,25 @@ interface SessionValue {
   getAccessToken: () => string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  /**
+   * Always resolves — the server's response is identical whether or not the
+   * email belongs to an account, and the client must not try to distinguish
+   * the two by, say, treating a rejection differently from a success.
+   */
+  requestPasswordReset: (email: string) => Promise<void>;
+  /** Redeems a reset token and adopts the resulting session, the same as sign-in. */
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /**
+   * Drops the local session without calling `/v1/auth/logout`.
+   *
+   * For account deletion: the server has already revoked every session and
+   * deleted the account inside the same transaction, so a logout call would
+   * hit credentials that no longer resolve to anyone. This only clears what
+   * `signOut` clears locally — the token store and in-memory state.
+   */
+  forgetLocalSession: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -223,6 +240,17 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
         );
         await adopt(session);
       },
+      requestPasswordReset: async (email) => {
+        await api.post('/v1/auth/forgot-password', { email }, { auth: false });
+      },
+      resetPassword: async (token, newPassword) => {
+        const session = await api.post<AuthSession>(
+          '/v1/auth/reset-password',
+          { token, newPassword },
+          { auth: false },
+        );
+        await adopt(session);
+      },
       signOut: async () => {
         try {
           await api.post('/v1/auth/logout', {
@@ -239,6 +267,7 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
         const me = await api.get<AuthUser>('/v1/auth/me');
         setUser(me);
       },
+      forgetLocalSession: clearSession,
     }),
     [status, user, api, adopt, clearSession],
   );

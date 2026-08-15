@@ -81,3 +81,26 @@ export const logoutRequestSchema = z.object({
   allDevices: z.boolean().default(false),
 });
 export type LogoutRequest = z.infer<typeof logoutRequestSchema>;
+
+// --- password reset ----------------------------------------------------
+
+export const forgotPasswordRequestSchema = z.object({
+  email: emailSchema,
+});
+export type ForgotPasswordRequest = z.infer<typeof forgotPasswordRequestSchema>;
+
+/**
+ * The response is a fixed message, not a decision. Whether the email belongs
+ * to an account is never reflected in the response — same status, same body,
+ * whichever branch the server actually took.
+ */
+export const forgotPasswordResponseSchema = z.object({
+  message: z.string(),
+});
+export type ForgotPasswordResponse = z.infer<typeof forgotPasswordResponseSchema>;
+
+export const resetPasswordRequestSchema = z.object({
+  token: z.string().min(20).max(500),
+  newPassword: passwordSchema,
+});
+export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;

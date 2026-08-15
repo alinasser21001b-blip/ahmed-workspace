@@ -157,6 +157,66 @@ export async function revokeAllSessionsForUser(userId: string, client?: Sql): Pr
   );
 }
 
+// --- password resets ---------------------------------------------------
+
+export interface PasswordResetRow {
+  id: string;
+  user_id: string;
+  expires_at: Date;
+}
+
+/**
+ * Marks every currently-live reset token for this user as consumed, without
+ * distinguishing why. A fresh request supersedes whatever came before it —
+ * only the newest link in an inbox should ever work.
+ */
+export async function supersedeActivePasswordResets(userId: string, client?: Sql): Promise<void> {
+  await queryOne(
+    `UPDATE password_resets SET used_at = now() WHERE user_id = $1 AND used_at IS NULL`,
+    [userId],
+    client,
+  );
+}
+
+export async function insertPasswordReset(
+  input: { userId: string; tokenHash: string; expiresAt: Date },
+  client?: Sql,
+): Promise<void> {
+  await queryOne(
+    `INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+    [input.userId, input.tokenHash, input.expiresAt],
+    client,
+  );
+}
+
+/**
+ * Locks the token row for the duration of the redemption transaction — the
+ * same double-submit guard `findSessionByTokenHashForUpdate` gives refresh
+ * tokens, and for the identical reason: two concurrent redemptions of the same
+ * link must not both succeed.
+ */
+export async function findActivePasswordResetByTokenHashForUpdate(
+  tokenHash: string,
+  client: Sql,
+): Promise<PasswordResetRow | null> {
+  return queryOne<PasswordResetRow>(
+    `SELECT id, user_id, expires_at FROM password_resets
+     WHERE token_hash = $1 AND used_at IS NULL
+     FOR UPDATE`,
+    [tokenHash],
+    client,
+  );
+}
+
+/** Guarded by `used_at IS NULL` even though the row was just locked: belt and suspenders costs one WHERE clause. */
+export async function consumePasswordReset(id: string, client: Sql): Promise<void> {
+  await queryOne(
+    `UPDATE password_resets SET used_at = now() WHERE id = $1 AND used_at IS NULL`,
+    [id],
+    client,
+  );
+}
+
 // --- actor ------------------------------------------------------------------
 
 interface ActorRow {

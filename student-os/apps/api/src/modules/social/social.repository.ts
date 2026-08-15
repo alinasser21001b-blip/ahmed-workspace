@@ -227,6 +227,15 @@ const REPORT_COLUMN: Record<string, string> = {
   profile: 'profile_id',
   group: 'group_id',
   community: 'community_id',
+  /*
+   * Messages became reportable for App Review Guideline 1.2. The column has
+   * existed since 0006; only this map was missing it, which meant the one
+   * surface where harassment is most private was the one surface a student
+   * could not report. Classrooms are deliberately still absent: `reports` has
+   * no `classroom_id` column, and adding a target without a foreign key would
+   * give up the referential integrity the exactly-one-target CHECK exists for.
+   */
+  message: 'message_id',
 };
 
 /**

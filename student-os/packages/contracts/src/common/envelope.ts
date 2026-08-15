@@ -22,6 +22,14 @@ export const errorCodeSchema = z.enum([
   'PAYLOAD_TOO_LARGE',
   'UNSUPPORTED_MEDIA_TYPE',
   'ACCOUNT_SUSPENDED',
+  /**
+   * The moderation gate refused the submission (App Review Guideline 1.2).
+   *
+   * Distinct from VALIDATION_ERROR because it is not a malformed request — the
+   * payload was well-formed and the service declined to publish it — and the
+   * client shows a different thing for each.
+   */
+  'CONTENT_REFUSED',
   'PRECONDITION_FAILED',
   'UPSTREAM_ERROR',
   'INTERNAL',

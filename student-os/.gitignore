@@ -26,3 +26,10 @@ netlify/functions/
 backups/
 *.dump
 *.dump.sha256
+
+# `expo prebuild` output. This project is managed workflow — EAS Build
+# generates these natively at build time. They exist locally only when someone
+# runs `expo prebuild` directly to inspect a real Info.plist/PrivacyInfo.xcprivacy
+# (see docs/app-store/03-PRIVACY-MANIFEST-AUDIT.md) and must never be committed.
+apps/mobile/ios/
+apps/mobile/android/

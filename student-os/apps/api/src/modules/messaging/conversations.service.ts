@@ -27,6 +27,7 @@ import {
 } from '@sos/core';
 import { withTransaction, type Sql } from '../../platform/db.js';
 import { errors } from '../../platform/errors.js';
+import * as moderationGate from '../moderation/moderation.service.js';
 import { recordAnalytics } from '../analytics/events.service.js';
 import { emit } from '../events/events.service.js';
 import * as files from '../files/files.repository.js';
@@ -348,6 +349,22 @@ export async function sendMessage(
   const decision = canSendMessage(actor, conversation, membership, counterpart);
   if (!decision.allowed) throw errors.forbidden(decision.reason);
 
+  /*
+   * The moderation gate, on the private surface (Guideline 1.2).
+   *
+   * A direct message has no audience, so the spam rules — which exist to
+   * protect one — do not run here. The rules that DO run are the ones about
+   * harassment aimed at a person, and a DM is precisely where that happens:
+   * refusing a slur or a threat in public and permitting it in a private
+   * message would be a filter that protects bystanders rather than targets.
+   */
+  const moderation = await moderationGate.gate({
+    userId: actor.userId,
+    surface: 'message',
+    audience: 'private',
+    text: input.body,
+  });
+
   const { messageId, seq, deduplicated } = await withTransaction(async (client) => {
     const result = await repo.insertMessage(
       {
@@ -400,6 +417,16 @@ export async function sendMessage(
 
     return { messageId: result.id, seq: result.seq, deduplicated: result.deduplicated };
   });
+
+  if (moderation.flagged && !deduplicated) {
+    await moderationGate.linkFlaggedTarget({
+      userId: actor.userId,
+      surface: 'message',
+      contentHash: moderation.contentHash,
+      targetKind: 'message',
+      targetId: messageId,
+    });
+  }
 
   const stored = await repo.findMessageById(messageId);
   if (!stored) throw errors.internal('message vanished after insert');

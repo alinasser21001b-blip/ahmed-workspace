@@ -1,11 +1,14 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ContentItem, FeedPage, Profile, Relationship } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActionSheet, ConfirmDialog } from '../../src/components/ActionSheet';
 import { Button } from '../../src/components/Button';
 import { PostCard } from '../../src/components/PostCard';
+import { ReportSheet } from '../../src/components/ReportSheet';
 import { Text } from '../../src/components/Text';
 import { Avatar, Badge, Card } from '../../src/components/surfaces';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
@@ -31,6 +34,9 @@ export default function ProfileScreen(): React.JSX.Element {
   const [posts, setPosts] = useState<ContentItem[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [acting, setActing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     setStatus('loading');
@@ -59,6 +65,29 @@ export default function ProfileScreen(): React.JSX.Element {
     try {
       const next = await api.request<Relationship>(`/v1/profiles/${handle}/follow`, {
         method: relationship.isFollowing ? 'DELETE' : 'PUT',
+      });
+      setRelationship(next);
+    } catch {
+      /* the button simply stays as it was */
+    } finally {
+      setActing(false);
+    }
+  };
+
+  /*
+   * Guideline 1.2 — "the ability to block abusive users from the service".
+   *
+   * Confirmed rather than instant: blocking cuts off messaging, following and
+   * private-content visibility in one step, and the person is never told —
+   * which means an accidental tap has no easy way back except finding this
+   * screen again through Settings → Blocked accounts.
+   */
+  const toggleBlock = async (): Promise<void> => {
+    if (!relationship) return;
+    setActing(true);
+    try {
+      const next = await api.request<Relationship>(`/v1/profiles/${handle}/block`, {
+        method: relationship.isBlocked ? 'DELETE' : 'PUT',
       });
       setRelationship(next);
     } catch {
@@ -98,6 +127,25 @@ export default function ProfileScreen(): React.JSX.Element {
         <Text variant="heading" style={{ flex: 1 }} numberOfLines={1} bidi="auto">
           {profile.displayName}
         </Text>
+        {profile.viewer?.isSelf ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.title')}
+            onPress={() => router.push('/settings')}
+            hitSlop={8}
+          >
+            <Ionicons name="settings-outline" size={22} color={theme.colors.text} />
+          </Pressable>
+        ) : profile.viewer && !profile.viewer.isSelf ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('action.more')}
+            onPress={() => setMenuOpen(true)}
+            hitSlop={8}
+          >
+            <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.text} />
+          </Pressable>
+        ) : null}
       </View>
 
       <Card>
@@ -155,6 +203,45 @@ export default function ProfileScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <ActionSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        items={[
+          {
+            label: relationship?.isBlocked
+              ? t('profile.unblock', { handle: profile.handle })
+              : t('profile.block', { handle: profile.handle }),
+            tone: relationship?.isBlocked ? 'default' : 'danger',
+            onPress: () => {
+              if (relationship?.isBlocked) void toggleBlock();
+              else setBlockConfirmOpen(true);
+            },
+          },
+          {
+            label: t('profile.report', { handle: profile.handle }),
+            onPress: () => setReportOpen(true),
+          },
+        ]}
+      />
+      <ConfirmDialog
+        visible={blockConfirmOpen}
+        title={t('profile.block.confirmTitle', { handle: profile.handle })}
+        body={t('profile.block.confirmBody', { handle: profile.handle })}
+        confirmLabel={t('profile.block', { handle: profile.handle })}
+        cancelLabel={t('action.cancel')}
+        danger
+        onConfirm={() => {
+          setBlockConfirmOpen(false);
+          void toggleBlock();
+        }}
+        onCancel={() => setBlockConfirmOpen(false)}
+      />
+      <ReportSheet
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType="profile"
+        targetId={profile.userId}
+      />
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}

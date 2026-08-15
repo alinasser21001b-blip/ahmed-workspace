@@ -67,6 +67,21 @@ const envSchema = z.object({
   AI_PROVIDER: z.enum(['anthropic', 'none']).default('none'),
   AI_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default('claude-sonnet-5'),
+
+  /*
+   * Where the app sends someone who needs help, the privacy policy, or the
+   * terms (App Review Guidelines 1.5 and 5.1.1(i)).
+   *
+   * Optional here and required at the release gate, which is the right split:
+   * a missing support URL must not stop the API booting for the whole cohort,
+   * but it must stop an iOS build reaching App Review. `pnpm appstore:check`
+   * enforces the second half, including refusing values that still look like
+   * placeholders.
+   */
+  SUPPORT_URL: z.string().url().optional(),
+  PRIVACY_POLICY_URL: z.string().url().optional(),
+  TERMS_URL: z.string().url().optional(),
+  SUPPORT_EMAIL: z.string().email().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

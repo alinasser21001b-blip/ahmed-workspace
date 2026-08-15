@@ -72,6 +72,11 @@ export default function SignIn(): React.JSX.Element {
           textContentType="password"
           {...(error ? { error } : {})}
         />
+        <Link href="/(auth)/forgot-password" asChild>
+          <Text variant="label" tone="primary" accessibilityRole="link">
+            {t('auth.forgotPassword.link')}
+          </Text>
+        </Link>
       </View>
 
       <Button

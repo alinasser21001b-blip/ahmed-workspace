@@ -44,8 +44,62 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
  * variable to set. An absent key survives the round trip as `undefined`, which
  * is what "nobody configured this" is supposed to look like.
  */
+/*
+ * The native half of the same guarantee `check-api-url.ts` gives the web
+ * build (App Store readiness — no localhost or cleartext HTTP in a shipped
+ * binary).
+ *
+ * `same-origin` — the web build's whole answer — cannot apply here: a native
+ * app has no page and therefore no origin to inherit, which
+ * `resolveApiBaseUrl` already refuses at runtime. What was missing is a gate
+ * BEFORE the binary is produced, so a misconfigured `eas build` fails in a
+ * terminal rather than shipping a build that fails every request on a
+ * reviewer's device.
+ *
+ * Scoped to `EAS_BUILD_PROFILE`, which EAS sets only while it is actually
+ * building — never during `expo start` or a local `expo prebuild` a developer
+ * runs to inspect the native project. Those must keep working without a
+ * production API address configured.
+ */
+const LOOPBACK_HOST = /^https?:\/\/(localhost|127(?:\.\d+){3}|\[::1\]|0\.0\.0\.0)(?::\d+)?(?:$|\/)/i;
+
+function assertNativeProductionApiUrl(profile: string | undefined, apiBaseUrl: string | undefined): void {
+  if (!profile) return; // Not an EAS build — a local prebuild/dev inspection.
+  if (profile !== 'production') return; // Preview/dev EAS profiles may point at a staging host.
+
+  if (!apiBaseUrl) {
+    throw new Error(
+      'EXPO_PUBLIC_API_URL is not set for an EAS production build. A native build has no page ' +
+        'to infer an origin from — set it explicitly to the production API’s HTTPS URL in ' +
+        'eas.json (build.production.env.EXPO_PUBLIC_API_URL) or the EAS project’s environment ' +
+        'variables before building.',
+    );
+  }
+  if (apiBaseUrl.trim().toLowerCase() === 'same-origin') {
+    throw new Error(
+      'EXPO_PUBLIC_API_URL is "same-origin" for a native production build. That setting only ' +
+        'means anything in a browser; a native build must be given the API’s actual HTTPS URL.',
+    );
+  }
+  if (LOOPBACK_HOST.test(apiBaseUrl.trim())) {
+    throw new Error(
+      `EXPO_PUBLIC_API_URL is "${apiBaseUrl}" for a native production build — a loopback ` +
+        'address that only means anything on the machine that built it. Refusing to produce ' +
+        'a binary that would only work on this machine.',
+    );
+  }
+  if (!/^https:\/\//i.test(apiBaseUrl.trim())) {
+    throw new Error(
+      `EXPO_PUBLIC_API_URL is "${apiBaseUrl}" for a native production build — not HTTPS. iOS ` +
+        'App Transport Security refuses cleartext HTTP by default, so this build would fail ' +
+        'every request on-device.',
+    );
+  }
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const apiBaseUrl = process.env.EXPO_PUBLIC_API_URL;
+  assertNativeProductionApiUrl(process.env.EAS_BUILD_PROFILE, apiBaseUrl);
   return {
     ...config,
     name: config.name ?? 'Student OS',

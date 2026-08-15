@@ -6,11 +6,26 @@ import { errors, PG_UNIQUE_VIOLATION, pgErrorCode } from '../../platform/errors.
 import * as repo from './auth.repository.js';
 import { hashPassword, needsRehash, verifyPassword } from './password.js';
 import {
+  generatePasswordResetToken,
   generateRefreshToken,
+  hashPasswordResetToken,
   hashRefreshToken,
+  passwordResetExpiry,
   refreshTokenExpiry,
   signAccessToken,
 } from './tokens.js';
+
+/**
+ * A password reset may act on this account. Deliberately the SAME set
+ * `refresh()` treats as capable of holding a live session — `active` and
+ * `restricted` — so a reset can never hand a session to an account that could
+ * not otherwise be signed into. `deleted` never reaches this check at all:
+ * `findUserByEmail`/`findUserById` already filter `deleted_at IS NULL`, so a
+ * deleted account is indistinguishable from "no such email" one layer up.
+ */
+function canResetPassword(status: repo.UserRow['status']): boolean {
+  return status === 'active' || status === 'restricted';
+}
 
 /**
  * Authentication business logic.
@@ -119,6 +134,86 @@ export async function login(input: LoginRequest, meta: RequestMeta): Promise<Aut
   await repo.touchLastActive(user.id);
 
   return issueSession(user, meta);
+}
+
+/**
+ * Mints a reset token, if this email resolves to a resettable account, and
+ * hands it — the plaintext, the only time it ever exists outside a hash — to
+ * `deliver`.
+ *
+ * The token is a constructor argument to a callback rather than a return
+ * value on purpose. A function that RETURNS the plaintext token is one
+ * accidental future change away from a route that serialises it straight into
+ * an HTTP response, which would turn "forgot password" into "here is anyone's
+ * password reset token, just ask." Injecting delivery instead makes that
+ * mistake require deliberately writing code to leak the token, not merely
+ * forgetting to strip a field.
+ *
+ * `deliver` is never called when the account does not exist or cannot use a
+ * reset — and the caller (the route) must not let that distinction leak: see
+ * its own comment for why the HTTP response is identical either way. What is
+ * NOT attempted here is disguising the timing difference between the two
+ * branches with dummy work. `signup()`'s own comment already states this
+ * codebase's position: email enumeration is not fully preventable this way,
+ * and pretending otherwise here would add a scrypt-shaped unauthenticated
+ * DoS lever for no real confidentiality gained. What is achievable, and what
+ * is implemented, is that the response never varies.
+ */
+export async function requestPasswordReset(
+  email: string,
+  deliver: (input: { userId: string; token: string }) => Promise<void> | void,
+): Promise<void> {
+  const user = await repo.findUserByEmail(email);
+  if (!user || !canResetPassword(user.status)) return;
+
+  const token = generatePasswordResetToken();
+  await withTransaction(async (client) => {
+    await repo.supersedeActivePasswordResets(user.id, client);
+    await repo.insertPasswordReset(
+      { userId: user.id, tokenHash: hashPasswordResetToken(token), expiresAt: passwordResetExpiry() },
+      client,
+    );
+  });
+  await deliver({ userId: user.id, token });
+}
+
+/**
+ * Redeems a reset token: sets the new password, consumes the token, and
+ * revokes every existing session before issuing exactly one fresh one for the
+ * device that completed the reset.
+ *
+ * The blanket revocation is a compromise assumption, not a courtesy: a
+ * password reset is frequently how someone recovers from a credential theft,
+ * and a session an attacker opened before that must not survive it. A user
+ * who reset their password because they simply forgot it pays the same cost —
+ * signing back in on their other devices — and that is the correct trade
+ * given the alternative is a live attacker session outliving the reset that
+ * was supposed to end it.
+ */
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+  meta: RequestMeta,
+): Promise<AuthSession> {
+  const tokenHash = hashPasswordResetToken(token);
+
+  return withTransaction(async (client) => {
+    const reset = await repo.findActivePasswordResetByTokenHashForUpdate(tokenHash, client);
+    if (!reset || reset.expires_at.getTime() <= Date.now()) {
+      throw errors.unauthenticated('invalid_or_expired_reset_token');
+    }
+
+    const user = await repo.findUserById(reset.user_id, client);
+    if (!user || !canResetPassword(user.status)) {
+      throw errors.unauthenticated('invalid_or_expired_reset_token');
+    }
+
+    await repo.consumePasswordReset(reset.id, client);
+    await repo.updatePasswordHash(user.id, await hashPassword(newPassword), client);
+    await repo.revokeAllSessionsForUser(user.id, client);
+
+    return issueSession(user, meta, client);
+  });
 }
 
 /**
