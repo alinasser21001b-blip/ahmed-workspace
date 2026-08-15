@@ -187,6 +187,106 @@ async function run(locale, width) {
   );
   await shot('08-topic-after');
 
+  /*
+   * The remaining surfaces are reached by direct URL rather than by tapping
+   * the tab bar. Two reasons: a pushed route covers the tab bar on web while
+   * leaving it in the DOM, which makes a tab click flaky rather than
+   * meaningful; and reaching each screen cold is itself the route-reload
+   * requirement, so this exercises both at once.
+   */
+
+  // --- classroom ----------------------------------------------------------
+  await page.goto(`${BASE}/classrooms/classroom-1`, { waitUntil: 'networkidle' });
+  const lecturesHeading = locale === 'ar' ? 'المحاضرات' : 'Lectures';
+  await waitVisible(page, lecturesHeading);
+  check(true, 'classroom renders its lecture sequence');
+  const roleLabel = locale === 'ar' ? 'أنت طالب هنا' : 'You are a student here';
+  check(await visibleCount(page, roleLabel) > 0, 'classroom states the viewer role');
+  const mostRecent = locale === 'ar' ? 'أحدث محاضرة' : 'Most recent lecture';
+  check(await visibleCount(page, mostRecent) > 0, 'classroom offers the most recent lecture');
+  await shot('09-classroom');
+
+  // --- messages -----------------------------------------------------------
+  await page.goto(`${BASE}/chat`, { waitUntil: 'networkidle' });
+  await waitVisible(page, 'Layla Hassan');
+  check(true, 'messages list renders conversations');
+  // The production host cannot hold a socket open, so this line is permanent
+  // and must be visible rather than implied.
+  const connectionLine = locale === 'ar'
+    ? 'التسليم الفوري غير متاح — الرسائل تُرسل وتُقرأ بشكل طبيعي.'
+    : 'Live delivery is unavailable — messages send and load normally.';
+  check(
+    await visibleCount(page, connectionLine) > 0,
+    'messages states the realtime limitation honestly',
+  );
+  await shot('10-messages');
+
+  // --- conversation -------------------------------------------------------
+  await page.goto(`${BASE}/chat/conv-1`, { waitUntil: 'networkidle' });
+  await waitVisible(page, 'اقرأي الفصل السابع من Guyton and Hall، صفحة 214.');
+  check(true, 'conversation renders its messages');
+  await shot('11-conversation');
+
+  // --- search -------------------------------------------------------------
+  await page.goto(`${BASE}/search`, { waitUntil: 'networkidle' });
+  await page.locator('input:visible').first().fill('Layla');
+  await waitVisible(page, locale === 'ar' ? 'أشخاص' : 'People');
+  check(true, 'search returns people results');
+  const deferred = locale === 'ar'
+    ? 'المواضيع والقاعات غير قابلة للبحث بعد.'
+    : 'Topics and classrooms are not searchable yet.';
+  check(
+    await visibleCount(page, deferred) > 0,
+    'search states the blocked result types rather than faking them',
+  );
+  await shot('12-search');
+
+  // --- profile ------------------------------------------------------------
+  await page.goto(`${BASE}/profile/layla.hassan`, { waitUntil: 'networkidle' });
+  const contribution = locale === 'ar' ? 'نقاط المساهمة' : 'Contribution score';
+  await waitVisible(page, contribution);
+  check(true, 'profile renders the contribution score');
+  const followWord = locale === 'ar' ? 'تتابعه' : 'Following';
+  check(
+    await visibleCount(page, followWord) > 0,
+    'profile uses follow terminology, not group join/leave',
+  );
+  await shot('13-profile');
+
+  // --- compose ------------------------------------------------------------
+  await page.goto(`${BASE}/compose`, { waitUntil: 'networkidle' });
+  const whoCanSee = locale === 'ar' ? 'من يمكنه رؤية هذا' : 'Who can see this';
+  await waitVisible(page, whoCanSee);
+  check(true, 'compose leads with the audience decision');
+  const optional = locale === 'ar' ? 'اختياري' : 'optional';
+  check(await visibleCount(page, optional) > 0, 'compose marks classification optional');
+  await shot('14-compose');
+
+  // --- settings -----------------------------------------------------------
+  await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle' });
+  const notificationsBlocked = locale === 'ar'
+    ? 'الإشعارات غير متاحة بعد'
+    : 'Notifications are not available yet';
+  await waitVisible(page, notificationsBlocked);
+  check(true, 'settings states that notifications are blocked');
+  await shot('15-settings');
+
+  // --- account deletion ---------------------------------------------------
+  await page.goto(`${BASE}/settings/delete-account`, { waitUntil: 'networkidle' });
+  // Substring, not an exact node match: these are sentences, and the
+  // assertion is about the copy being present and readable.
+  const deletionText = await page.locator('body').innerText();
+  const survives = locale === 'ar'
+    ? 'المجموعات والقاعات التي تملكها'
+    : 'Groups and classrooms you own';
+  check(deletionText.includes(survives), 'deletion warning states what survives, above the fields');
+  const tombstone = locale === 'ar' ? 'حُذفت هذه الرسالة' : 'This message was deleted';
+  check(
+    deletionText.includes(tombstone),
+    'deletion copy states messages are tombstoned, not erased',
+  );
+  await shot('16-delete-account');
+
   // --- no horizontal overflow at this width -------------------------------
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

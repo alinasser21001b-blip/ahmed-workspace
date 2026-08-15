@@ -251,6 +251,10 @@ export default function ConversationScreen(): React.JSX.Element {
             accessibilityLabel={t('action.back')}
             onPress={() => router.back()}
             hitSlop={8}
+            // hitSlop alone is not a target: it does not exist for a switch
+            // control, a stylus, or the accessibility inspector. The box has
+            // to actually be 44.
+            style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
           >
             <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
           </Pressable>
@@ -264,8 +268,16 @@ export default function ConversationScreen(): React.JSX.Element {
                 {t('chat.typing')}
               </Text>
             ) : connection !== 'open' ? (
-              <Text variant="metadata" tone="muted">
-                {t(connection === 'connecting' ? 'chat.connecting' : 'chat.offline')}
+              /*
+               * Not "you are offline". The socket being shut is not the same
+               * fact as the device having no connection, and on the current
+               * production host the socket never opens at all — so the old
+               * copy would permanently tell an online student that they were
+               * offline and that their messages were waiting, when both were
+               * false and the messages had already sent over HTTP.
+               */
+              <Text variant="metadata" tone="attention">
+                {t('chat.connection.down')}
               </Text>
             ) : null}
           </View>
@@ -386,8 +398,10 @@ export default function ConversationScreen(): React.JSX.Element {
                 borderRadius: 22,
                 alignItems: 'center',
                 justifyContent: 'center',
+                // Ink, like every other dominant action in this design. Send
+                // was the last indigo fill left in the product.
                 backgroundColor:
-                  draft.trim().length === 0 ? theme.colors.surface : theme.colors.primary,
+                  draft.trim().length === 0 ? theme.colors.surface : theme.colors.text,
               }}
             >
               <Ionicons

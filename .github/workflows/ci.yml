@@ -339,3 +339,81 @@ jobs:
       - name: API log on failure
         if: failure()
         run: cat /tmp/api.log
+
+  # ---------------------------------------------------------------------------
+  # The frozen-design UI, in a browser, in both languages, at 360px.
+  #
+  # Separate from `journey` and deliberately database-free: this runs the
+  # preview fixture build, where the transport is an in-memory world and no
+  # socket is ever opened. That is what makes it a UI gate rather than a system
+  # gate — it cannot go red because a server was slow, and it cannot go green
+  # because a screen quietly rendered nothing.
+  #
+  # Two suites: the journey walks every P0 and P1 surface, and the audit checks
+  # the accessibility rules that are verifiable from the DOM.
+  # ---------------------------------------------------------------------------
+  preview-ui:
+    name: Preview UI journey and accessibility audit
+    runs-on: ubuntu-latest
+
+    env:
+      # No API is reachable from this build and none is needed — the preview
+      # flag swaps the transport before any request is made. The address is
+      # still declared, because the build refuses to run without one and
+      # `same-origin` is the setting with no host to be wrong about.
+      EXPO_PUBLIC_API_URL: same-origin
+      EXPO_PUBLIC_PREVIEW_MODE: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: student-os/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: student-os/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @sos/contracts --filter @sos/core build
+
+      - run: pnpm --filter @sos/mobile build:web
+
+      - name: Serve the preview bundle
+        run: |
+          npx --yes serve apps/mobile/dist -l 8098 --single > /tmp/preview-web.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8098 > /dev/null; then
+              echo "Preview bundle served after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "Preview bundle never served"; cat /tmp/preview-web.log; exit 1
+
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Walk every implemented surface — Arabic and English, 360px and 390px
+        env:
+          E2E_WEB_URL: http://localhost:8098
+          E2E_SHOT_DIR: ${{ runner.temp }}/preview-shots
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:preview
+
+      - name: Audit accessibility
+        env:
+          E2E_WEB_URL: http://localhost:8098
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:a11y
+
+      - name: Upload preview screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-screenshots
+          path: ${{ runner.temp }}/preview-shots
+          if-no-files-found: ignore
