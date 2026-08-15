@@ -2,7 +2,7 @@ import { Link, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { ApiError, NetworkError } from '../../src/api/client';
-import { Button } from '../../src/components/Button';
+import { DominantAction } from '../../src/components/editorial';
 import { Input } from '../../src/components/Input';
 import { Text } from '../../src/components/Text';
 import { Screen } from '../../src/components/states';
@@ -53,7 +53,9 @@ export default function ResetPassword(): React.JSX.Element {
   return (
     <Screen scroll>
       <View style={{ gap: theme.spacing.xs, marginTop: theme.spacing.xxl }}>
-        <Text variant="display">{t('auth.resetPassword.title')}</Text>
+        <Text accessibilityRole="header" variant="display">
+          {t('auth.resetPassword.title')}
+        </Text>
         <Text variant="body" tone="muted">
           {t('auth.resetPassword.subtitle')}
         </Text>
@@ -80,17 +82,17 @@ export default function ResetPassword(): React.JSX.Element {
         />
       </View>
 
-      <Button
+      <DominantAction
         label={t('auth.resetPassword.submit')}
         onPress={() => void submit()}
         loading={submitting}
         disabled={!canSubmit}
-        size="lg"
-        fullWidth
       />
 
+      {/* A way back, not a second offer: the return link is quiet text, so the
+          one filled control on the screen stays the one that finishes it. */}
       <Link href="/(auth)/sign-in" asChild>
-        <Text variant="label" tone="primary" align="center" accessibilityRole="link">
+        <Text variant="label" tone="secondary" align="center" accessibilityRole="link">
           {t('auth.backToSignIn')}
         </Text>
       </Link>

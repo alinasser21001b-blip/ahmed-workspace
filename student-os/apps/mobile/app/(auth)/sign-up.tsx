@@ -1,7 +1,7 @@
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
-import { Button } from '../../src/components/Button';
+import { DominantAction } from '../../src/components/editorial';
 import { Input } from '../../src/components/Input';
 import { Text } from '../../src/components/Text';
 import { Screen } from '../../src/components/states';
@@ -73,17 +73,15 @@ export default function SignUp(): React.JSX.Element {
         />
       </View>
 
-      <Button
+      <DominantAction
         label={t('auth.signUp.title')}
         onPress={() => void submit()}
         loading={submitting}
         disabled={!canSubmit}
-        size="lg"
-        fullWidth
       />
 
       <Link href="/(auth)/sign-in" asChild>
-        <Text variant="label" tone="primary" align="center" accessibilityRole="link">
+        <Text variant="label" tone="secondary" align="center" accessibilityRole="link">
           {t('auth.haveAccount')}
         </Text>
       </Link>

@@ -2,7 +2,7 @@ import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { NetworkError } from '../../src/api/client';
-import { Button } from '../../src/components/Button';
+import { DominantAction } from '../../src/components/editorial';
 import { Input } from '../../src/components/Input';
 import { Text } from '../../src/components/Text';
 import { Screen } from '../../src/components/states';
@@ -71,22 +71,20 @@ export default function ForgotPassword(): React.JSX.Element {
             {t('auth.forgotPassword.sent.body')}
           </Text>
         </View>
-        <Button
+        <DominantAction
           label={t('auth.backToSignIn')}
           onPress={() => router.replace('/(auth)/sign-in')}
-          size="lg"
-          fullWidth
         />
       </Screen>
     );
   }
 
-
-
   return (
     <Screen scroll>
       <View style={{ gap: theme.spacing.xs, marginTop: theme.spacing.xxl }}>
-        <Text variant="display">{t('auth.forgotPassword.title')}</Text>
+        <Text accessibilityRole="header" variant="display">
+          {t('auth.forgotPassword.title')}
+        </Text>
         <Text variant="body" tone="muted">
           {t('auth.forgotPassword.subtitle')}
         </Text>
@@ -104,17 +102,15 @@ export default function ForgotPassword(): React.JSX.Element {
         {...(networkError ? { error: t('state.offline') } : {})}
       />
 
-      <Button
+      <DominantAction
         label={t('auth.forgotPassword.submit')}
         onPress={() => void submit()}
         loading={submitting}
         disabled={!canSubmit}
-        size="lg"
-        fullWidth
       />
 
       <Link href="/(auth)/sign-in" asChild>
-        <Text variant="label" tone="primary" align="center" accessibilityRole="link">
+        <Text variant="label" tone="secondary" align="center" accessibilityRole="link">
           {t('auth.backToSignIn')}
         </Text>
       </Link>

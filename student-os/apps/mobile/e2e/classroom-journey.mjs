@@ -292,8 +292,8 @@ try {
 
   const beforeJoin = await page.locator('body').innerText();
   check(
-    beforeJoin.includes('انضم لعرض المحاضرات والمصادر.'),
-    'a non-member is told to join rather than shown the lectures',
+    beforeJoin.includes('المحاضرات والمواد وقائمة الأعضاء تُرسل للأعضاء فقط.'),
+    'a non-member is told why the lectures are absent, not shown them',
   );
   check(
     !beforeJoin.includes('رمز الانضمام'),
