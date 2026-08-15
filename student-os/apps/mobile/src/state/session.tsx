@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { ApiClient } from '../api/client';
+import { IS_PREVIEW_MODE } from '../preview/preview-mode';
+import { fixtureFetch } from '../preview/fixture-transport';
 import { resolveApiBaseUrl } from '../config/api-base-url';
 
 /**
@@ -151,6 +153,11 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
     () =>
       new ApiClient({
         baseUrl: API_BASE_URL,
+        // Preview builds resolve every request against the in-memory fixture
+        // world instead of a network. Fail-closed: unless the build was
+        // exported with EXPO_PUBLIC_PREVIEW_MODE, this spread adds nothing and
+        // the real transport is untouched.
+        ...(IS_PREVIEW_MODE ? { fetchImpl: fixtureFetch } : {}),
         tokens: {
           getAccessToken: () => accessToken.current,
           getRefreshToken: () => refreshToken.current,

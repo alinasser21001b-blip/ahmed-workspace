@@ -20,9 +20,12 @@
  *
  * Two properties this file is responsible for:
  *
- *  1. **It cannot be enabled in production.** The flag is ignored unless the
- *     build is a development or preview build. Shipping the flag set in a
- *     store build is therefore inert rather than dangerous.
+ *  1. **It fails closed.** `EXPO_PUBLIC_*` variables are inlined at export
+ *     time, so the flag is a build-time constant: absent from the export
+ *     environment, it is `false` in the artifact and nothing at runtime can
+ *     flip it. A production export simply never sets it — and the release
+ *     gate should assert that (`EXPO_PUBLIC_PREVIEW_MODE` must be unset for
+ *     any store or production web build).
  *  2. **It is explicit.** There is no inference from hostname, no "looks like
  *     a preview URL" heuristic. A preview build is one that was exported with
  *     `EXPO_PUBLIC_PREVIEW_MODE=1`, and nothing else is.
