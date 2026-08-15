@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
-import { Linking, Pressable, ScrollView, View } from 'react-native';
+import { Linking, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { DirectionalIcon } from '../../src/components/DirectionalIcon';
+import { TopBar } from '../../src/components/editorial';
+import { AcademicRow } from '../../src/components/rows';
 import { Text } from '../../src/components/Text';
-import { Card, SectionHeader } from '../../src/components/surfaces';
+import { SectionHeader } from '../../src/components/surfaces';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -27,18 +28,12 @@ function Row({
   onPress: () => void;
   tone?: 'default' | 'danger';
 }): React.JSX.Element {
-  const theme = useTheme();
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}>
-      <Card>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text variant="body" tone={tone === 'danger' ? 'danger' : 'default'}>
-            {label}
-          </Text>
-          <DirectionalIcon direction="forward" size={18} color={theme.colors.textMuted} />
-        </View>
-      </Card>
-    </Pressable>
+    <AcademicRow onPress={onPress} accessibilityLabel={label} chevron>
+      <Text variant="body" tone={tone === 'danger' ? 'danger' : 'default'}>
+        {label}
+      </Text>
+    </AcademicRow>
   );
 }
 
@@ -51,31 +46,38 @@ export default function SettingsScreen(): React.JSX.Element {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ScrollView
-        contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.lg }}
+        contentContainerStyle={{ padding: theme.spacing.xl, gap: theme.spacing.xl }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t('action.back')}
-            onPress={() => router.back()}
-            hitSlop={8}
-          >
-            <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
-          </Pressable>
-          <Text variant="heading">{t('settings.title')}</Text>
-        </View>
+        <TopBar title={t('settings.title')} onBack={() => router.back()} rule={false} />
 
         <View>
           <SectionHeader title={t('settings.account')} />
-          <View style={{ gap: theme.spacing.sm }}>
+          <View>
             <Row label={t('settings.blocked')} onPress={() => router.push('/settings/blocked')} />
             <Row label={t('settings.signOut')} onPress={() => void signOut()} />
           </View>
         </View>
 
+        {/*
+         * Notifications are BLOCKED_BY_PRODUCT_CAPABILITY: the schema, the
+         * rules and push-token storage all exist, but there is no producer,
+         * no drain and no route. Stating that is the honest surface — a
+         * toggle here would control nothing, and a tray would be empty by
+         * construction rather than because nothing happened.
+         */}
+        <View style={{ gap: theme.spacing.xs }}>
+          <SectionHeader title={t('nav.notifications')} />
+          <Text variant="body" tone="secondary">
+            {t('notifications.blocked.title')}
+          </Text>
+          <Text variant="metadata" tone="muted">
+            {t('notifications.blocked.body')}
+          </Text>
+        </View>
+
         <View>
           <SectionHeader title={t('settings.support')} />
-          <View style={{ gap: theme.spacing.sm }}>
+          <View>
             {links.supportUrl ? (
               <Row
                 label={t('settings.support.help')}

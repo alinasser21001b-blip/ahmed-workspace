@@ -367,8 +367,7 @@ export const en: Record<keyof typeof ar, string> = {
   'settings.signOut': 'Sign out',
   'settings.deleteAccount': 'Delete account',
   'settings.deleteAccount.body':
-    'This permanently deletes your account: your profile, posts, comments, messages, and learning record. This cannot be undone.',
-  'settings.deleteAccount.confirmTitle': 'Permanently delete your account?',
+    'This permanently deletes your account: your profile, posts, comments, practice history and learning record. It cannot be undone. Messages you sent stay in other people’s conversations as “This message was deleted”, without your name.',
   'settings.deleteAccount.confirmBody':
     'Type DELETE and enter your password to confirm. This cannot be undone once submitted.',
   'settings.deleteAccount.password': 'Password',
@@ -530,5 +529,10 @@ export const en: Record<keyof typeof ar, string> = {
 
   'chat.youPrefix': 'You',
   'chat.unreadDividerA11y': 'Unread messages below',
+
+  'action.clear': 'Clear',
+
+  'settings.deleteAccount.survives':
+    'Groups and classrooms you own pass to another member, or are archived if there is no one to pass them to. Reports you filed stay with moderation, without your name.',
 
 };

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Image, Pressable, TextInput, View } from 'react-native';
 import { ApiError, NetworkError } from '../src/api/client';
 import { Button } from '../src/components/Button';
+import { DominantAction, SectionHeader } from '../src/components/editorial';
 import { Text } from '../src/components/Text';
 import { Screen } from '../src/components/states';
 import { useI18n, type TranslationKey } from '../src/i18n/index';
@@ -126,14 +127,19 @@ export default function Compose(): React.JSX.Element {
   return (
     <Screen scroll>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text variant="title">{t('compose.title')}</Text>
+        <Text accessibilityRole="header" variant="title">
+          {t('compose.title')}
+        </Text>
+        {/* 44 px and far from Publish: dismissal genuinely loses the text,
+            because there is no draft persistence to fall back on. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('action.cancel')}
           onPress={() => router.back()}
-          hitSlop={8}
+          hitSlop={10}
+          style={{ minWidth: 44, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' }}
         >
-          <Ionicons name="close" size={24} color={theme.colors.textMuted} />
+          <Ionicons name="close" size={24} color={theme.colors.text} />
         </Pressable>
       </View>
 
@@ -159,6 +165,11 @@ export default function Compose(): React.JSX.Element {
           writingDirection: theme.isRTL ? 'rtl' : 'ltr',
         }}
       />
+
+      {/* Language is detected, never asked — classification.ts derives it. */}
+      <Text variant="metadata" tone="muted">
+        {t('compose.languageDetected')}
+      </Text>
 
       {attachment ? (
         <View style={{ gap: theme.spacing.sm }}>
@@ -190,11 +201,13 @@ export default function Compose(): React.JSX.Element {
         />
       )}
 
+      {/* The audience is the loudest decision and the only pre-selected
+          control: a default nobody noticed is how a private note reaches a
+          cohort. */}
       <View style={{ gap: theme.spacing.sm, display: groupId ? 'none' : 'flex' }}>
-        <Text variant="label" tone="muted">
-          {t('compose.visibility')}
-        </Text>
+        <SectionHeader title={t('compose.whoCanSee')} />
         <ChoiceRow
+          label={t('compose.whoCanSee')}
           options={VISIBILITY_OPTIONS.map((option) => ({
             value: option.value,
             label: t(option.key),
@@ -211,10 +224,9 @@ export default function Compose(): React.JSX.Element {
        * different state from having chosen "note".
        */}
       <View style={{ gap: theme.spacing.sm }}>
-        <Text variant="label" tone="muted">
-          {t('knowledge.type')}
-        </Text>
+        <SectionHeader title={t('compose.whatKind')} trailing={t('compose.optional')} />
         <ChoiceRow
+          label={`${t('compose.whatKind')}, ${t('compose.optional')}`}
           options={KNOWLEDGE_TYPES.map((value) => ({
             value,
             label: t(`knowledge.type.${value}` as TranslationKey),
@@ -225,10 +237,9 @@ export default function Compose(): React.JSX.Element {
       </View>
 
       <View style={{ gap: theme.spacing.sm }}>
-        <Text variant="label" tone="muted">
-          {t('knowledge.difficulty')}
-        </Text>
+        <SectionHeader title={t('compose.difficulty')} trailing={t('compose.optional')} />
         <ChoiceRow
+          label={`${t('compose.difficulty')}, ${t('compose.optional')}`}
           options={DIFFICULTIES.map((value) => ({
             value,
             label: t(`knowledge.difficulty.${value}` as TranslationKey),
@@ -239,18 +250,28 @@ export default function Compose(): React.JSX.Element {
       </View>
 
       {error ? (
-        <Text variant="caption" tone="danger" accessibilityLiveRegion="polite">
-          {error}
-        </Text>
+        <View
+          accessibilityLiveRegion="polite"
+          style={{
+            borderStartWidth: 2,
+            borderStartColor: theme.colors.challenged,
+            paddingStart: 11,
+          }}
+        >
+          <Text variant="metadata" tone="challenged">
+            {error}
+          </Text>
+        </View>
       ) : null}
+      <Text variant="metadata" tone="faint">
+        {t('compose.clearHint')}
+      </Text>
 
-      <Button
+      <DominantAction
         label={t('compose.publish')}
         onPress={() => void publish()}
         loading={publishing}
         disabled={!canPublish}
-        size="lg"
-        fullWidth
       />
     </Screen>
   );
@@ -267,14 +288,21 @@ function ChoiceRow<T extends string>({
   options,
   selected,
   onSelect,
+  label,
 }: {
   options: { value: T; label: string }[];
   selected: T | null;
   onSelect: (value: T) => void;
+  /** Labels the radiogroup, so the section title is announced with the chips. */
+  label: string;
 }): React.JSX.Element {
   const theme = useTheme();
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}
+      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}
+    >
       {options.map((option) => {
         const active = selected === option.value;
         return (
@@ -286,14 +314,21 @@ function ChoiceRow<T extends string>({
             onPress={() => onSelect(option.value)}
             style={{
               borderRadius: theme.radius.pill,
-              borderWidth: 1,
-              borderColor: active ? theme.colors.primary : theme.colors.border,
-              backgroundColor: active ? theme.colors.primarySoft : theme.colors.surface,
+              borderWidth: active ? 0 : 1.5,
+              borderColor: theme.colors.borderStrong,
+              // A choice made is an ink fill — the same weight the dominant
+              // action carries, and never teal.
+              backgroundColor: active ? theme.colors.text : 'transparent',
               paddingHorizontal: theme.spacing.lg,
-              paddingVertical: theme.spacing.sm,
+              minHeight: 44,
+              justifyContent: 'center',
             }}
           >
-            <Text variant="caption" tone={active ? 'primary' : 'muted'}>
+            <Text
+              variant="metadata"
+              tone={active ? 'inverse' : 'secondary'}
+              style={{ fontWeight: active ? '600' : '500' }}
+            >
               {option.label}
             </Text>
           </Pressable>
