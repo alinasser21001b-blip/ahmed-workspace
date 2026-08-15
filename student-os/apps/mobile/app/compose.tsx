@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Image, Pressable, TextInput, View } from 'react-native';
 import { ApiError, NetworkError } from '../src/api/client';
 import { Button } from '../src/components/Button';
-import { DominantAction, SectionHeader } from '../src/components/editorial';
+import { ChipPicker, DominantAction, SectionHeader } from '../src/components/editorial';
 import { Text } from '../src/components/Text';
 import { Screen } from '../src/components/states';
 import { useI18n, type TranslationKey } from '../src/i18n/index';
@@ -206,7 +206,7 @@ export default function Compose(): React.JSX.Element {
           cohort. */}
       <View style={{ gap: theme.spacing.sm, display: groupId ? 'none' : 'flex' }}>
         <SectionHeader title={t('compose.whoCanSee')} />
-        <ChoiceRow
+        <ChipPicker
           label={t('compose.whoCanSee')}
           options={VISIBILITY_OPTIONS.map((option) => ({
             value: option.value,
@@ -225,7 +225,7 @@ export default function Compose(): React.JSX.Element {
        */}
       <View style={{ gap: theme.spacing.sm }}>
         <SectionHeader title={t('compose.whatKind')} trailing={t('compose.optional')} />
-        <ChoiceRow
+        <ChipPicker
           label={`${t('compose.whatKind')}, ${t('compose.optional')}`}
           options={KNOWLEDGE_TYPES.map((value) => ({
             value,
@@ -238,7 +238,7 @@ export default function Compose(): React.JSX.Element {
 
       <View style={{ gap: theme.spacing.sm }}>
         <SectionHeader title={t('compose.difficulty')} trailing={t('compose.optional')} />
-        <ChoiceRow
+        <ChipPicker
           label={`${t('compose.difficulty')}, ${t('compose.optional')}`}
           options={DIFFICULTIES.map((value) => ({
             value,
@@ -284,60 +284,6 @@ export default function Compose(): React.JSX.Element {
  * behaved this way since Phase 2 and the classification pickers reuse it rather
  * than inventing a second look for the same decision.
  */
-function ChoiceRow<T extends string>({
-  options,
-  selected,
-  onSelect,
-  label,
-}: {
-  options: { value: T; label: string }[];
-  selected: T | null;
-  onSelect: (value: T) => void;
-  /** Labels the radiogroup, so the section title is announced with the chips. */
-  label: string;
-}): React.JSX.Element {
-  const theme = useTheme();
-  return (
-    <View
-      accessibilityRole="radiogroup"
-      accessibilityLabel={label}
-      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}
-    >
-      {options.map((option) => {
-        const active = selected === option.value;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={option.label}
-            onPress={() => onSelect(option.value)}
-            style={{
-              borderRadius: theme.radius.pill,
-              borderWidth: active ? 0 : 1.5,
-              borderColor: theme.colors.borderStrong,
-              // A choice made is an ink fill — the same weight the dominant
-              // action carries, and never teal.
-              backgroundColor: active ? theme.colors.text : 'transparent',
-              paddingHorizontal: theme.spacing.lg,
-              minHeight: 44,
-              justifyContent: 'center',
-            }}
-          >
-            <Text
-              variant="metadata"
-              tone={active ? 'inverse' : 'secondary'}
-              style={{ fontWeight: active ? '600' : '500' }}
-            >
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 function uploadErrorKey(caught: unknown): TranslationKey {
   if (caught instanceof NetworkError) return 'state.offline';
   if (caught instanceof ApiError) {

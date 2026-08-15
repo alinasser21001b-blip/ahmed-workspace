@@ -63,6 +63,13 @@ export default function RootLayout(): React.JSX.Element {
                 name="practice/[topicId]"
                 options={{ presentation: 'fullScreenModal' }}
               />
+              {/*
+               * The preview feedback form. Registered unconditionally because
+               * the route table is static, and harmless in production: the
+               * screen renders a sentence rather than a form when the build is
+               * not a preview, and nothing links to it there.
+               */}
+              <Stack.Screen name="preview-feedback" options={{ presentation: 'modal' }} />
             </Stack>
             </RealtimeProvider>
           </SessionProvider>

@@ -279,6 +279,72 @@ export function InkBand({
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// ChipPicker — a single-choice row of chips
+
+/**
+ * One choice from a few, laid out as wrapping chips.
+ *
+ * The selected chip is an ink fill — the same weight the dominant action
+ * carries, never teal, and never colour alone: the fill, the label weight and
+ * the announced selected state all change together, so the choice survives
+ * greyscale and a screen reader alike.
+ */
+export function ChipPicker<T extends string>({
+  options,
+  selected,
+  onSelect,
+  label,
+}: {
+  options: { value: T; label: string }[];
+  selected: T | null;
+  onSelect: (value: T) => void;
+  /** Labels the radiogroup, so the section title is announced with the chips. */
+  label: string;
+}): React.JSX.Element {
+  const theme = useTheme();
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}
+      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}
+    >
+      {options.map((option) => {
+        const active = selected === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={option.label}
+            onPress={() => onSelect(option.value)}
+            style={{
+              borderRadius: theme.radius.pill,
+              borderWidth: active ? 0 : 1.5,
+              borderColor: theme.colors.borderStrong,
+              // A choice made is an ink fill — the same weight the dominant
+              // action carries, and never teal.
+              backgroundColor: active ? theme.colors.text : 'transparent',
+              paddingHorizontal: theme.spacing.lg,
+              minHeight: 44,
+              justifyContent: 'center',
+            }}
+          >
+            <Text
+              variant="metadata"
+              tone={active ? 'inverse' : 'secondary'}
+              style={{ fontWeight: active ? '600' : '500' }}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Hairline + 2 px rule helpers
 

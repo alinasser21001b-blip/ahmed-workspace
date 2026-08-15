@@ -410,6 +410,18 @@ jobs:
           PLAYWRIGHT_CHROMIUM: ''
         run: pnpm test:a11y
 
+      # The acceptance test for the deployed student preview. It runs here
+      # against the same artifact CI just built, and again by hand against the
+      # real site after a deploy — the same file, so "green locally" and
+      # "green for a student" cannot diverge. It is the only suite that watches
+      # the network: a request to any host but the preview's own fails it.
+      - name: Prove the preview journey and that nothing leaves the origin
+        env:
+          E2E_WEB_URL: http://localhost:8098
+          E2E_SHOT_DIR: ${{ runner.temp }}/preview-shots
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:preview:deployed
+
       - name: Upload preview screenshots
         if: always()
         uses: actions/upload-artifact@v4
