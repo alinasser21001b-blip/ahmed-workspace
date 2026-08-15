@@ -48,6 +48,19 @@ export default function RootLayout(): React.JSX.Element {
               <Stack.Screen name="lecture/[id]" />
               <Stack.Screen name="chat/[id]" />
               <Stack.Screen name="profile/[handle]" />
+              {/*
+               * Practice is a focus mode, not a tab screen: full-screen
+               * presentation so the tab bar is unmounted rather than hidden,
+               * and the only navigation inside it is the close control and the
+               * post-feedback "Open topic" action.
+               *
+               * This route was previously unregistered, so Practice rendered
+               * without the presentation the design requires.
+               */}
+              <Stack.Screen
+                name="practice/[topicId]"
+                options={{ presentation: 'fullScreenModal' }}
+              />
             </Stack>
             </RealtimeProvider>
           </SessionProvider>

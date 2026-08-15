@@ -58,12 +58,25 @@ export interface TokenStore {
 export interface ApiClientOptions {
   baseUrl: string;
   tokens?: TokenStore;
+  /**
+   * Transport. Defaults to the global `fetch`.
+   *
+   * Injectable so the preview build can serve fixtures without the rest of the
+   * app knowing: every screen keeps calling the same typed helpers, and the
+   * substitution happens once, here. Production passes nothing and gets
+   * `fetch`, so the real path is unchanged rather than conditionally bypassed.
+   */
+  fetchImpl?: typeof fetch;
 }
 
 export class ApiClient {
   private refreshInFlight: Promise<boolean> | null = null;
 
   constructor(private readonly options: ApiClientOptions) {}
+
+  private get transport(): typeof fetch {
+    return this.options.fetchImpl ?? fetch;
+  }
 
   async request<T>(
     path: string,
@@ -83,7 +96,7 @@ export class ApiClient {
       if (token) headers.authorization = `Bearer ${token}`;
 
       try {
-        return await fetch(`${this.options.baseUrl}${path}`, {
+        return await this.transport(`${this.options.baseUrl}${path}`, {
           method,
           headers,
           ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -140,7 +153,7 @@ export class ApiClient {
     if (!refreshToken) return false;
 
     try {
-      const response = await fetch(`${this.options.baseUrl}/v1/auth/refresh`, {
+      const response = await this.transport(`${this.options.baseUrl}/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -178,7 +191,7 @@ export class ApiClient {
     const send = async (): Promise<Response> => {
       const token = this.options.tokens?.getAccessToken();
       try {
-        return await fetch(`${this.options.baseUrl}${path}`, {
+        return await this.transport(`${this.options.baseUrl}${path}`, {
           method: 'POST',
           headers: token ? { authorization: `Bearer ${token}` } : {},
           body: form,
