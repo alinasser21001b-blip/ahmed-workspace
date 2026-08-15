@@ -42,6 +42,20 @@ export const ar = {
   'auth.error.invalidCredentials': 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
   'auth.error.emailTaken': 'هذا البريد الإلكتروني مستخدم بالفعل',
   'auth.error.suspended': 'هذا الحساب موقوف',
+  'auth.error.resetTokenInvalid': 'هذا الرابط غير صالح أو منتهي الصلاحية. اطلب رابطاً جديداً.',
+  'auth.backToSignIn': 'العودة لتسجيل الدخول',
+  'auth.forgotPassword.link': 'نسيت كلمة المرور؟',
+  'auth.forgotPassword.title': 'إعادة تعيين كلمة المرور',
+  'auth.forgotPassword.subtitle': 'أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور.',
+  'auth.forgotPassword.submit': 'إرسال رابط إعادة التعيين',
+  'auth.forgotPassword.sent.title': 'تحقق من بريدك الإلكتروني',
+  'auth.forgotPassword.sent.body':
+    'إذا كان هناك حساب مرتبط بهذا البريد الإلكتروني، فقد أُرسل إليه رابط لإعادة تعيين كلمة المرور.',
+  'auth.resetPassword.title': 'كلمة مرور جديدة',
+  'auth.resetPassword.subtitle': 'الصق الرمز من رسالة إعادة التعيين، ثم اختر كلمة مرور جديدة.',
+  'auth.resetPassword.token': 'رمز إعادة التعيين',
+  'auth.resetPassword.newPassword': 'كلمة المرور الجديدة',
+  'auth.resetPassword.submit': 'تعيين كلمة المرور',
 
   // --- onboarding
   'onboarding.university.title': 'اختر جامعتك',

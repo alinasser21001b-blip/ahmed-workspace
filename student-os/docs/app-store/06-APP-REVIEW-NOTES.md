@@ -21,6 +21,10 @@ A deterministic path a reviewer can follow to exercise every capability named in
 11. **Privacy** — **Settings → Privacy policy** opens the published policy in the system browser.
 12. **Delete account** — **Settings → Delete account**, enter the account's password, type `DELETE`, submit. **Reviewers should be told this is destructive** — recommend using a dedicated, disposable review account for this step rather than the primary demo account, so the rest of the journey remains testable on a future review pass.
 
+## Password reset — present, delivery not yet live
+
+The sign-in screen has a "Forgot password?" link, and the full reset flow (request → server-issued single-use token → set a new password → signed back in) works end to end. **No email is actually sent yet** — no email provider is configured in this build's environment (documented as `EXTERNAL_INFRASTRUCTURE_REQUIRED` in `00-READINESS-AUDIT.md`), so a reviewer who taps it will see the confirmation screen but will not receive a message. This is expected in this build, not a bug to report; it does not block review of any other flow, and the demo account's provided password is sufficient for every other step in this journey.
+
 ## Non-obvious feature explanation (for Guideline 2.3.1(a) — "described with specificity")
 
 - **The moderation gate is not visible UI.** It runs silently on every post/comment/message; a reviewer will only see it if they deliberately submit content matching a blocked pattern (e.g. an explicit threat), which returns a clear in-app error rather than posting.

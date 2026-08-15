@@ -32,7 +32,7 @@ Every category above exists to run a specific feature you use directly — your 
 
 ## Photo uploads — a specific note
 
-When you upload a photo, the file is stored as you provided it. **If your device embeds location data in photo files (a common camera setting), that location data is currently stored along with the photo.** We recommend disabling location tagging in your device's camera settings if you do not want this. `EXTERNAL_OWNER_ACTION_REQUIRED: confirm whether EXIF-stripping has been implemented server-side by the time this policy is published — if so, remove this paragraph and state the opposite.`
+When you upload a photo, we remove location and other identifying camera metadata (such as device model and timestamp) from the file automatically, on our server, before it is stored. We keep only what is needed to display the photo correctly, including its orientation. This happens for every upload — there is nothing to turn on or configure.
 
 ## How long we keep it
 

@@ -90,6 +90,14 @@ interface SessionValue {
   getAccessToken: () => string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  /**
+   * Always resolves — the server's response is identical whether or not the
+   * email belongs to an account, and the client must not try to distinguish
+   * the two by, say, treating a rejection differently from a success.
+   */
+  requestPasswordReset: (email: string) => Promise<void>;
+  /** Redeems a reset token and adopts the resulting session, the same as sign-in. */
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
   /**
@@ -228,6 +236,17 @@ export function SessionProvider({ children }: { children: ReactNode }): React.JS
         const session = await api.post<AuthSession>(
           '/v1/auth/signup',
           { email, password, locale: 'ar' },
+          { auth: false },
+        );
+        await adopt(session);
+      },
+      requestPasswordReset: async (email) => {
+        await api.post('/v1/auth/forgot-password', { email }, { auth: false });
+      },
+      resetPassword: async (token, newPassword) => {
+        const session = await api.post<AuthSession>(
+          '/v1/auth/reset-password',
+          { token, newPassword },
           { auth: false },
         );
         await adopt(session);

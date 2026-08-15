@@ -51,6 +51,8 @@ See `01-PRIVACY-DATA-MAP.md` and `02-APP-PRIVACY-ANSWERS.md`.
 
 Headline finding, PASS with evidence: no third-party SDK in `apps/mobile/package.json` collects or transmits data off-device (11 dependencies audited: `@expo/vector-icons`, `expo`, `expo-constants`, `expo-image-picker`, `expo-linking`, `expo-localization`, `expo-router`, `expo-secure-store`, `expo-status-bar`, `react`/`react-dom`, `react-native`, `react-native-safe-area-context`, `react-native-screens`, `react-native-web` — none are analytics, crash-reporting, or advertising SDKs). One client, one server origin, no third party. This is the basis for the "no tracking" conclusion in `02-APP-PRIVACY-ANSWERS.md`.
 
+**Updated in the hardening pass (see `08-HARDENING-PASS.md`):** uploaded-photo EXIF/GPS metadata — flagged as an open gap in the original pass — is now stripped server-side, unconditionally, before bytes reach storage. `apps/api/src/platform/image-sanitize.ts` parses each container format (JPEG/PNG/WebP/GIF) at the metadata level only — never decoding pixels — and removes GPS-capable metadata while preserving JPEG orientation and required color-management data. Proven with 13 unit tests against hand-built fixtures and 3 integration tests that upload a real GPS-bearing JPEG through the live HTTP route and confirm the coordinates are absent from what the signed-URL route serves back.
+
 ## 4. Login services — Guideline 4.8
 
 **NOT_APPLICABLE.** The app uses exclusively its own email/password account system (`apps/api/src/modules/auth/`). No third-party or social login (Google, Facebook, Apple, etc.) exists anywhere in the codebase. Guideline 4.8's "equivalent option" requirement is triggered only by the presence of a third-party login; since there is none, **Sign in with Apple is correctly NOT added** — the brief's own instruction not to add it for decoration is followed.
@@ -79,7 +81,7 @@ Headline finding, PASS with evidence: no third-party SDK in `apps/mobile/package
 | Logout revokes server-side | **PASS** |
 | Refresh token rotation | **PASS** |
 | Sign-out reachable in the shipped app | **FIXED → PASS** | Previously `signOut()` existed but no screen called it. `apps/mobile/app/settings/index.tsx` now does. |
-| Password reset / forgotten password | **FAIL, not fixed in this pass** | No route or screen exists. Not required by any Apple guideline directly, but is a real product gap adjacent to account deletion (a user who forgets their password cannot re-authenticate to delete their own account either). Out of this pass's P0 scope; recorded as a **CODE BLOCKER, non-Apple** in the final report. |
+| Password reset / forgotten password | **FIXED → PASS (code), delivery EXTERNAL_INFRASTRUCTURE_REQUIRED** | `POST /v1/auth/forgot-password` + `POST /v1/auth/reset-password` (`auth.service.ts`), backed by `password_resets` (`0016_password_reset.sql`): opaque single-use token, SHA-256 hash at rest, 30-minute expiry, superseded on a fresh request, redemption revokes every existing session and issues one fresh one. Mobile screens at `app/(auth)/{forgot-password,reset-password}.tsx`. No email provider is configured anywhere in this repository (`platform/config.ts` has no SMTP/provider vars) — `platform/mailer.ts` is the one integration point, currently a no-op that logs `EXTERNAL_INFRASTRUCTURE_REQUIRED` rather than pretending to send. 10 adversarial integration tests. |
 | Hardcoded credentials reaching the iOS bundle | **PASS** | `pnpm appstore:check` greps `apps/mobile/app` and `apps/mobile/src` for demo passwords / JWT-secret patterns — clean. Demo credentials (`correct-horse-battery`) exist only in `apps/api/scripts/seed-demo.ts` and test helpers, neither of which is part of the mobile bundle. |
 | Debug panels in production | **PASS** | No `__DEV__`-gated debug UI found. |
 
@@ -95,8 +97,10 @@ No diagnostic, prescriptive, or "replaces clinical judgment" language found in e
 
 ## Summary counts
 
-- **PASS:** 24
+- **PASS:** 25
 - **PARTIAL:** 8
-- **FAIL:** 2 (app icon/splash; password reset)
+- **FAIL:** 1 (app icon/splash — a DESIGN blocker, not this pass's to fix)
 - **NOT_APPLICABLE:** 1 (Guideline 4.8)
-- **EXTERNAL_OWNER_ACTION_REQUIRED:** 4 (EAS/Apple credentials, support URL values, Xcode/SDK version confirmation, privacy manifest verification against a real prebuild)
+- **EXTERNAL_OWNER_ACTION_REQUIRED:** 4 (EAS/Apple credentials, support URL values, Xcode/SDK version confirmation, password reset email delivery — see `08-HARDENING-PASS.md`)
+
+Updated in the pre-merge hardening pass (see `08-HARDENING-PASS.md`): password reset moved from FAIL to PASS (§6 above); uploaded-photo EXIF/GPS metadata (§3 above, and `01-PRIVACY-DATA-MAP.md`) is now stripped server-side rather than an open gap; the privacy manifest audit (`03-PRIVACY-MANIFEST-AUDIT.md`) gained real evidence from an actual `expo prebuild` run, which also surfaced and fixed two unused permission declarations (`NSFaceIDUsageDescription`, `NSMicrophoneUsageDescription`).

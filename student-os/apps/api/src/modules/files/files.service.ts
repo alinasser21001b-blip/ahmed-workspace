@@ -5,6 +5,7 @@ import { canAccessFile, type Actor } from '@sos/core';
 import { getConfig } from '../../platform/config.js';
 import { errors } from '../../platform/errors.js';
 import { sniffImage } from '../../platform/image-meta.js';
+import { sanitizeImage } from '../../platform/image-sanitize.js';
 import { buildStorageKey, EXTENSION_BY_MIME, getStorage } from '../../platform/storage.js';
 import * as profiles from '../users/users.repository.js';
 import * as repo from './files.repository.js';
@@ -57,6 +58,28 @@ export async function uploadImage(
   const extension = EXTENSION_BY_MIME[meta.mimeType];
   if (!extension) throw errors.unsupportedMediaType(meta.mimeType);
 
+  /*
+   * Metadata sanitization (App Store readiness — 5.1.1 privacy). A phone
+   * photo's EXIF block carries GPS coordinates by default, and nothing before
+   * this point ever looked past the format signature. `sanitizeImage` strips
+   * GPS and every other non-essential metadata field at the container level —
+   * never by decoding pixels — and rebuilds a minimal orientation-only EXIF
+   * block for JPEG so the image still displays right-side up.
+   *
+   * The sanitized bytes are re-sniffed rather than trusted: sanitisation only
+   * touches header/metadata segments and never the pixel data, so dimensions
+   * cannot legitimately change. If they did — meaning the format is no longer
+   * parseable — that is treated as a sanitizer bug, not a reason to fall back
+   * to the unsanitized original, which would silently reopen the privacy hole
+   * this exists to close.
+   */
+  const sanitized = sanitizeImage(input.buffer, meta.mimeType);
+  const sanitizedMeta = sniffImage(sanitized.buffer);
+  if (!sanitizedMeta || sanitizedMeta.width !== meta.width || sanitizedMeta.height !== meta.height) {
+    throw errors.unsupportedMediaType(meta.mimeType);
+  }
+  const bytes = sanitized.buffer;
+
   const profile = await profiles.findProfileByUserId(actor.userId);
   const storage = getStorage();
   const { env } = getConfig();
@@ -70,7 +93,7 @@ export async function uploadImage(
     storageKey: `pending/${randomUUID()}`,
     bucket: env.STORAGE_BUCKET ?? 'local',
     mimeType: meta.mimeType,
-    sizeBytes: input.buffer.length,
+    sizeBytes: bytes.length,
     originalName: input.originalName,
     metadata: { width: meta.width, height: meta.height },
     visibility: 'private',
@@ -80,7 +103,7 @@ export async function uploadImage(
   });
 
   const key = buildStorageKey(actor.userId, row.id, extension);
-  await storage.put(key, input.buffer, meta.mimeType);
+  await storage.put(key, bytes, meta.mimeType);
 
   const stored = await repo.updateStorageKey(row.id, key);
   return toFileRefDto(stored);

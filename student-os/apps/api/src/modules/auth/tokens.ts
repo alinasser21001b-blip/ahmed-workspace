@@ -81,3 +81,27 @@ export function refreshTokenExpiry(now: Date = new Date()): Date {
   const days = getConfig().env.REFRESH_TOKEN_TTL_DAYS;
   return new Date(now.getTime() + days * 86_400_000);
 }
+
+/**
+ * Password reset tokens — the same shape as a refresh token (256 bits of
+ * random entropy, hashed with SHA-256 at rest) and named separately anyway.
+ * A reset token and a refresh token being structurally identical does not
+ * make them interchangeable: they live in different tables with different
+ * hash columns, so a `password_resets` row can never be presented where a
+ * `sessions` row is expected even by accident, and the distinct names are
+ * what keep that true for a reader as well as for the schema.
+ */
+export function generatePasswordResetToken(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+export function hashPasswordResetToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/** 30 minutes: long enough to open an email, short enough that a stale link is not a standing risk. */
+const PASSWORD_RESET_TTL_MINUTES = 30;
+
+export function passwordResetExpiry(now: Date = new Date()): Date {
+  return new Date(now.getTime() + PASSWORD_RESET_TTL_MINUTES * 60_000);
+}
