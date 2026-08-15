@@ -75,7 +75,22 @@ export class ApiClient {
   constructor(private readonly options: ApiClientOptions) {}
 
   private get transport(): typeof fetch {
-    return this.options.fetchImpl ?? fetch;
+    const injected = this.options.fetchImpl;
+    if (injected) return injected;
+    /*
+     * Wrapped, not returned bare.
+     *
+     * `this.transport(url, init)` calls whatever the getter returns with the
+     * ApiClient as its receiver. The browser's `fetch` refuses that — it must
+     * be invoked with the global object — and throws "Illegal invocation",
+     * which surfaces here as a NetworkError on every single request.
+     *
+     * Node's fetch does not care, so this passed the unit and API suites and
+     * failed only in the browser journey, where signup never reached
+     * onboarding. The arrow function has no `this` of its own, so the inner
+     * call is an ordinary global one.
+     */
+    return (input, init) => fetch(input, init);
   }
 
   async request<T>(
