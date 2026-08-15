@@ -19,6 +19,38 @@ import type { PluralForms } from '@sos/core';
  */
 
 export const arPlurals = {
+  'classroom.members.count': {
+    zero: 'لا أعضاء',
+    one: 'عضو واحد',
+    two: 'عضوان',
+    few: '{count} أعضاء',
+    many: '{count} عضوًا',
+    other: '{count} عضو',
+  },
+  'classroom.materials.count': {
+    zero: 'لا مواد',
+    one: 'مادة واحدة',
+    two: 'مادتان',
+    few: '{count} مواد',
+    many: '{count} مادة',
+    other: '{count} مادة',
+  },
+  'chat.unread.count': {
+    zero: 'لا رسائل جديدة',
+    one: 'رسالة واحدة غير مقروءة',
+    two: 'رسالتان غير مقروءتين',
+    few: '{count} رسائل غير مقروءة',
+    many: '{count} رسالة غير مقروءة',
+    other: '{count} رسالة غير مقروءة',
+  },
+  'search.results.count': {
+    zero: 'لا نتائج',
+    one: 'نتيجة واحدة',
+    two: 'نتيجتان',
+    few: '{count} نتائج',
+    many: '{count} نتيجة',
+    other: '{count} نتيجة',
+  },
   'learn.answered.count': {
     zero: 'لم تُجب بعد',
     one: 'إجابة واحدة',
@@ -76,6 +108,26 @@ export type PluralKey = keyof typeof arPlurals;
 
 /** Typed against Arabic, so a missing entry is a compile error. */
 export const enPlurals: Record<PluralKey, PluralForms> = {
+  'classroom.members.count': {
+    zero: 'No members',
+    one: '1 member',
+    other: '{count} members',
+  },
+  'classroom.materials.count': {
+    zero: 'No materials',
+    one: '1 material',
+    other: '{count} materials',
+  },
+  'chat.unread.count': {
+    zero: 'No unread messages',
+    one: '1 unread',
+    other: '{count} unread',
+  },
+  'search.results.count': {
+    zero: 'No results',
+    one: '1 result',
+    other: '{count} results',
+  },
   'learn.answered.count': {
     zero: 'Not answered yet',
     one: '1 answered',

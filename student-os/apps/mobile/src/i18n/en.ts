@@ -242,8 +242,8 @@ export const en: Record<keyof typeof ar, string> = {
   'chat.composer.placeholder': 'Write a message…',
   'chat.send': 'Send',
   'chat.typing': 'Typing…',
-  'chat.unreadDivider': 'New messages',
-  'chat.failed': 'Could not send',
+  'chat.unreadDivider': 'Unread',
+  'chat.failed': 'Failed',
   'chat.retry': 'Retry',
   'chat.state.sending': 'Sending',
   'chat.state.sent': 'Sent',
@@ -463,5 +463,72 @@ export const en: Record<keyof typeof ar, string> = {
   'practice.complete': 'Session complete',
   'practice.a11yCorrectAnswer': 'correct answer',
   'practice.a11yYourAnswerIncorrect': 'your answer, incorrect',
+
+
+  // --- final design: classroom ------------------------------------------------
+  'classroom.youAreStudent': 'You are a student here',
+  'classroom.youAreTeacher': 'You teach here',
+  'classroom.membersOnly': 'Lectures, materials and the member list are only sent to members.',
+  'classroom.mostRecent': 'Most recent lecture',
+  'classroom.openLecture': 'Open lecture',
+  'classroom.seeAll': 'See all',
+  'classroom.lectureNumber': 'Lecture {number}',
+  'classroom.joinCodePrompt': 'Join code',
+
+  // --- final design: messages -------------------------------------------------
+  'chat.connection.down': 'Live delivery is unavailable — messages send and load normally.',
+  'chat.queued': 'Queued',
+  'chat.sending': 'Sending…',
+  'chat.sent': 'Sent',
+  'chat.delivered': 'Delivered',
+  'chat.read': 'Read',
+  'chat.retrySend': 'Retry',
+  'chat.deletedMessage': 'This message was deleted',
+  'chat.readOnlyReason': 'Only instructors can post here. You can read every message.',
+  'chat.searchPeople': 'Search people',
+
+  // --- final design: search ---------------------------------------------------
+  'search.people': 'People',
+  'search.studyGroups': 'Study groups',
+  'search.knowledge': 'Knowledge',
+  'search.communities': 'Communities',
+  'search.official': 'Official',
+  'search.noResultsFor': 'No results for «{query}»',
+  'search.tryShorter': 'Try a shorter word, or the term as it appears in your course material.',
+  'search.needsConnection': 'Search needs a connection.',
+  'search.deferredTopics': 'Topics and classrooms are not searchable yet.',
+  'search.minQuery': 'Type at least two characters.',
+
+  // --- final design: profile --------------------------------------------------
+  'social.follow': 'Follow',
+  'social.following': 'Following',
+  'social.unfollow': 'Unfollow',
+  'social.blockedPerson': 'You blocked this person',
+  'profile.unavailable': 'This profile is not available.',
+  'profile.editProfile': 'Edit profile',
+  'profile.posts': 'Posts',
+  'profile.noPosts': 'No posts yet',
+  'profile.writeSomething': 'Write something',
+  'profile.verifiedInstructor': 'verified instructor',
+  'profile.more': 'More actions',
+
+  // --- final design: compose --------------------------------------------------
+  'compose.whoCanSee': 'Who can see this',
+  'compose.whatKind': 'What kind of knowledge is this',
+  'compose.optional': 'optional',
+  'compose.difficulty': 'Difficulty',
+  'compose.clearHint': 'Tap a selected chip to clear it.',
+  'compose.languageDetected': 'Language is detected from what you write.',
+  'compose.needsConnection': 'Publishing needs a connection.',
+  'compose.textKept': 'Your text is kept here.',
+
+  // --- final design: settings + compliance ------------------------------------
+  'settings.privacyAndSafety': 'Privacy and safety',
+  'settings.about': 'About',
+  'notifications.blocked.title': 'Notifications are not available yet',
+  'notifications.blocked.body': 'There is no delivery system behind them yet, so the app does not pretend to have one.',
+
+  'chat.youPrefix': 'You',
+  'chat.unreadDividerA11y': 'Unread messages below',
 
 };

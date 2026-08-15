@@ -254,8 +254,8 @@ export const ar = {
   'chat.composer.placeholder': 'اكتب رسالة…',
   'chat.send': 'إرسال',
   'chat.typing': 'يكتب الآن…',
-  'chat.unreadDivider': 'رسائل جديدة',
-  'chat.failed': 'تعذّر الإرسال',
+  'chat.unreadDivider': 'غير المقروء',
+  'chat.failed': 'فشل الإرسال',
   'chat.retry': 'إعادة المحاولة',
   'chat.state.sending': 'جارٍ الإرسال',
   'chat.state.sent': 'أُرسلت',
@@ -479,5 +479,72 @@ export const ar = {
   'practice.complete': 'انتهت الجلسة',
   'practice.a11yCorrectAnswer': 'الإجابة الصحيحة',
   'practice.a11yYourAnswerIncorrect': 'إجابتك، غير صحيحة',
+
+
+  // --- final design: classroom ------------------------------------------------
+  'classroom.youAreStudent': 'أنت طالب هنا',
+  'classroom.youAreTeacher': 'أنت تدرّس هنا',
+  'classroom.membersOnly': 'المحاضرات والمواد وقائمة الأعضاء تُرسل للأعضاء فقط.',
+  'classroom.mostRecent': 'أحدث محاضرة',
+  'classroom.openLecture': 'افتح المحاضرة',
+  'classroom.seeAll': 'عرض الكل',
+  'classroom.lectureNumber': 'محاضرة {number}',
+  'classroom.joinCodePrompt': 'رمز الانضمام',
+
+  // --- final design: messages -------------------------------------------------
+  'chat.connection.down': 'التسليم الفوري غير متاح — الرسائل تُرسل وتُقرأ بشكل طبيعي.',
+  'chat.queued': 'في الانتظار',
+  'chat.sending': 'يُرسل…',
+  'chat.sent': 'أُرسلت',
+  'chat.delivered': 'وصلت',
+  'chat.read': 'قُرئت',
+  'chat.retrySend': 'إعادة المحاولة',
+  'chat.deletedMessage': 'حُذفت هذه الرسالة',
+  'chat.readOnlyReason': 'النشر هنا للتدريسيين فقط. يمكنك قراءة كل الرسائل.',
+  'chat.searchPeople': 'ابحث عن أشخاص',
+
+  // --- final design: search ---------------------------------------------------
+  'search.people': 'أشخاص',
+  'search.studyGroups': 'مجموعات دراسية',
+  'search.knowledge': 'معرفة',
+  'search.communities': 'مجتمعات',
+  'search.official': 'رسمي',
+  'search.noResultsFor': 'لا نتائج لـ «{query}»',
+  'search.tryShorter': 'جرّب كلمة أقصر، أو المصطلح كما يظهر في مادتك الدراسية.',
+  'search.needsConnection': 'البحث يحتاج إلى اتصال.',
+  'search.deferredTopics': 'المواضيع والقاعات غير قابلة للبحث بعد.',
+  'search.minQuery': 'اكتب حرفين على الأقل.',
+
+  // --- final design: profile --------------------------------------------------
+  'social.follow': 'متابعة',
+  'social.following': 'تتابعه',
+  'social.unfollow': 'إلغاء المتابعة',
+  'social.blockedPerson': 'لقد حظرت هذا الشخص',
+  'profile.unavailable': 'هذا الملف الشخصي غير متاح.',
+  'profile.editProfile': 'تعديل الملف الشخصي',
+  'profile.posts': 'المنشورات',
+  'profile.noPosts': 'لا منشورات بعد',
+  'profile.writeSomething': 'اكتب شيئاً',
+  'profile.verifiedInstructor': 'تدريسي موثّق',
+  'profile.more': 'إجراءات أخرى',
+
+  // --- final design: compose --------------------------------------------------
+  'compose.whoCanSee': 'من يمكنه رؤية هذا',
+  'compose.whatKind': 'ما نوع هذه المعرفة',
+  'compose.optional': 'اختياري',
+  'compose.difficulty': 'المستوى',
+  'compose.clearHint': 'اضغط على خيار محدد لإلغائه.',
+  'compose.languageDetected': 'تُحدَّد اللغة تلقائياً مما تكتبه.',
+  'compose.needsConnection': 'النشر يحتاج إلى اتصال.',
+  'compose.textKept': 'نصّك محفوظ هنا.',
+
+  // --- final design: settings + compliance ------------------------------------
+  'settings.privacyAndSafety': 'الخصوصية والسلامة',
+  'settings.about': 'حول التطبيق',
+  'notifications.blocked.title': 'الإشعارات غير متاحة بعد',
+  'notifications.blocked.body': 'لا يوجد نظام تسليم خلفها حتى الآن، والتطبيق لا يتظاهر بوجوده.',
+
+  'chat.youPrefix': 'أنت',
+  'chat.unreadDividerA11y': 'رسائل غير مقروءة أدناه',
 
 } as const;
