@@ -12,7 +12,26 @@ import type { TypographyVariant } from '../theme/tokens';
 
 export interface TextProps extends RNTextProps {
   variant?: TypographyVariant;
-  tone?: 'default' | 'muted' | 'inverse' | 'primary' | 'learning' | 'danger';
+  /**
+   * Semantic colour role. Each has exactly one meaning — see
+   * `docs/design-handoff/07-COLOUR.md`.
+   *
+   * `provenance` is citation and source only: never success, never a correct
+   * answer, never a call to action. Correctness is carried by ink plus a word
+   * plus a glyph, so that it survives the greyscale test.
+   */
+  tone?:
+    | 'default'
+    | 'secondary'
+    | 'muted'
+    | 'faint'
+    | 'inverse'
+    | 'primary'
+    | 'provenance'
+    | 'structure'
+    | 'attention'
+    | 'challenged'
+    | 'danger';
   align?: 'start' | 'center' | 'end';
   /**
    * Which direction this text is written in.
@@ -47,10 +66,15 @@ export function Text({
 
   const color = {
     default: theme.colors.text,
+    secondary: theme.colors.textSecondary,
     muted: theme.colors.textMuted,
+    faint: theme.colors.textFaint,
     inverse: theme.colors.textInverse,
     primary: theme.colors.primary,
-    learning: theme.colors.learning,
+    provenance: theme.colors.provenance,
+    structure: theme.colors.structure,
+    attention: theme.colors.attention,
+    challenged: theme.colors.challenged,
     danger: theme.colors.danger,
   }[tone];
 

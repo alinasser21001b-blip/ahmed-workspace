@@ -163,7 +163,7 @@ export function ReportSheet({
                 }}
               />
               {outcome === 'error' ? (
-                <Text variant="micro" tone="danger">
+                <Text variant="metadata" tone="danger">
                   {t('error.generic')}
                 </Text>
               ) : null}

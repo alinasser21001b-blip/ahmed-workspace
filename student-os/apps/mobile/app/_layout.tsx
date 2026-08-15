@@ -4,6 +4,7 @@ import { getLocales } from 'expo-localization';
 import { useMemo } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { applyDirection, I18nProvider, type Locale } from '../src/i18n/index';
+import { PreviewBanner } from '../src/preview/PreviewBanner';
 import { RealtimeProvider } from '../src/state/realtime';
 import { SessionProvider } from '../src/state/session';
 import { ThemeProvider } from '../src/theme/ThemeProvider';
@@ -30,6 +31,7 @@ export default function RootLayout(): React.JSX.Element {
           <SessionProvider>
             <RealtimeProvider>
             <StatusBar style="auto" />
+            <PreviewBanner />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="(auth)" />
@@ -48,6 +50,19 @@ export default function RootLayout(): React.JSX.Element {
               <Stack.Screen name="lecture/[id]" />
               <Stack.Screen name="chat/[id]" />
               <Stack.Screen name="profile/[handle]" />
+              {/*
+               * Practice is a focus mode, not a tab screen: full-screen
+               * presentation so the tab bar is unmounted rather than hidden,
+               * and the only navigation inside it is the close control and the
+               * post-feedback "Open topic" action.
+               *
+               * This route was previously unregistered, so Practice rendered
+               * without the presentation the design requires.
+               */}
+              <Stack.Screen
+                name="practice/[topicId]"
+                options={{ presentation: 'fullScreenModal' }}
+              />
             </Stack>
             </RealtimeProvider>
           </SessionProvider>

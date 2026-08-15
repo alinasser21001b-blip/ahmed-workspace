@@ -26,7 +26,9 @@ export function Card({
     borderRadius: theme.radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     padding: padded ? theme.spacing.lg : 0,
-    ...theme.shadow.card,
+    // No shadow. Elevation is not used for content in this system: a hairline
+    // border does that work, and a shadow under a content row reads as a card
+    // in a social feed, which is the grammar this direction rejects.
   };
 
   if (onPress) {
@@ -88,7 +90,11 @@ export function Avatar({
   );
 }
 
-export type BadgeTone = 'neutral' | 'primary' | 'learning' | 'warning' | 'danger';
+/**
+ * `provenance` is for source and citation labels only. An academic label such
+ * as a course name is classification, not provenance, and takes `structure`.
+ */
+export type BadgeTone = 'neutral' | 'primary' | 'provenance' | 'structure' | 'warning' | 'danger';
 
 export function Badge({
   label,
@@ -104,15 +110,21 @@ export function Badge({
   const backgrounds: Record<BadgeTone, string> = {
     neutral: theme.colors.background,
     primary: theme.colors.primarySoft,
-    learning: theme.colors.learningSoft,
-    warning: theme.colors.learningSoft,
+    provenance: theme.colors.provenanceSoft,
+    structure: theme.colors.primarySoft,
+    // Was the learning fill, which made a warning badge indistinguishable from
+    // a study badge. There is deliberately no `attentionSoft` token, so this
+    // takes the plain ground and is carried by the `attention` text colour and
+    // the word itself.
+    warning: theme.colors.background,
     danger: theme.colors.dangerSoft,
   };
   const tones = {
     neutral: 'muted',
     primary: 'primary',
-    learning: 'learning',
-    warning: 'default',
+    provenance: 'provenance',
+    structure: 'structure',
+    warning: 'attention',
     danger: 'danger',
   } as const;
 
@@ -125,7 +137,7 @@ export function Badge({
   };
 
   const content = (
-    <Text variant="micro" tone={tones[tone]} bidi="auto">
+    <Text variant="metadata" tone={tones[tone]} bidi="auto">
       {label}
     </Text>
   );

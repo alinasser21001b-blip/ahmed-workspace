@@ -1,33 +1,33 @@
 import type { ContentItem, FeedPage, KnowledgeType, TopicDetail } from '@sos/contracts';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../../src/components/Button';
-import { DirectionalIcon } from '../../src/components/DirectionalIcon';
-import { PostCard } from '../../src/components/PostCard';
-import { Text } from '../../src/components/Text';
-import { Badge, Card } from '../../src/components/surfaces';
+import { DominantAction, Hairline, MetadataLine, SectionHeader, TopBar } from '../../src/components/editorial';
+import { EvidenceFraction, RelationshipPrimitive, type RelationRow } from '../../src/components/evidence';
+import { ContentGrammar } from '../../src/components/knowledge/ContentGrammar';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
-import { useI18n, type TranslationKey } from '../../src/i18n/index';
-import { bumpContentVersion, useContentVersion } from '../../src/state/content-events';
+import { Text } from '../../src/components/Text';
+import { localizeDigits, useI18n, type TranslationKey } from '../../src/i18n/index';
+import { useContentVersion } from '../../src/state/content-events';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 /**
- * A topic, as a place.
+ * Topic — the reading surface, per 12-LEARN-TOPIC.md.
  *
- * This is the Phase 5 navigation primitive and the clearest expression of what
- * separates this product from a timeline: a good explanation is in the feed for
- * a day and in its topic forever. A student arriving three months later finds
- * it here, filtered by what kind of knowledge they need.
+ * Hierarchy: back + crumb → title → 2 px rule + coverage row with the inline
+ * Practise action → "How it connects" (RelationshipPrimitive) → "Knowledge
+ * here" (the grouped index) → the knowledge list in ContentGrammar rows.
  *
- * The filter row is deterministic — an equality on a classified column, not a
- * relevance model — so a student can always tell why something is in the list.
+ * Coverage and accuracy are split on purpose: the metadata line states what
+ * was answered, the EvidenceFraction states correct-of-answered, and the delta
+ * after a Practice run lands on accuracy. Returning from Practice refetches —
+ * stale evidence here defeats the loop.
  */
 export default function TopicScreen(): React.JSX.Element {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const theme = useTheme();
   const { api } = useSession();
   const contentVersion = useContentVersion();
@@ -37,25 +37,31 @@ export default function TopicScreen(): React.JSX.Element {
   const [filter, setFilter] = useState<KnowledgeType | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
-  const load = useCallback(async (): Promise<void> => {
-    setStatus('loading');
-    try {
-      const detail = await api.get<TopicDetail>(`/v1/topics/${id}`);
-      setTopic(detail);
+  const load = useCallback(
+    async (quiet = false): Promise<void> => {
+      if (!quiet) setStatus('loading');
+      try {
+        const detail = await api.get<TopicDetail>(`/v1/topics/${id}`);
+        setTopic(detail);
+        const page = await api.get<FeedPage>(
+          `/v1/topics/${id}/knowledge?limit=30${filter ? `&knowledgeType=${filter}` : ''}`,
+        );
+        setItems(page.items);
+        setStatus('ready');
+      } catch {
+        setStatus('error');
+      }
+    },
+    [api, id, filter],
+  );
 
-      const page = await api.get<FeedPage>(
-        `/v1/topics/${id}/knowledge?limit=30${filter ? `&knowledgeType=${filter}` : ''}`,
-      );
-      setItems(page.items);
-      setStatus('ready');
-    } catch {
-      setStatus('error');
-    }
-  }, [api, id, filter]);
-
-  useEffect(() => {
-    void load();
-  }, [load, contentVersion]);
+  // Refetch on focus — including the return from Practice.
+  useFocusEffect(
+    useCallback(() => {
+      void load(topic !== null);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [load, contentVersion]),
+  );
 
   if (status === 'loading') {
     return (
@@ -73,128 +79,110 @@ export default function TopicScreen(): React.JSX.Element {
     );
   }
 
-  /*
-   * Only types that actually have visible knowledge become filter chips.
-   * Offering a filter that returns nothing is a dead control, and the counts
-   * are already permission-filtered, so a chip cannot advertise content the
-   * reader may not open.
-   */
   const availableTypes = topic.knowledgeCounts.filter((entry) => entry.count > 0);
 
+  const relations: RelationRow[] = topic.related.slice(0, 5).map((relation) => ({
+    kind:
+      relation.relation === 'part_of'
+        ? 'part_of'
+        : relation.relation === 'prerequisite_of'
+          ? // The contract's `prerequisite_of` may not be *shown* as a
+            // prerequisite claim — the handoff forbids implying study order.
+            // It renders as plain relatedness.
+            'co_occurs'
+          : 'co_occurs',
+    target: relation.name,
+    derived: relation.source === 'derived',
+    onPress: () => router.push(`/topic/${relation.id}`),
+  }));
+
   const header = (
-    <View style={{ gap: theme.spacing.lg, paddingBottom: theme.spacing.lg }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('action.back')}
-          onPress={() => router.back()}
-          hitSlop={8}
-        >
-          <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text variant="heading" numberOfLines={2} bidi="auto">
-            {topic.name}
-          </Text>
-          {/* Where this sits academically — the answer to "what am I studying?" */}
-          <Text variant="micro" tone="muted" bidi="auto">
-            {topic.courseName} · {topic.subjectName}
-            {topic.parentTopicName ? ` · ${topic.parentTopicName}` : ''}
-          </Text>
-        </View>
-      </View>
+    <View style={{ gap: theme.spacing.xl, paddingBottom: theme.spacing.lg }}>
+      <TopBar
+        title={topic.name}
+        crumb={[topic.courseName, topic.subjectName].join(' › ')}
+        onBack={() => router.back()}
+      />
 
-      {/*
-        The only place in the product that asks the student a question.
-        Rendered from `canPractice`, which the server projects — the client
-        cannot know which quizzes are published in which of this student's
-        courses, and a button that 404s is the dead control Phase 3 ruled out.
-      */}
-      {topic.viewer.canPractice ? (
-        <Button
-          label={t('practice.action')}
-          variant="learning"
-          fullWidth
-          onPress={() => router.push(`/practice/${topic.id}`)}
-        />
-      ) : null}
-
-      {topic.viewer.questionsSeen > 0 ? (
-        <Card>
-          <View style={{ gap: theme.spacing.xs }}>
-            <Text variant="bodyStrong">
-              {t('practice.score', {
-                correct: topic.viewer.questionsCorrect,
-                seen: topic.viewer.questionsSeen,
+      {/* Coverage row + the one dominant action. */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: theme.spacing.lg,
+        }}
+      >
+        <View style={{ flex: 1, gap: theme.spacing.xs }}>
+          <EvidenceFraction
+            correct={topic.viewer.questionsCorrect}
+            answered={topic.viewer.questionsSeen}
+            showTicks
+          />
+          {topic.viewer.questionsSeen > 0 ? (
+            <Text variant="metadata" tone="muted">
+              {t('topic.answeredHere', {
+                answered: localizeDigits(locale, topic.viewer.questionsSeen),
+                correct: localizeDigits(locale, topic.viewer.questionsCorrect),
               })}
             </Text>
-            {/* A count, never a verdict — the same framing the Learn tab uses. */}
-            <Text variant="micro" tone="muted">
-              {t('practice.signalNote')}
-            </Text>
-          </View>
-        </Card>
-      ) : null}
-
-      {topic.subtopics.length > 0 ? (
-        <View style={{ gap: theme.spacing.sm }}>
-          <Text variant="label">{t('topic.subtopics')}</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-            {topic.subtopics.map((sub) => (
-              <Badge
-                key={sub.id}
-                label={sub.name}
-                tone="primary"
-                onPress={() => router.push(`/topic/${sub.id}`)}
-              />
-            ))}
-          </View>
+          ) : null}
         </View>
-      ) : null}
+        {topic.viewer.canPractice ? (
+          <DominantAction
+            label={t('topic.practise')}
+            onPress={() => router.push(`/practice/${topic.id}`)}
+            inline
+          />
+        ) : null}
+      </View>
 
-      {topic.related.length > 0 ? (
+      {relations.length > 0 ? (
         <View style={{ gap: theme.spacing.sm }}>
-          <Text variant="label">{t('topic.related')}</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-            {topic.related.map((rel) => (
-              <Badge
-                key={`${rel.id}-${rel.relation}`}
-                label={rel.name}
-                tone="learning"
-                onPress={() => router.push(`/topic/${rel.id}`)}
-              />
-            ))}
-          </View>
-          {/* Where the edge came from, stated rather than implied. A count is
-              not an assertion, and the student is told which this is. */}
-          <Text variant="micro" tone="muted">
-            {topic.related.some((rel) => rel.source === 'derived')
-              ? t('topic.related.derived')
-              : t('topic.related.curated')}
-          </Text>
+          <SectionHeader title={t('topic.howItConnects')} />
+          <RelationshipPrimitive relations={relations} />
         </View>
       ) : null}
 
       {availableTypes.length > 0 ? (
         <View style={{ gap: theme.spacing.sm }}>
-          <Text variant="label">{t('topic.knowledge')}</Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-            <Badge
-              label={t('topic.filter.all')}
-              tone={filter === null ? 'primary' : 'neutral'}
-              onPress={() => setFilter(null)}
-            />
-            {availableTypes.map((entry) => (
-              <Badge
-                key={entry.knowledgeType}
-                label={`${t(`knowledge.type.${entry.knowledgeType}` as TranslationKey)} · ${entry.count}`}
-                tone={filter === entry.knowledgeType ? 'primary' : 'neutral'}
-                onPress={() => setFilter(entry.knowledgeType)}
-              />
-            ))}
-          </View>
+          <SectionHeader title={t('topic.knowledgeHere')} />
+          {availableTypes.map((entry) => (
+            <Pressable
+              key={entry.knowledgeType}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === entry.knowledgeType }}
+              accessibilityLabel={`${t(`knowledge.type.${entry.knowledgeType}` as TranslationKey)}, ${entry.count}`}
+              onPress={() =>
+                setFilter((current) => (current === entry.knowledgeType ? null : entry.knowledgeType))
+              }
+              style={{
+                minHeight: 48,
+                borderTopWidth: 1,
+                borderTopColor: theme.colors.border,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: theme.spacing.md,
+                backgroundColor:
+                  filter === entry.knowledgeType ? theme.colors.surfaceSelected : 'transparent',
+              }}
+            >
+              <Text
+                variant="body"
+                style={{ fontWeight: filter === entry.knowledgeType ? '600' : '400' }}
+              >
+                {t(`knowledge.type.${entry.knowledgeType}` as TranslationKey)}
+              </Text>
+              <Text variant="numeric" tone="muted">
+                {localizeDigits(locale, entry.count)}
+              </Text>
+            </Pressable>
+          ))}
         </View>
       ) : null}
+
+      <MetadataLine parts={[t('learn.privateToYou')]} />
+      <Hairline />
     </View>
   );
 
@@ -203,40 +191,23 @@ export default function TopicScreen(): React.JSX.Element {
       <FlatList
         data={items}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={{
-          padding: theme.spacing.lg,
-          paddingBottom: theme.spacing.xxxl,
-          gap: theme.spacing.md,
-          flexGrow: 1,
-        }}
+        contentContainerStyle={{ padding: theme.spacing.xl, paddingBottom: theme.spacing.xxxl }}
         ListHeaderComponent={header}
-        ListEmptyComponent={
-          <View style={{ minHeight: 200 }}>
-            <EmptyState
-              title={t('topic.knowledge.empty.title')}
-              body={t('topic.knowledge.empty.body')}
-              action={{
-                label: t('compose.publish'),
-                onPress: () => router.push('/compose'),
-              }}
-            />
-          </View>
-        }
+        ItemSeparatorComponent={Hairline}
         renderItem={({ item }) => (
-          <PostCard
+          <ContentGrammar
             item={item}
+            density="feed"
             onPress={() => router.push(`/post/${item.id}`)}
-            onComment={() => router.push(`/post/${item.id}`)}
-            onToggleReaction={() => {
-              void api
-                .request(`/v1/content/${item.id}/reaction`, {
-                  method: item.viewer.reaction ? 'DELETE' : 'PUT',
-                  ...(item.viewer.reaction ? {} : { body: { kind: 'like' } }),
-                })
-                .then(() => bumpContentVersion());
-            }}
           />
         )}
+        ListEmptyComponent={
+          <EmptyState
+            title={t('topic.knowledge.empty.title')}
+            body={t('topic.knowledge.empty.body')}
+            action={{ label: t('action.back'), onPress: () => router.back() }}
+          />
+        }
       />
     </SafeAreaView>
   );

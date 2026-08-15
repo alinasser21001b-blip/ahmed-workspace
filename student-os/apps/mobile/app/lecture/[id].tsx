@@ -202,7 +202,7 @@ export default function LectureScreen(): React.JSX.Element {
               {lecture.title}
             </Text>
             {lecture.author ? (
-              <Text variant="micro" tone="muted" bidi="auto">
+              <Text variant="metadata" tone="muted" bidi="auto">
                 {lecture.author.displayName}
               </Text>
             ) : null}
@@ -248,7 +248,7 @@ export default function LectureScreen(): React.JSX.Element {
             <SectionHeader title={t('lecture.concepts')} />
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
               {lecture.keyConcepts.map((concept) => (
-                <Badge key={concept} label={concept} tone="learning" />
+                <Badge key={concept} label={concept} tone="structure" />
               ))}
             </View>
           </View>
@@ -323,7 +323,7 @@ export default function LectureScreen(): React.JSX.Element {
               />
               <Button
                 label={t('lecture.material.attach')}
-                variant="learning"
+                variant="dominant"
                 loading={attaching}
                 disabled={!materialFile || materialTitle.trim().length === 0}
                 onPress={() => void attachMaterial()}
@@ -335,7 +335,7 @@ export default function LectureScreen(): React.JSX.Element {
 
         <View>
           <SectionHeader title={t('lecture.discussion')} />
-          <Text variant="micro" tone="muted">
+          <Text variant="metadata" tone="muted">
             {t('lecture.discussion.scope')}
           </Text>
 
@@ -390,11 +390,11 @@ export default function LectureScreen(): React.JSX.Element {
         </View>
 
         {lecture.viewer.completedAt ? (
-          <Badge label={t('lecture.completed')} tone="learning" />
+          <Badge label={t('lecture.completed')} tone="neutral" />
         ) : (
           <Button
             label={t('lecture.markRead')}
-            variant="learning"
+            variant="dominant"
             fullWidth
             loading={marking}
             onPress={() => void markRead()}

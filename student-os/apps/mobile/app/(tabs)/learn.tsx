@@ -1,37 +1,36 @@
 import type { LearnOverview } from '@sos/contracts';
-import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DirectionalIcon } from '../../src/components/DirectionalIcon';
-import { Text } from '../../src/components/Text';
-import { Badge, Card, SectionHeader } from '../../src/components/surfaces';
+import { InkBand, MetadataLine, SectionHeader, TopBar } from '../../src/components/editorial';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
+import { Text } from '../../src/components/Text';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 /**
- * Learn (§57, Phase 5).
+ * Learn — the frozen hierarchy from 12-LEARN-TOPIC.md.
  *
- * Previously a shell whose only control did nothing. It now shows what the
- * system actually knows about this student, and nothing else: topics they have
- * answered questions on, topics they declared an interest in, how much they
- * have saved, and how many meaningful learning actions they took this week.
+ * Title → "Built only from questions you have answered." → 2 px rule →
+ * ink band (Quick Practice) → "Recent answers suggest difficulty" →
+ * "Not enough evidence to say" (dashed, desaturated) → privacy line.
  *
- * Two rules shape every section here:
+ * The two evidence groups are the screen's argument. Difficulty is a solid
+ * group; low evidence is a structurally different dashed group, not a colour
+ * warning. Membership comes from the server's `lowConfidence` — the client
+ * renders the boolean and never computes a threshold.
  *
- *  1. **A section with no data is absent.** A "Quizzes" card that leads
- *     nowhere teaches students that the tab is decorative, which is worse than
- *     a shorter screen.
- *  2. **A weakness signal is a count, never a verdict.** Where the sample is
- *     too small to conclude anything the API says so and the row says so too —
- *     the alternative is a number that looks like an assessment and is not
- *     (ADR-0014).
+ * The contract carries `questionsSeen` per topic but not `questionsCorrect`,
+ * so rows state the answered count; the accuracy fraction lives on Topic,
+ * where the viewer data exists. Stating a fraction here would mean inventing
+ * a numerator.
  */
 
 export default function Learn(): React.JSX.Element {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const theme = useTheme();
   const { api } = useSession();
 
@@ -51,9 +50,14 @@ export default function Learn(): React.JSX.Element {
     [api],
   );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // Refetch on every return — including the return from Practice, which is
+  // the one the loop exists for. Stale evidence here defeats the product.
+  useFocusEffect(
+    useCallback(() => {
+      void load(overview ? 'refresh' : 'initial');
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [load]),
+  );
 
   if (status === 'loading') {
     return (
@@ -71,69 +75,73 @@ export default function Learn(): React.JSX.Element {
     );
   }
 
-  /*
-   * "Nothing yet" is a real state for a new student, not a failure. It gets the
-   * empty state rather than a screen of zeroes, because a zero next to a label
-   * like "topics to review" reads as a judgement about the student.
-   */
-  const hasAnything =
-    overview.focusTopics.length > 0 ||
-    overview.interestTopics.length > 0 ||
-    overview.savedCount > 0 ||
-    overview.meaningfulActionsThisWeek > 0;
+  const difficulty = overview.focusTopics.filter((topic) => !topic.lowConfidence);
+  const lowEvidence = overview.focusTopics.filter((topic) => topic.lowConfidence);
+  const bandTopic = difficulty[0] ?? overview.focusTopics[0];
+  const empty = overview.focusTopics.length === 0 && overview.interestTopics.length === 0;
+
+  const topicRow = (
+    topic: LearnOverview['focusTopics'][number],
+    dashed: boolean,
+  ): React.JSX.Element => (
+    <Pressable
+      key={topic.id}
+      accessibilityRole="button"
+      // The caveat is part of the row's label, not a node a reader can skip.
+      accessibilityLabel={[
+        topic.name,
+        t('learn.answered.count', { count: topic.questionsSeen }),
+        dashed ? t('learn.smallSample') : null,
+      ]
+        .filter(Boolean)
+        .join(', ')}
+      onPress={() => router.push(`/topic/${topic.id}`)}
+      style={({ pressed }) => ({
+        minHeight: 52,
+        paddingVertical: theme.spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.border,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: theme.spacing.md,
+        opacity: pressed ? 0.9 : 1,
+      })}
+    >
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text variant="bodyStrong" bidi="auto" tone={dashed ? 'secondary' : 'default'}>
+          {topic.name}
+        </Text>
+        <MetadataLine
+          parts={[topic.subjectName, t('learn.answered.count', { count: topic.questionsSeen })]}
+        />
+      </View>
+      <DirectionalIcon direction="forward" size={18} color={theme.colors.textFaint} />
+    </Pressable>
+  );
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <ScrollView
         contentContainerStyle={{
-          padding: theme.spacing.lg,
+          padding: theme.spacing.xl,
           paddingBottom: theme.spacing.xxxl,
-          gap: theme.spacing.lg,
+          gap: theme.spacing.xl,
           flexGrow: 1,
         }}
         refreshControl={
           <RefreshControl
             refreshing={status === 'refreshing'}
             onRefresh={() => void load('refresh')}
-            tintColor={theme.colors.primary}
+            tintColor={theme.colors.text}
           />
         }
       >
-        <Text variant="display">{t('learn.title')}</Text>
+        <TopBar title={t('learn.title')} />
+        <Text variant="metadata" tone="muted" style={{ marginTop: -theme.spacing.md }}>
+          {t('learn.builtFrom')}
+        </Text>
 
-        {/*
-         * Classrooms are always reachable, even for a student with no signals
-         * yet — this is the one section that is a destination rather than a
-         * report, so hiding it when the rest of the tab is empty would strand
-         * a new student on a screen that says "nothing yet" and offers no way
-         * to change that.
-         */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('classrooms.title')}
-          onPress={() => router.push('/classrooms')}
-        >
-          <Card>
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: theme.spacing.md,
-              }}
-            >
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text variant="bodyStrong">{t('classrooms.title')}</Text>
-                <Text variant="micro" tone="muted">
-                  {t('classrooms.empty.body')}
-                </Text>
-              </View>
-              <DirectionalIcon direction="forward" size={20} color={theme.colors.textMuted} />
-            </View>
-          </Card>
-        </Pressable>
-
-        {!hasAnything ? (
+        {empty ? (
           <View style={{ minHeight: 260 }}>
             <EmptyState
               title={t('learn.empty.real.title')}
@@ -141,100 +149,98 @@ export default function Learn(): React.JSX.Element {
               action={{ label: t('nav.home'), onPress: () => router.push('/(tabs)') }}
             />
           </View>
-        ) : null}
+        ) : (
+          <>
+            {/* The one dominant action on this screen. */}
+            {bandTopic ? (
+              <InkBand
+                heading={t('learn.readyToPractise')}
+                detail={bandTopic.name}
+                actionLabel={t('learn.start')}
+                onPress={() => router.push(`/practice/${bandTopic.id}`)}
+              />
+            ) : null}
 
-        {/* The two counts, side by side. Both are literal row counts. */}
-        {overview.savedCount > 0 || overview.meaningfulActionsThisWeek > 0 ? (
-          <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
-            {overview.savedCount > 0 ? (
-              <View style={{ flex: 1 }}>
-                <Card>
-                  <Text variant="display">{overview.savedCount}</Text>
-                  <Text variant="caption" tone="muted">
-                    {t('learn.savedCount')}
-                  </Text>
-                </Card>
+            {difficulty.length > 0 ? (
+              <View>
+                <SectionHeader title={t('learn.suggestDifficulty')} />
+                {difficulty.map((topic) => topicRow(topic, false))}
               </View>
             ) : null}
-            {overview.meaningfulActionsThisWeek > 0 ? (
-              <View style={{ flex: 1 }}>
-                <Card>
-                  <Text variant="display">{overview.meaningfulActionsThisWeek}</Text>
-                  <Text variant="caption" tone="muted">
-                    {t('learn.thisWeek')}
-                  </Text>
-                </Card>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
 
-        {overview.focusTopics.length > 0 ? (
-          <View>
-            <SectionHeader title={t('learn.focus')} />
-            <View style={{ gap: theme.spacing.md }}>
-              {overview.focusTopics.map((topic) => (
-                <Pressable
-                  key={topic.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={topic.name}
-                  onPress={() => router.push(`/topic/${topic.id}`)}
-                >
-                  <Card>
-                    <View style={{ gap: theme.spacing.xs }}>
-                      <Text variant="bodyStrong" bidi="auto">
+            {lowEvidence.length > 0 || overview.interestTopics.length > 0 ? (
+              // Dashed and desaturated: a structural difference, not a warning.
+              <View
+                style={{
+                  borderWidth: 1,
+                  borderStyle: 'dashed',
+                  borderColor: theme.colors.borderStrong,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.lg,
+                }}
+              >
+                <SectionHeader title={t('learn.notEnoughEvidence')} />
+                {lowEvidence.map((topic) => topicRow(topic, true))}
+                {overview.interestTopics.map((topic) => (
+                  <Pressable
+                    key={topic.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${locale === 'ar' ? topic.name : topic.name}, ${t('evidence.notAnswered')}`}
+                    onPress={() => router.push(`/topic/${topic.id}`)}
+                    style={{
+                      minHeight: 52,
+                      paddingVertical: theme.spacing.md,
+                      borderTopWidth: 1,
+                      borderTopColor: theme.colors.border,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: theme.spacing.md,
+                    }}
+                  >
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text variant="bodyStrong" tone="secondary" bidi="auto">
                         {topic.name}
                       </Text>
-                      {topic.subjectName ? (
-                        <Text variant="micro" tone="muted" bidi="auto">
-                          {topic.subjectName}
-                        </Text>
-                      ) : null}
-                      <View
-                        style={{
-                          flexDirection: 'row',
-                          flexWrap: 'wrap',
-                          gap: theme.spacing.xs,
-                          alignItems: 'center',
-                        }}
-                      >
-                        <Badge
-                          label={`${t('learn.questionsSeen')} · ${topic.questionsSeen}`}
-                          tone="neutral"
-                        />
-                        {/* Stated on the row, not buried in a tooltip: the
-                            student sees the caveat at the same moment as the
-                            signal it qualifies. */}
-                        {topic.lowConfidence ? (
-                          <Badge label={t('learn.focus.lowConfidence')} tone="warning" />
-                        ) : null}
-                      </View>
+                      <MetadataLine parts={[t('evidence.notAnswered')]} />
                     </View>
-                  </Card>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
+                    <DirectionalIcon direction="forward" size={18} color={theme.colors.textFaint} />
+                  </Pressable>
+                ))}
+                <Text
+                  variant="caption"
+                  tone="faint"
+                  style={{ marginTop: theme.spacing.sm }}
+                >
+                  {t('learn.smallSample')}
+                </Text>
+              </View>
+            ) : null}
+          </>
+        )}
 
-        {overview.interestTopics.length > 0 ? (
-          <View>
-            <SectionHeader title={t('learn.interests')} />
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-              {overview.interestTopics.map((topic) => (
-                <Badge
-                  key={topic.id}
-                  label={topic.name}
-                  tone="primary"
-                  onPress={() => router.push(`/topic/${topic.id}`)}
-                />
-              ))}
-            </View>
+        {/* Classrooms — a destination, always reachable. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('classrooms.title')}
+          onPress={() => router.push('/classrooms')}
+          style={{
+            minHeight: 48,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.border,
+            paddingVertical: theme.spacing.md,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.md,
+          }}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text variant="bodyStrong">{t('classrooms.title')}</Text>
           </View>
-        ) : null}
+          <DirectionalIcon direction="forward" size={18} color={theme.colors.textFaint} />
+        </Pressable>
 
-        <Text variant="caption" tone="muted">
-          {t('learn.signalsDisclaimer')}
+        <Text variant="metadata" tone="muted">
+          {t('learn.privateToYou')}
         </Text>
       </ScrollView>
     </SafeAreaView>

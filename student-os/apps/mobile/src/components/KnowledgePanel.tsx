@@ -212,7 +212,7 @@ function SourceRow({
   return (
     <Card>
       <View style={{ gap: theme.spacing.xs }}>
-        <Badge label={t(`knowledge.source.kind.${source.kind}` as TranslationKey)} tone="learning" />
+        <Badge label={t(`knowledge.source.kind.${source.kind}` as TranslationKey)} tone="provenance" />
         <Text variant="body" bidi="auto">
           {source.citation}
           {source.pageRef ? ` · ${source.pageRef}` : ''}
@@ -223,7 +223,7 @@ function SourceRow({
             accessibilityLabel={source.url}
             onPress={() => void Linking.openURL(source.url!)}
           >
-            <Text variant="micro" tone="primary" numberOfLines={1}>
+            <Text variant="metadata" tone="primary" numberOfLines={1}>
               {source.url}
             </Text>
           </Pressable>
@@ -231,7 +231,7 @@ function SourceRow({
         {/* Who made the claim. Not always the author — a classmate finding the
             textbook page is exactly the behaviour this is meant to reward. */}
         {source.addedBy ? (
-          <Text variant="micro" tone="muted" bidi="auto">
+          <Text variant="metadata" tone="muted" bidi="auto">
             {source.addedBy.displayName}
           </Text>
         ) : null}
@@ -273,7 +273,7 @@ function CorrectionRow({
           {correction.body}
         </Text>
         {correction.proposedBy ? (
-          <Text variant="micro" tone="muted" bidi="auto">
+          <Text variant="metadata" tone="muted" bidi="auto">
             {correction.proposedBy.displayName}
           </Text>
         ) : null}
@@ -285,7 +285,7 @@ function CorrectionRow({
               <View style={{ flex: 1 }}>
                 <Button
                   label={t('knowledge.corrections.accept')}
-                  variant="learning"
+                  variant="dominant"
                   fullWidth
                   onPress={() => onResolve('accepted')}
                 />
@@ -401,7 +401,7 @@ function SourceForm({
         <View style={{ flex: 1 }}>
           <Button
             label={t('action.save')}
-            variant="learning"
+            variant="dominant"
             fullWidth
             loading={busy}
             disabled={!valid}
@@ -451,7 +451,7 @@ function CorrectionForm({
         <View style={{ flex: 1 }}>
           <Button
             label={t('action.save')}
-            variant="learning"
+            variant="dominant"
             fullWidth
             loading={busy}
             disabled={!valid}

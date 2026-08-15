@@ -19,6 +19,22 @@ import type { PluralForms } from '@sos/core';
  */
 
 export const arPlurals = {
+  'learn.answered.count': {
+    zero: 'لم تُجب بعد',
+    one: 'إجابة واحدة',
+    two: 'إجابتان',
+    few: '{count} إجابات',
+    many: '{count} إجابة',
+    other: '{count} إجابة',
+  },
+  'provenance.cites': {
+    zero: 'بلا مصادر',
+    one: 'يستشهد بمصدر واحد',
+    two: 'يستشهد بمصدرين',
+    few: 'يستشهد بـ{count} مصادر',
+    many: 'يستشهد بـ{count} مصدرًا',
+    other: 'يستشهد بـ{count} مصدر',
+  },
   'groups.members.count': {
     zero: 'لا أعضاء',
     one: 'عضو واحد',
@@ -60,6 +76,15 @@ export type PluralKey = keyof typeof arPlurals;
 
 /** Typed against Arabic, so a missing entry is a compile error. */
 export const enPlurals: Record<PluralKey, PluralForms> = {
+  'learn.answered.count': {
+    zero: 'Not answered yet',
+    one: '1 answered',
+    other: '{count} answered',
+  },
+  'provenance.cites': {
+    one: 'Cites 1 source',
+    other: 'Cites {count} sources',
+  },
   'groups.members.count': { zero: 'No members', one: '1 member', other: '{count} members' },
   'groups.requests.count': { zero: 'No requests', one: '1 request', other: '{count} requests' },
   'post.likes.count': { zero: 'No likes', one: '1 like', other: '{count} likes' },

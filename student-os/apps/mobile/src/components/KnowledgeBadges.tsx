@@ -46,7 +46,7 @@ export function KnowledgeBadges({
     chips.push({
       key: 'type',
       label: t(`knowledge.type.${item.knowledgeType}` as TranslationKey),
-      tone: 'learning',
+      tone: 'structure',
     });
   }
   if (item.difficulty) {
@@ -157,10 +157,14 @@ export function ReaderCaution({ item }: { item: ContentItem }): React.JSX.Elemen
         paddingHorizontal: theme.spacing.md,
         paddingVertical: theme.spacing.sm,
         backgroundColor:
-          provenance === 'corrected' ? theme.colors.dangerSoft : theme.colors.learningSoft,
+          provenance === 'corrected' ? theme.colors.challengedSoft : theme.colors.provenanceSoft,
       }}
     >
-      <Text variant="micro" tone={provenance === 'corrected' ? 'danger' : 'default'}>
+      {/*
+       * A corrected claim is `challenged` — something does not hold — not
+       * `danger`, which is reserved for actions that destroy something.
+       */}
+      <Text variant="metadata" tone={provenance === 'corrected' ? 'challenged' : 'provenance'}>
         {t(`knowledge.provenance.${provenance}` as TranslationKey)}
       </Text>
     </View>

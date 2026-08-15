@@ -159,7 +159,7 @@ export default function Classrooms(): React.JSX.Element {
             />
             <Button
               label={t('classrooms.join')}
-              variant="learning"
+              variant="dominant"
               loading={joining}
               disabled={joinCode.trim().length < 4}
               onPress={() => void joinByCode()}
@@ -255,7 +255,7 @@ export default function Classrooms(): React.JSX.Element {
                 {item.title}
               </Text>
               {item.courseName ? (
-                <Text variant="micro" tone="muted" bidi="auto">
+                <Text variant="metadata" tone="muted" bidi="auto">
                   {item.courseName}
                   {item.instructor ? ` · ${item.instructor.displayName}` : ''}
                 </Text>
@@ -266,7 +266,7 @@ export default function Classrooms(): React.JSX.Element {
                 <Badge label={`${t('classrooms.members')} · ${item.memberCount}`} tone="neutral" />
                 <Badge
                   label={`${t('classrooms.lectures')} · ${item.lectureCount}`}
-                  tone="learning"
+                  tone="neutral"
                 />
                 {item.viewer.role ? (
                   <Badge

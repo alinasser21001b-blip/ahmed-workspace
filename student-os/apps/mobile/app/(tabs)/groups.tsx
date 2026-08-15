@@ -152,10 +152,10 @@ export default function Groups(): React.JSX.Element {
               ) : null}
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
-                <Text variant="micro" tone="muted">
+                <Text variant="metadata" tone="muted">
                   {t('groups.members.count', { count: item.memberCount })}
                 </Text>
-                {item.courseName ? <Badge label={item.courseName} tone="learning" /> : null}
+                {item.courseName ? <Badge label={item.courseName} tone="structure" /> : null}
                 {item.viewer.membershipStatus === 'pending' ? (
                   <Badge label={t('groups.join.pending')} tone="warning" />
                 ) : null}

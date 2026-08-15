@@ -157,7 +157,7 @@ export default function ProfileScreen(): React.JSX.Element {
               <Text variant="caption" tone="muted">
                 @{profile.handle}
               </Text>
-              <Text variant="micro" tone="muted">
+              <Text variant="metadata" tone="muted">
                 {[profile.academic.collegeName, profile.academic.stageName]
                   .filter(Boolean)
                   .join(locale === 'ar' ? ' — ' : ' · ')}
@@ -173,7 +173,7 @@ export default function ProfileScreen(): React.JSX.Element {
                 <Badge
                   key={topic.id}
                   label={locale === 'ar' ? topic.nameAr : topic.nameEn}
-                  tone="learning"
+                  tone="structure"
                 />
               ))}
             </View>
@@ -182,7 +182,7 @@ export default function ProfileScreen(): React.JSX.Element {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xl }}>
             <View>
               <Text variant="heading">{profile.contributionScore}</Text>
-              <Text variant="micro" tone="muted">
+              <Text variant="metadata" tone="muted">
                 {t('profile.contributionScore')}
               </Text>
             </View>

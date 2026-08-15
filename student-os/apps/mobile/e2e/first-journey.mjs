@@ -127,7 +127,13 @@ try {
 
   console.log('step 4 — academic home');
   const home = await page.locator('body').innerText();
-  check(home.includes(displayName), 'home greets the student by name');
+  /*
+   * The frozen design replaced the "Hi {name}" greeting with the product
+   * masthead plus the cohort line: Home states where you are, not who you
+   * are, because the identity is already the account you signed into. The
+   * profile-derived facts below are the part that still has to be real.
+   */
+  check(home.includes('Student OS'), 'home shows the product masthead');
   check(home.includes('كلية الطب'), 'home shows the real college from the profile');
   check(home.includes('المرحلة الخامسة'), 'home shows the real stage from the profile');
   /*
@@ -138,8 +144,8 @@ try {
    * on that would be testing the fixture rather than the product.
    */
   check(
-    home.includes('كن أول من ينشر') || (await page.getByLabel('إعجاب').count()) > 0,
-    'the home feed shows either a real empty state or real cohort content',
+    home.includes('كن أول من ينشر') || home.includes('مصنَّف ضمن مواضيعك'),
+    'the home feed shows either a real empty state or the classification section',
   );
 
   console.log('step 5 — the five primary destinations');
@@ -163,10 +169,23 @@ try {
    * section and nothing else. That is the cold-start path working: the
    * screen is built from a real row, not from a placeholder.
    */
-  check(shell.includes('اهتماماتك'), 'learn shows the interests the student declared');
+  /*
+   * The frozen Learn groups topics by evidence rather than by section label:
+   * a student with one declared interest and no answers has nothing in the
+   * difficulty group and their interest in the "not enough evidence" group.
+   * The topic name and the evidence framing are what must be real.
+   */
+  check(
+    shell.includes('لا توجد أدلة كافية للحكم'),
+    'learn shows the low-evidence group for a student with no answers',
+  );
   check(shell.includes('المتلازمة الكلوية'), 'learn names the declared interest topic');
   check(
-    shell.includes('هذه مؤشرات نشاط دراسي، وليست تقييماً لمستواك.'),
+    shell.includes('مبني فقط على الأسئلة التي أجبت عنها.'),
+    'learn states that it is built only from answered questions',
+  );
+  check(
+    shell.includes('إشارات نشاط دراسي، وليست تقييماً. تظهر لك وحدك.'),
     'learning signals carry their honesty disclaimer where they are shown',
   );
   check(shell.includes('لا توجد محادثات'), 'chat shell has an empty state');

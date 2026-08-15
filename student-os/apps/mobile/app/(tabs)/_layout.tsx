@@ -1,8 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
-import type { ColorValue } from 'react-native';
+import { StyleSheet, type ColorValue } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '../../src/i18n/index';
 import { useTheme } from '../../src/theme/ThemeProvider';
+
+/** Tab bar height before the safe-area inset is added. */
+const TAB_BAR_HEIGHT = 74;
 
 /**
  * Primary navigation (§54).
@@ -28,17 +32,26 @@ function TabIcon({
   name,
   color,
   size,
+  focused,
   bump = 0,
 }: {
   name: IconName;
   color: ColorValue | undefined;
   size: number;
+  focused: boolean;
   bump?: number;
 }): React.JSX.Element {
   const theme = useTheme();
+  /*
+   * The focused tab uses the filled glyph, not merely a different tint. Colour
+   * is never the only carrier of a state in this system, and "which tab am I
+   * on" has to survive greyscale and colour-vision deficiency like every other
+   * state does.
+   */
+  const glyph = (focused ? name.replace(/-outline$/, '') : name) as IconName;
   return (
     <Ionicons
-      name={name}
+      name={glyph}
       size={size + bump}
       color={typeof color === 'string' ? color : theme.colors.textMuted}
     />
@@ -48,20 +61,35 @@ function TabIcon({
 export default function TabsLayout(): React.JSX.Element {
   const { t } = useI18n();
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
+        // Position is ink, not the indigo primary: an active tab states where
+        // you are, and the filled glyph plus weight 600 carry it as well as the
+        // colour does, so it survives greyscale.
+        tabBarActiveTintColor: theme.colors.text,
         tabBarInactiveTintColor: theme.colors.textMuted,
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          height: TAB_BAR_HEIGHT + insets.bottom,
+          paddingBottom: insets.bottom,
+          // No elevation. This system does not use shadows for chrome.
+          elevation: 0,
+          shadowOpacity: 0,
         },
-        // Five destinations with Arabic labels overflow at the default size on a
-        // narrow phone, and a clipped label is worse than a small one.
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+        /*
+         * 12 px is the floor here and it is a deliberate, isolated exception to
+         * the 13 px metadata rule: five destinations with Arabic labels clip at
+         * 13 on a 360 px screen, and a clipped label is worse than a small one.
+         * The label is never the only carrier — the glyph and position state it
+         * too. Do not copy this exception to any other surface.
+         */
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
         tabBarItemStyle: { paddingHorizontal: 0 },
       }}
     >

@@ -219,7 +219,7 @@ export default function NewClassroom(): React.JSX.Element {
 
           <Button
             label={t('classrooms.create')}
-            variant="learning"
+            variant="dominant"
             size="lg"
             fullWidth
             loading={submitting}

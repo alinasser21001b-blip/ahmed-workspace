@@ -111,7 +111,7 @@ export default function ClassroomScreen(): React.JSX.Element {
           <Text variant="heading" numberOfLines={2} bidi="auto">
             {classroom.title}
           </Text>
-          <Text variant="micro" tone="muted" bidi="auto">
+          <Text variant="metadata" tone="muted" bidi="auto">
             {classroom.courseName}
             {classroom.instructor ? ` · ${classroom.instructor.displayName}` : ''}
           </Text>
@@ -126,7 +126,7 @@ export default function ClassroomScreen(): React.JSX.Element {
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
         <Badge label={`${t('classrooms.members')} · ${classroom.memberCount}`} tone="neutral" />
-        <Badge label={`${t('classrooms.lectures')} · ${classroom.lectureCount}`} tone="learning" />
+        <Badge label={`${t('classrooms.lectures')} · ${classroom.lectureCount}`} tone="neutral" />
         {classroom.viewer.role ? (
           <Badge
             label={t(`classrooms.role.${classroom.viewer.role}` as TranslationKey)}
@@ -151,7 +151,7 @@ export default function ClassroomScreen(): React.JSX.Element {
       {classroom.viewer.canJoin ? (
         <Button
           label={t('classrooms.join')}
-          variant="learning"
+          variant="dominant"
           fullWidth
           loading={joining}
           onPress={() => void join()}
@@ -171,7 +171,7 @@ export default function ClassroomScreen(): React.JSX.Element {
             {members.slice(0, 12).map((member) => (
               <View key={member.user.userId} style={{ alignItems: 'center', width: 64 }}>
                 <Avatar name={member.user.displayName} size={40} />
-                <Text variant="micro" tone="muted" numberOfLines={1} bidi="auto">
+                <Text variant="metadata" tone="muted" numberOfLines={1} bidi="auto">
                   {member.user.displayName}
                 </Text>
               </View>

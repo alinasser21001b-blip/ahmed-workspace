@@ -26,6 +26,21 @@ function isPluralKey(key: TranslationKey): key is PluralKey {
 
 export const isRTLLocale = (locale: Locale): boolean => locale === 'ar';
 
+/**
+ * Renders digits in the locale's numeral system.
+ *
+ * Arabic interface copy uses Arabic-Indic digits (٣ من ٧); clinical values
+ * inside content (pH 7.1, 18 g/L) are part of the content and are NOT passed
+ * through this — units and measurements keep Western digits in both locales,
+ * per the RTL constitution in the design handoff.
+ */
+const ARABIC_INDIC = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'] as const;
+export function localizeDigits(locale: Locale, value: number | string): string {
+  const text = String(value);
+  if (locale !== 'ar') return text;
+  return text.replace(/[0-9]/g, (digit) => ARABIC_INDIC[Number(digit)] as string);
+}
+
 interface I18nValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
@@ -63,6 +78,15 @@ export function I18nProvider({
           const count = Number(params?.count ?? 0);
           const forms = pluralCatalogues[locale][key] ?? enPlurals[key];
           template = selectPlural(locale, count, forms);
+          /*
+           * The count is interface copy, so Arabic renders it in Arabic-Indic
+           * digits — «٦ إجابات», not «6 إجابات». Only this parameter is
+           * converted: other params can carry content (a handle, a name) where
+           * substituting digits would corrupt the value.
+           */
+          if (locale === 'ar' && params) {
+            params = { ...params, count: localizeDigits(locale, count) };
+          }
         } else {
           template = catalogues[locale][key] ?? catalogues.en[key] ?? key;
         }

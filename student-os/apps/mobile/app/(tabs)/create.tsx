@@ -19,7 +19,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 interface CreateOption {
   key: TranslationKey;
   icon: React.ComponentProps<typeof Ionicons>['name'];
-  tone: 'social' | 'learning';
+  tone: 'social' | 'academic';
   /** Null until the phase that ships it — shown, but visibly not yet available. */
   route: '/compose' | null;
 }
@@ -27,10 +27,10 @@ interface CreateOption {
 const OPTIONS: CreateOption[] = [
   { key: 'create.post', icon: 'create-outline', tone: 'social', route: '/compose' },
   { key: 'create.reel', icon: 'videocam-outline', tone: 'social', route: null },
-  { key: 'create.question', icon: 'help-circle-outline', tone: 'learning', route: null },
+  { key: 'create.question', icon: 'help-circle-outline', tone: 'academic', route: null },
   { key: 'create.poll', icon: 'stats-chart-outline', tone: 'social', route: null },
-  { key: 'create.resource', icon: 'document-attach-outline', tone: 'learning', route: null },
-  { key: 'create.studySession', icon: 'time-outline', tone: 'learning', route: null },
+  { key: 'create.resource', icon: 'document-attach-outline', tone: 'academic', route: null },
+  { key: 'create.studySession', icon: 'time-outline', tone: 'academic', route: null },
 ];
 
 export default function Create(): React.JSX.Element {
@@ -58,19 +58,19 @@ export default function Create(): React.JSX.Element {
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor:
-                    option.tone === 'learning' ? theme.colors.learningSoft : theme.colors.primarySoft,
+                    option.tone === 'academic' ? theme.colors.primarySoft : theme.colors.background,
                 }}
               >
                 <Ionicons
                   name={option.icon}
                   size={20}
-                  color={option.tone === 'learning' ? theme.colors.learning : theme.colors.primary}
+                  color={option.tone === 'academic' ? theme.colors.structure : theme.colors.text}
                 />
               </View>
               <Text variant="bodyStrong">{t(option.key)}</Text>
               <View style={{ flex: 1 }} />
               {option.route ? null : (
-                <Text variant="micro" tone="muted">
+                <Text variant="metadata" tone="muted">
                   {t('phase.comingSoon.title')}
                 </Text>
               )}

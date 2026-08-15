@@ -93,7 +93,7 @@ export function PostCard({
           </Pressable>
           <View style={{ flex: 1, gap: 1 }}>
             <Text variant="label" bidi="auto">{item.author.displayName}</Text>
-            <Text variant="micro" tone="muted">
+            <Text variant="metadata" tone="muted">
               {[item.author.stageName, formatRelative(item.createdAt, locale)]
                 .filter(Boolean)
                 .join(' · ')}
@@ -143,7 +143,7 @@ export function PostCard({
          */}
         {item.academic.courseName ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-            <Badge label={item.academic.courseName} tone="learning" />
+            <Badge label={item.academic.courseName} tone="structure" />
           </View>
         ) : null}
 
@@ -182,7 +182,7 @@ export function PostCard({
             icon={item.viewer.hasBookmarked ? 'bookmark' : 'bookmark-outline'}
             label={item.viewer.hasBookmarked ? t('post.saved') : t('post.save')}
             active={item.viewer.hasBookmarked}
-            activeColor={theme.colors.learning}
+            activeColor={theme.colors.text}
             onPress={onToggleBookmark}
           />
         </View>

@@ -58,12 +58,40 @@ export interface TokenStore {
 export interface ApiClientOptions {
   baseUrl: string;
   tokens?: TokenStore;
+  /**
+   * Transport. Defaults to the global `fetch`.
+   *
+   * Injectable so the preview build can serve fixtures without the rest of the
+   * app knowing: every screen keeps calling the same typed helpers, and the
+   * substitution happens once, here. Production passes nothing and gets
+   * `fetch`, so the real path is unchanged rather than conditionally bypassed.
+   */
+  fetchImpl?: typeof fetch;
 }
 
 export class ApiClient {
   private refreshInFlight: Promise<boolean> | null = null;
 
   constructor(private readonly options: ApiClientOptions) {}
+
+  private get transport(): typeof fetch {
+    const injected = this.options.fetchImpl;
+    if (injected) return injected;
+    /*
+     * Wrapped, not returned bare.
+     *
+     * `this.transport(url, init)` calls whatever the getter returns with the
+     * ApiClient as its receiver. The browser's `fetch` refuses that — it must
+     * be invoked with the global object — and throws "Illegal invocation",
+     * which surfaces here as a NetworkError on every single request.
+     *
+     * Node's fetch does not care, so this passed the unit and API suites and
+     * failed only in the browser journey, where signup never reached
+     * onboarding. The arrow function has no `this` of its own, so the inner
+     * call is an ordinary global one.
+     */
+    return (input, init) => fetch(input, init);
+  }
 
   async request<T>(
     path: string,
@@ -83,7 +111,7 @@ export class ApiClient {
       if (token) headers.authorization = `Bearer ${token}`;
 
       try {
-        return await fetch(`${this.options.baseUrl}${path}`, {
+        return await this.transport(`${this.options.baseUrl}${path}`, {
           method,
           headers,
           ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -140,7 +168,7 @@ export class ApiClient {
     if (!refreshToken) return false;
 
     try {
-      const response = await fetch(`${this.options.baseUrl}/v1/auth/refresh`, {
+      const response = await this.transport(`${this.options.baseUrl}/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -178,7 +206,7 @@ export class ApiClient {
     const send = async (): Promise<Response> => {
       const token = this.options.tokens?.getAccessToken();
       try {
-        return await fetch(`${this.options.baseUrl}${path}`, {
+        return await this.transport(`${this.options.baseUrl}${path}`, {
           method: 'POST',
           headers: token ? { authorization: `Bearer ${token}` } : {},
           body: form,

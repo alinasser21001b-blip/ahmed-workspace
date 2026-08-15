@@ -99,7 +99,7 @@ export default function SettingsScreen(): React.JSX.Element {
 
         <View>
           <SectionHeader title={t('settings.deleteAccount')} />
-          <Text variant="micro" tone="muted" style={{ marginBottom: theme.spacing.sm }}>
+          <Text variant="metadata" tone="muted" style={{ marginBottom: theme.spacing.sm }}>
             {t('settings.deleteAccount.body')}
           </Text>
           <Row
