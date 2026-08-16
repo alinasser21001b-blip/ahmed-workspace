@@ -76,6 +76,23 @@ export const nextId = (prefix: string): string => `preview-${prefix}-${(idCounte
 
 export const PREVIEW_USER_ID = 'preview-user-0001';
 
+/**
+ * Picks a name the way the server does.
+ *
+ * The API stores `name_ar` / `name_en` for every academic entity and resolves
+ * one with `localised(ar, en, locale)` from the caller's Accept-Language. The
+ * fixture transport never reaches the network, so no header exists to read —
+ * and without this the Arabic UI rendered "الأحد، ١٦ أغسطس · Second year ·
+ * College of Medicine", an Arabic sentence with two English nouns wedged into
+ * it.
+ *
+ * The locale is read at access time, not captured at module load: these
+ * fixtures are constructed once and serialised on every request, by which
+ * point the student may have switched language.
+ */
+const localisedName = (ar: string, en: string): string =>
+  typeof document !== 'undefined' && document.documentElement.lang.startsWith('ar') ? ar : en;
+
 const person = (
   userId: string,
   handle: string,
@@ -87,8 +104,12 @@ const person = (
   displayName,
   avatarUrl: null,
   verificationLevel: level,
-  stageName: level === 'instructor' ? null : 'Second year',
-  collegeName: 'College of Medicine',
+  get stageName() {
+    return level === 'instructor' ? null : localisedName('المرحلة الثانية', 'Second year');
+  },
+  get collegeName() {
+    return localisedName('كلية الطب', 'College of Medicine');
+  },
 });
 
 export const me = person(PREVIEW_USER_ID, 'preview.student', 'Preview Student');
@@ -211,13 +232,13 @@ export function makeMyProfile(): Profile {
     verificationLevel: 'student',
     academic: {
       universityId: 'u1',
-      universityName: 'University of Baghdad',
+      universityName: localisedName('جامعة بغداد', 'University of Baghdad'),
       collegeId: 'c1',
-      collegeName: 'College of Medicine',
+      collegeName: localisedName('كلية الطب', 'College of Medicine'),
       programId: 'p1',
-      programName: 'Medicine (MBChB)',
+      programName: localisedName('الطب والجراحة العامة', 'Medicine (MBChB)'),
       stageId: 's2',
-      stageName: 'Second year',
+      stageName: localisedName('المرحلة الثانية', 'Second year'),
       academicYearId: null,
       academicYearLabel: null,
     },
@@ -1121,13 +1142,16 @@ export function profileByHandle(handle: string): Profile | null {
     verificationLevel: summary.verificationLevel,
     academic: {
       universityId: 'u1',
-      universityName: 'University of Baghdad',
+      universityName: localisedName('جامعة بغداد', 'University of Baghdad'),
       collegeId: 'c1',
-      collegeName: 'College of Medicine',
+      collegeName: localisedName('كلية الطب', 'College of Medicine'),
       programId: 'p1',
-      programName: 'Medicine (MBChB)',
+      programName: localisedName('الطب والجراحة العامة', 'Medicine (MBChB)'),
       stageId: summary.verificationLevel === 'instructor' ? null : 's2',
-      stageName: summary.verificationLevel === 'instructor' ? null : 'Second year',
+      stageName:
+        summary.verificationLevel === 'instructor'
+          ? null
+          : localisedName('المرحلة الثانية', 'Second year'),
       academicYearId: null,
       academicYearLabel: null,
     },
