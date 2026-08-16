@@ -135,6 +135,32 @@ async function run(locale, width) {
     if (!url.startsWith(ORIGIN)) offOrigin.push(`${request.method()} ${url}`);
   });
   page.on('websocket', (ws) => sockets.push(ws.url()));
+  /*
+   * Playwright's websocket event reports sockets that connect. A socket that
+   * is attempted and refused never fires it — which is precisely the case a
+   * fixture preview produces, and precisely the one that must fail this test.
+   * So the constructor itself is wrapped before any app code runs.
+   */
+  await page.addInitScript(() => {
+    const w = /** @type {any} */ (window);
+    w.__socketAttempts = [];
+    const Real = w.WebSocket;
+    w.WebSocket = function (url, protocols) {
+      w.__socketAttempts.push(String(url));
+      return new Real(url, protocols);
+    };
+    w.WebSocket.prototype = Real.prototype;
+    // Same for push: record a permission request rather than trusting that
+    // nothing asked.
+    w.__notificationPermissionRequested = false;
+    if (w.Notification && w.Notification.requestPermission) {
+      const realRequest = w.Notification.requestPermission.bind(w.Notification);
+      w.Notification.requestPermission = (...args) => {
+        w.__notificationPermissionRequested = true;
+        return realRequest(...args);
+      };
+    }
+  });
 
   const label = `${locale} @ ${width}px`;
   console.log(`\n${label}`);
@@ -165,10 +191,23 @@ async function run(locale, width) {
   const inputs = page.locator('input');
   await inputs.nth(0).fill('preview@student-os.example');
   await inputs.nth(1).fill('preview-password');
-  await clickVisible(page, c.signIn);
-  await page.waitForTimeout(3000);
+  /*
+   * By role, not by text. The screen's heading and its submit control carry
+   * the same words, and a text match resolved to the heading — which is not
+   * clickable, so the journey silently continued as a signed-out visitor
+   * while every later assertion still passed against fixture data that does
+   * not require a session.
+   */
+  await page.getByRole('button', { name: c.signIn }).first().click();
+  await page.waitForTimeout(3500);
   await shot('02-home');
-  check(!page.url().endsWith('/(auth)/sign-in'), 'sign-in lands in the app');
+  // Proof of arrival, not absence of a URL: the masthead only exists inside
+  // the app, and the sign-in submit only exists outside it.
+  check(
+    (await visibleCount(page, 'Student OS')) > 0 &&
+      (await page.getByRole('button', { name: c.signIn }).count()) === 0,
+    'sign-in authenticates and lands on Home',
+  );
   await noOverflow('home');
 
   // --- 4. learn → topic → practice → answer → feedback ---------------------
@@ -313,7 +352,12 @@ async function run(locale, width) {
 
   // --- 14. nothing left the origin -----------------------------------------
   check(offOrigin.length === 0, 'no request left the preview origin', offOrigin.slice(0, 5).join(' | '));
-  check(sockets.length === 0, 'no WebSocket was opened', sockets.slice(0, 3).join(' | '));
+  const attempted = await page.evaluate(() => window.__socketAttempts ?? []);
+  check(
+    sockets.length === 0 && attempted.length === 0,
+    'no WebSocket was opened or even attempted',
+    [...sockets, ...attempted].slice(0, 3).join(' | '),
+  );
 
   const pushUsed = await page.evaluate(() => {
     // The app must never have asked for notification permission: push is inert

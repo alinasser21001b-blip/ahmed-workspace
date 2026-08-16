@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { API_BASE_URL, useSession } from './session';
 import { Outbox } from './outbox';
+import { IS_PREVIEW_MODE } from '../preview/preview-mode';
 
 /**
  * The realtime connection.
@@ -72,6 +73,20 @@ export function RealtimeProvider({ children }: { children: ReactNode }): React.J
 
   const connect = useCallback(() => {
     if (disposed.current) return;
+    /*
+     * A preview build has no server to hold a socket, so opening one is a
+     * connection to nowhere: it fails, logs an error to the console on every
+     * attempt, and then retries on a backoff for as long as the preview is
+     * open. Students would see nothing, but anyone inspecting the preview
+     * would see a page repeatedly trying to reach a realtime endpoint — which
+     * is exactly the claim a fixture preview must not make.
+     *
+     * Staying `offline` is also the honest status: the conversation and the
+     * messages list already render the permanent "live delivery is
+     * unavailable" line from it, which is true here for the same reason it is
+     * true in production on the current host.
+     */
+    if (IS_PREVIEW_MODE) return;
     const token = getAccessToken();
     if (sessionStatus !== 'signedIn' || !token) return;
     if (socket.current && socket.current.readyState <= WebSocket.OPEN) return;
