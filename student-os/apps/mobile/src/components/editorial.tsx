@@ -44,10 +44,13 @@ export function SectionHeader({
   title,
   tone = 'default',
   trailing,
+  onTrailingPress,
 }: {
   title: string;
   tone?: 'default' | 'structure' | 'challenged';
   trailing?: string;
+  /** When set, the trailing text becomes a 44 px link (See all, New, Browse). */
+  onTrailingPress?: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
   return (
@@ -67,7 +70,19 @@ export function SectionHeader({
       >
         {title}
       </Text>
-      {trailing ? (
+      {trailing && onTrailingPress ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={trailing}
+          onPress={onTrailingPress}
+          hitSlop={10}
+          style={{ minHeight: 44, justifyContent: 'center' }}
+        >
+          <Text variant="metadata" tone="structure" style={{ fontWeight: '600' }}>
+            {trailing}
+          </Text>
+        </Pressable>
+      ) : trailing ? (
         <Text variant="metadata" tone="muted">
           {trailing}
         </Text>
@@ -139,11 +154,13 @@ export function DominantAction({
   loading = false,
   inline = false,
   inverse = false,
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
+  style?: ViewStyle;
   /** Topic's inline Practise: 44 px, self-sized. Default is the 54 px footer. */
   inline?: boolean;
   /** Paper fill on an ink band (Learn's Start). */
@@ -171,16 +188,19 @@ export function DominantAction({
       accessibilityState={{ disabled: inert, busy: loading }}
       disabled={inert}
       onPress={onPress}
-      style={({ pressed }) => ({
-        backgroundColor: background,
-        borderRadius: theme.radius.sm,
-        minHeight: inline ? 44 : 54,
-        paddingHorizontal: theme.spacing.xl,
-        alignItems: 'center',
-        justifyContent: 'center',
-        alignSelf: inline ? 'flex-start' : 'stretch',
-        opacity: pressed && !inert ? 0.85 : 1,
-      })}
+      style={({ pressed }) => [
+        {
+          backgroundColor: background,
+          borderRadius: theme.radius.sm,
+          minHeight: inline ? 44 : 54,
+          paddingHorizontal: theme.spacing.xl,
+          alignItems: 'center',
+          justifyContent: 'center',
+          alignSelf: inline ? ('flex-start' as const) : ('stretch' as const),
+          opacity: pressed && !inert ? 0.85 : 1,
+        },
+        style,
+      ]}
     >
       {loading ? (
         <ActivityIndicator color={labelColor} />

@@ -12,6 +12,10 @@
     "build:web": "tsx scripts/check-api-url.ts && expo export --platform web --output-dir dist --clear"
   },
   "dependencies": {
+    "@expo-google-fonts/ibm-plex-mono": "^0.4.1",
+    "@expo-google-fonts/ibm-plex-sans": "^0.4.1",
+    "@expo-google-fonts/ibm-plex-sans-arabic": "^0.4.2",
+    "@expo-google-fonts/newsreader": "^0.4.1",
     "@expo/vector-icons": "^15.1.1",
     "@sos/contracts": "workspace:*",
     "@sos/core": "workspace:*",

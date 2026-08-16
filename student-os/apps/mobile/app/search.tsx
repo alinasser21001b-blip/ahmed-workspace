@@ -4,7 +4,8 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MetadataLine, SectionHeader, TopBar } from '../src/components/editorial';
+import { MetadataLine, SectionHeader } from '../src/components/editorial';
+import { DirectionalIcon } from '../src/components/DirectionalIcon';
 import { AcademicRow } from '../src/components/rows';
 import { Avatar } from '../src/components/surfaces';
 import { Text } from '../src/components/Text';
@@ -83,18 +84,38 @@ export default function Search(): React.JSX.Element {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      {/* The field is pinned: results scroll under it, it never scrolls away. */}
-      <View style={{ paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.md, gap: theme.spacing.md }}>
-        <TopBar title={t('nav.search')} onBack={() => router.back()} rule={false} />
+      {/* The field is pinned: results scroll under it, it never scrolls away.
+          No screen title — frame 5c gives the whole top row to the back
+          control and the pill field, because on this screen the query IS the
+          title. */}
+      <View
+        style={{
+          paddingHorizontal: theme.spacing.xl,
+          paddingTop: theme.spacing.md,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: theme.spacing.md,
+        }}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('action.back')}
+          onPress={() => router.back()}
+          hitSlop={10}
+          style={{ minWidth: 44, minHeight: 44, justifyContent: 'center' }}
+        >
+          <DirectionalIcon direction="back" size={22} color={theme.colors.text} />
+        </Pressable>
         <View
           style={{
+            flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
             gap: theme.spacing.sm,
-            borderWidth: 1.5,
+            borderWidth: 1,
             borderColor: theme.colors.borderStrong,
-            borderRadius: theme.radius.sm,
-            paddingHorizontal: theme.spacing.md,
+            borderRadius: theme.radius.pill,
+            paddingHorizontal: theme.spacing.lg,
             minHeight: 50,
           }}
         >
@@ -110,6 +131,10 @@ export default function Search(): React.JSX.Element {
             returnKeyType="search"
             style={{
               flex: 1,
+              // Web: a flex item will not shrink below its placeholder's
+              // intrinsic width without this, and the placeholder is a full
+              // sentence — that was a 22 px page overflow at 360.
+              minWidth: 0,
               color: theme.colors.text,
               fontSize: 16,
               lineHeight: 22,

@@ -82,7 +82,7 @@ export function PracticeHeader({
           />
         ))}
       </View>
-      <Text variant="metadata" tone="inverse" accessibilityLabel={t('practice.progress', { current: index + 1, total })}>
+      <Text variant="numeric" tone="inverse" accessibilityLabel={t('practice.progress', { current: index + 1, total })}>
         {t('practice.counter', {
           current: localizeDigits(locale, index + 1),
           total: localizeDigits(locale, total),
@@ -127,31 +127,38 @@ export function AnswerOption({
    * colour alone: the key carries a checkmark and the word "Correct"; a wrong
    * choice carries "You chose"; the rest dim.
    */
-  let borderColor = theme.colors.border;
-  let borderWidth = 1.5;
-  let background = theme.colors.surface;
+  /*
+   * The frame's grammar: options are hairline-separated ROWS of the page,
+   * not boxes floating on it. A choice is stated by filling the row and
+   * ruling it top and bottom at 2 px in ink — the same weight the masthead
+   * rule carries — plus a trailing check. Never colour alone.
+   */
+  let ruleColor = theme.colors.border;
+  let ruleWidth = 1;
+  let background: string = 'transparent';
   let dimmed = false;
+  let emphasized = false;
   let stateWord: string | null = null;
   let stateTone: 'default' | 'challenged' = 'default';
 
   if (!revealed && selected) {
-    borderColor = theme.colors.text;
-    borderWidth = 2;
+    ruleColor = theme.colors.text;
+    ruleWidth = 2;
     background = theme.colors.surfaceSelected;
+    emphasized = true;
   } else if (revealed) {
     if (isCorrect) {
-      borderColor = theme.colors.text;
-      borderWidth = 2;
+      ruleColor = theme.colors.text;
+      ruleWidth = 2;
       background = theme.colors.surfaceSelected;
+      emphasized = true;
       stateWord = t('practice.correct');
     } else if (wasChosen) {
-      borderColor = theme.colors.challenged;
-      borderWidth = 2;
+      ruleColor = theme.colors.challenged;
+      ruleWidth = 2;
       stateWord = t('practice.youChose');
       stateTone = 'challenged';
     } else {
-      borderColor = theme.colors.border;
-      borderWidth = 1;
       dimmed = true;
     }
   }
@@ -172,16 +179,20 @@ export function AnswerOption({
       disabled={revealed}
       onPress={onPress}
       style={({ pressed }) => ({
-        borderColor,
-        borderWidth,
-        borderRadius: theme.radius.sm,
+        borderTopColor: ruleColor,
+        borderTopWidth: ruleWidth,
+        borderBottomColor: ruleColor,
+        borderBottomWidth: emphasized || (revealed && wasChosen && !isCorrect) ? ruleWidth : 0,
+        // Negative margin keeps adjacent hairlines from doubling where an
+        // emphasized row's bottom rule meets the next row's top rule.
+        marginTop: -1,
         backgroundColor: background,
         minHeight: 56,
-        paddingHorizontal: theme.spacing.lg,
+        paddingHorizontal: theme.spacing.xs,
         paddingVertical: theme.spacing.md,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.md,
+        gap: theme.spacing.lg,
         opacity: pressed && !revealed ? 0.9 : 1,
       })}
     >
@@ -228,6 +239,9 @@ export function AnswerOption({
           </View>
         ) : null}
       </View>
+      {kind !== 'multi' && selected && !revealed ? (
+        <Ionicons accessible={false} name="checkmark" size={20} color={theme.colors.text} />
+      ) : null}
     </Pressable>
   );
 }

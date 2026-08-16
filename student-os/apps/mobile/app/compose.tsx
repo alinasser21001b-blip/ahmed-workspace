@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Image, Pressable, TextInput, View } from 'react-native';
 import { ApiError, NetworkError } from '../src/api/client';
 import { Button } from '../src/components/Button';
-import { ChipPicker, DominantAction, SectionHeader } from '../src/components/editorial';
+import { ChipPicker, DominantAction, SecondaryAction, SectionHeader } from '../src/components/editorial';
 import { Text } from '../src/components/Text';
 import { Screen } from '../src/components/states';
 import { useI18n, type TranslationKey } from '../src/i18n/index';
@@ -191,15 +191,7 @@ export default function Compose(): React.JSX.Element {
             onPress={() => setAttachment(null)}
           />
         </View>
-      ) : (
-        <Button
-          label={uploading ? t('compose.uploading') : t('compose.addImage')}
-          variant="secondary"
-          loading={uploading}
-          onPress={() => void pickImage()}
-          fullWidth
-        />
-      )}
+      ) : null}
 
       {/* The audience is the loudest decision and the only pre-selected
           control: a default nobody noticed is how a private note reaches a
@@ -267,12 +259,24 @@ export default function Compose(): React.JSX.Element {
         {t('compose.clearHint')}
       </Text>
 
-      <DominantAction
-        label={t('compose.publish')}
-        onPress={() => void publish()}
-        loading={publishing}
-        disabled={!canPublish}
-      />
+      {/* Frame 5d's closing row: the outline Image entry beside the ink
+          Publish. One dominant action; Image is secondary by construction. */}
+      <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+        {attachment === null ? (
+          <SecondaryAction
+            label={uploading ? t('compose.uploading') : t('compose.addImage')}
+            disabled={uploading}
+            onPress={() => void pickImage()}
+          />
+        ) : null}
+        <DominantAction
+          label={t('compose.publish')}
+          onPress={() => void publish()}
+          loading={publishing}
+          disabled={!canPublish}
+          style={{ flex: 1 }}
+        />
+      </View>
     </Screen>
   );
 }

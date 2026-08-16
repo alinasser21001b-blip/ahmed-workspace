@@ -108,7 +108,7 @@ export default function Learn(): React.JSX.Element {
       })}
     >
       <View style={{ flex: 1, gap: 2 }}>
-        <Text variant="bodyStrong" bidi="auto" tone={dashed ? 'secondary' : 'default'}>
+        <Text variant="heading" bidi="auto" tone={dashed ? 'secondary' : 'default'}>
           {topic.name}
         </Text>
         <MetadataLine
@@ -146,7 +146,7 @@ export default function Learn(): React.JSX.Element {
             <EmptyState
               title={t('learn.empty.real.title')}
               body={t('learn.empty.real.body')}
-              action={{ label: t('nav.home'), onPress: () => router.push('/(tabs)') }}
+              action={{ label: t('nav.today'), onPress: () => router.push('/(tabs)') }}
             />
           </View>
         ) : (

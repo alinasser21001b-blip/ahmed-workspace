@@ -72,9 +72,9 @@ export const en: Record<keyof typeof ar, string> = {
   'onboarding.interests.subtitle': 'Pick topics to personalise what you see',
   'onboarding.finish': 'Get started',
 
-  'nav.home': 'Home',
-  'nav.groups': 'Groups',
-  'nav.create': 'Create',
+  'nav.today': 'Today',
+  'nav.topics': 'Topics',
+  'nav.rooms': 'Rooms',
   'nav.learn': 'Learn',
   'nav.chat': 'Chat',
   'nav.profile': 'Profile',
@@ -573,5 +573,17 @@ export const en: Record<keyof typeof ar, string> = {
   'preview.feedback.sent.handOver': 'If you were asked to send these back, copy them and paste them wherever you were told to.',
   'preview.feedback.notPreview': 'The feedback form is part of the student preview and is not available in this build.',
   'preview.feedback.noPersonalData': 'Nothing here identifies you.',
+
+  // --- Topics and Rooms tabs (the frozen five) ------------------------------
+  'topics.dek': 'Everything taught to your stage, by course.',
+  'topics.empty.title': 'No topics yet',
+  'topics.empty.body': 'Topics appear here once your courses are published.',
+  'rooms.classrooms': 'Classrooms',
+  'rooms.groups': 'Study groups',
+  'rooms.browse': 'Browse',
+  'rooms.classrooms.empty': 'You are not in a classroom yet. Browse to find yours or join with a code.',
+  'rooms.groups.empty': 'No study groups yet. Start one for your cohort.',
+  'rooms.empty.title': 'No rooms yet',
+  'rooms.empty.body': 'Classrooms come from your teaching staff; study groups come from students like you.',
 
 };

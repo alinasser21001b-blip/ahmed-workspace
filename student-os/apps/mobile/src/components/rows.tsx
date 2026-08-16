@@ -188,9 +188,21 @@ export function MemberAvatarRow({
 // RoleLabel — a single structure-coloured label, never a pill stack
 
 export function RoleLabel({ label }: { label: string }): React.JSX.Element {
+  const theme = useTheme();
   return (
-    <Text variant="metadata" tone="structure" style={{ fontWeight: '600' }}>
-      {label}
-    </Text>
+    <View
+      style={{
+        alignSelf: 'flex-start',
+        borderWidth: 1,
+        borderColor: theme.colors.structure,
+        borderRadius: theme.radius.sm,
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: 3,
+      }}
+    >
+      <Text variant="metadata" tone="structure" style={{ fontWeight: '600' }}>
+        {label}
+      </Text>
+    </View>
   );
 }

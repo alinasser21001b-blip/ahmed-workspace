@@ -1,3 +1,18 @@
+import {
+  IBMPlexMono_500Medium,
+} from '@expo-google-fonts/ibm-plex-mono';
+import {
+  IBMPlexSans_400Regular,
+  IBMPlexSans_500Medium,
+  IBMPlexSans_600SemiBold,
+} from '@expo-google-fonts/ibm-plex-sans';
+import {
+  IBMPlexSansArabic_400Regular,
+  IBMPlexSansArabic_500Medium,
+  IBMPlexSansArabic_600SemiBold,
+} from '@expo-google-fonts/ibm-plex-sans-arabic';
+import { Newsreader_400Regular, Newsreader_500Medium } from '@expo-google-fonts/newsreader';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { getLocales } from 'expo-localization';
@@ -10,19 +25,41 @@ import { SessionProvider } from '../src/state/session';
 import { ThemeProvider } from '../src/theme/ThemeProvider';
 
 /**
- * Root layout: providers, writing direction, and the top-level navigator.
+ * Root layout: providers, writing direction, fonts, and the top-level
+ * navigator.
  *
  * Direction is decided once, here, before anything renders. Flipping it later
  * leaves half the tree mirrored, so the device locale is read at startup and
  * applied before the first paint.
  */
-export default function RootLayout(): React.JSX.Element {
+export default function RootLayout(): React.JSX.Element | null {
+  /*
+   * The frozen faces — four families, nine static instances, no variable
+   * axes (`06-TYPOGRAPHY.md` §Loading, `tokens.json → fontsToBundle`).
+   * Rendering is held until they resolve: a script-swap flash is worse than
+   * a moment of blank, because the Arabic fallback is a system face at a
+   * visibly different weight and the swap would happen mid-read.
+   */
+  const [fontsLoaded] = useFonts({
+    Newsreader_400Regular,
+    Newsreader_500Medium,
+    IBMPlexSans_400Regular,
+    IBMPlexSans_500Medium,
+    IBMPlexSans_600SemiBold,
+    IBMPlexSansArabic_400Regular,
+    IBMPlexSansArabic_500Medium,
+    IBMPlexSansArabic_600SemiBold,
+    IBMPlexMono_500Medium,
+  });
+
   const initialLocale = useMemo<Locale>(() => {
     const deviceLanguage = getLocales()[0]?.languageCode;
     const locale: Locale = deviceLanguage === 'en' ? 'en' : 'ar';
     applyDirection(locale);
     return locale;
   }, []);
+
+  if (!fontsLoaded) return null;
 
   return (
     <SafeAreaProvider>

@@ -194,9 +194,12 @@ export default function ProfileScreen(): React.JSX.Element {
        */}
       <View
         accessibilityLabel={`${localizeDigits(locale, profile.contributionScore)}, ${t('profile.contributionScore')}`}
-        style={{ gap: 2 }}
+        style={{ flexDirection: 'row', alignItems: 'baseline', gap: theme.spacing.sm }}
       >
-        <Text variant="numeric" style={{ fontSize: 22, lineHeight: 30, fontWeight: '600' }}>
+        {/* Display-sized, mono, on one baseline with its caption — frame 5d.
+            Mono because it is a numeral, display-sized because it is the only
+            number a profile is allowed. */}
+        <Text variant="numeric" style={{ fontSize: 30, lineHeight: 36 }}>
           {localizeDigits(locale, profile.contributionScore)}
         </Text>
         <Text variant="metadata" tone="muted">

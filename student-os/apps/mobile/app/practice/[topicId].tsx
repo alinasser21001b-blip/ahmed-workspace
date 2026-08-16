@@ -262,8 +262,14 @@ export default function PracticeScreen(): React.JSX.Element {
           gap: theme.spacing.lg,
         }}
       >
-        {/* The stem — the largest text on screen at every step. */}
-        <Text variant="title" bidi="auto" style={{ fontWeight: '600' }}>
+        {/* The stem — the largest text on screen at every step, in the
+            editorial voice: 24/34 Newsreader for Latin, 22/40 Plex Arabic 600
+            for Arabic (06-TYPOGRAPHY role table). */}
+        <Text
+          variant="heading"
+          bidi="auto"
+          style={theme.isRTL ? { fontSize: 22, lineHeight: 40 } : { fontSize: 24, lineHeight: 34 }}
+        >
           {question.prompt}
         </Text>
         {isMulti ? (
@@ -272,7 +278,7 @@ export default function PracticeScreen(): React.JSX.Element {
           </Text>
         ) : null}
 
-        <View style={{ gap: theme.spacing.sm }}>
+        <View>
           {question.options.map((option, optionIndex) => (
             <AnswerOption
               key={option.id}

@@ -75,9 +75,9 @@ export const ar = {
   'onboarding.finish': 'ابدأ',
 
   // --- navigation
-  'nav.home': 'الرئيسية',
-  'nav.groups': 'المجموعات',
-  'nav.create': 'إنشاء',
+  'nav.today': 'اليوم',
+  'nav.topics': 'المواضيع',
+  'nav.rooms': 'القاعات',
   'nav.learn': 'التعلّم',
   'nav.chat': 'المحادثات',
   'nav.profile': 'الملف الشخصي',
@@ -589,5 +589,17 @@ export const ar = {
   'preview.feedback.sent.handOver': 'إن طُلب منك إرسالها، فانسخها وألصقها في المكان الذي قيل لك.',
   'preview.feedback.notPreview': 'نموذج الملاحظات جزء من النسخة التجريبية وغير متاح في هذه النسخة.',
   'preview.feedback.noPersonalData': 'لا شيء هنا يدل على هويتك.',
+
+  // --- Topics and Rooms tabs (the frozen five) ------------------------------
+  'topics.dek': 'كل ما يُدرَّس لمرحلتك، بحسب المادة.',
+  'topics.empty.title': 'لا مواضيع بعد',
+  'topics.empty.body': 'تظهر المواضيع هنا عند نشر موادك الدراسية.',
+  'rooms.classrooms': 'القاعات الدراسية',
+  'rooms.groups': 'مجموعات الدراسة',
+  'rooms.browse': 'تصفّح',
+  'rooms.classrooms.empty': 'لست في قاعة دراسية بعد. تصفّح لتجد قاعتك أو انضم برمز.',
+  'rooms.groups.empty': 'لا مجموعات دراسة بعد. ابدأ واحدة لدفعتك.',
+  'rooms.empty.title': 'لا قاعات بعد',
+  'rooms.empty.body': 'القاعات الدراسية من التدريسيين؛ ومجموعات الدراسة من طلبة مثلك.',
 
 } as const;

@@ -149,18 +149,21 @@ try {
   );
 
   console.log('step 5 — the five primary destinations');
+  // The frozen five: Today · Topics · Learn · Rooms · Chat (04-NAVIGATION.md).
   for (const [tab, label] of [
-    ['المجموعات', '10-groups'],
-    ['إنشاء', '11-create'],
+    ['المواضيع', '10-topics'],
     ['التعلّم', '12-learn'],
+    ['القاعات', '11-rooms'],
     ['المحادثات', '13-chat'],
   ]) {
     await visibleText(tab).click();
     await settle(label);
   }
   const shell = await page.locator('body').innerText();
-  check(shell.includes('لا توجد مجموعات دراسية بعد'), 'groups shell has an empty state');
-  check(shell.includes('مقطع تعليمي'), 'create sheet offers academic content types');
+  // Rooms replaces the old Groups tab; a new student has no rooms at all.
+  check(shell.includes('لا قاعات بعد'), 'rooms shell has a real empty state');
+  // Topics is the curriculum browser the frozen five added to the bar.
+  check(shell.includes('كل ما يُدرَّس لمرحلتك'), 'topics tab states what it lists');
   /*
    * Phase 5 replaced the Learn shell. It used to list "topics to review" as a
    * coming-soon card whether or not any existed; it now shows sections only
@@ -233,15 +236,20 @@ try {
   );
 
   console.log('step 7 — community (phase 3)');
-  await visibleText('المجموعات').click();
-  await settle('20-groups-empty');
+  // Study groups live in the Rooms tab now, alongside classrooms under their
+  // distinct nouns; creation is the section's trailing link.
+  await visibleText('القاعات').click();
+  await settle('20-rooms-empty');
   check(
-    (await page.locator('body').innerText()).includes('لا توجد مجموعات دراسية بعد'),
-    'the groups tab starts with a real empty state',
+    (await page.locator('body').innerText()).includes('لا قاعات بعد') ||
+      (await page.locator('body').innerText()).includes('لا مجموعات دراسة بعد'),
+    'the rooms tab starts with a real empty state',
   );
 
   const groupName = `مجموعة الكلى ${Date.now().toString().slice(-6)}`;
-  await page.getByLabel('إنشاء مجموعة').last().click();
+  await page.getByLabel('مجموعة جديدة').last().click().catch(async () => {
+    await page.getByText('مجموعة جديدة', { exact: true }).last().click();
+  });
   await settle('21-create-group');
   check(
     await page.getByText('من يمكنه رؤية المجموعة').last().isVisible(),
