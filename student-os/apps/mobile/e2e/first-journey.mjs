@@ -161,7 +161,7 @@ try {
   }
   const shell = await page.locator('body').innerText();
   // Rooms replaces the old Groups tab; a new student has no rooms at all.
-  check(shell.includes('لا قاعات بعد'), 'rooms shell has a real empty state');
+  check(shell.includes('لا مجموعات دراسة بعد'), 'rooms shell has a real empty state');
   // Topics is the curriculum browser the frozen five added to the bar.
   check(shell.includes('كل ما يُدرَّس لمرحلتك'), 'topics tab states what it lists');
   /*
@@ -194,7 +194,7 @@ try {
   check(shell.includes('لا توجد محادثات'), 'chat shell has an empty state');
 
   console.log('step 6 — the social core loop (phase 2)');
-  await visibleText('الرئيسية').click();
+  await visibleText('اليوم').click();
   await settle('14-home-feed');
 
   const postBody = `منشور اختباري ${Date.now()}`;
@@ -241,15 +241,12 @@ try {
   await visibleText('القاعات').click();
   await settle('20-rooms-empty');
   check(
-    (await page.locator('body').innerText()).includes('لا قاعات بعد') ||
-      (await page.locator('body').innerText()).includes('لا مجموعات دراسة بعد'),
+    (await page.locator('body').innerText()).includes('لا مجموعات دراسة بعد'),
     'the rooms tab starts with a real empty state',
   );
 
   const groupName = `مجموعة الكلى ${Date.now().toString().slice(-6)}`;
-  await page.getByLabel('مجموعة جديدة').last().click().catch(async () => {
-    await page.getByText('مجموعة جديدة', { exact: true }).last().click();
-  });
+  await page.getByLabel('إنشاء مجموعة').last().click();
   await settle('21-create-group');
   check(
     await page.getByText('من يمكنه رؤية المجموعة').last().isVisible(),
@@ -288,7 +285,7 @@ try {
   await page.waitForTimeout(1200);
   await page.getByLabel('رجوع').last().click();
   await page.waitForTimeout(1500);
-  await visibleText('الرئيسية').click();
+  await visibleText('اليوم').click();
   await page.waitForTimeout(1500);
   // Exact label, not a substring. `بحث` is a substring of the Messages
   // screen's own people-search control, and that screen is mounted in the tab

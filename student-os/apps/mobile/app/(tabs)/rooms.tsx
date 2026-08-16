@@ -6,7 +6,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MetadataLine, SectionHeader } from '../../src/components/editorial';
 import { AcademicRow } from '../../src/components/rows';
-import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
+import { ErrorState, LoadingState } from '../../src/components/states';
 import { Text } from '../../src/components/Text';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
@@ -75,8 +75,6 @@ export default function Rooms(): React.JSX.Element {
     );
   }
 
-  const empty = classrooms.length === 0 && groups.length === 0;
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }} edges={['top']}>
       <ScrollView
@@ -99,15 +97,11 @@ export default function Rooms(): React.JSX.Element {
         </Text>
         <View style={{ height: 2, backgroundColor: theme.colors.text }} />
 
-        {empty ? (
-          <View style={{ flex: 1, minHeight: 260 }}>
-            <EmptyState
-              title={t('rooms.empty.title')}
-              body={t('rooms.empty.body')}
-              action={{ label: t('rooms.browse'), onPress: () => router.push('/classrooms') }}
-            />
-          </View>
-        ) : (
+        {/* Both sections always render: their trailing links (Browse, New
+            group) are the way IN, so a student with zero rooms needs them
+            most — a full-screen empty state here would hide the only two
+            affordances that fix it. */}
+        {
           <>
             <View>
               <SectionHeader
@@ -196,7 +190,7 @@ export default function Rooms(): React.JSX.Element {
               )}
             </View>
           </>
-        )}
+        }
       </ScrollView>
     </SafeAreaView>
   );
