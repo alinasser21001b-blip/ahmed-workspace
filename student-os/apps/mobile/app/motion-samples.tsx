@@ -79,7 +79,7 @@ const SAMPLES: Sample[] = [
     id: 'report-modal',
     title: '4 · Report modal',
     interaction: 'Open the report, then dismiss it. Context → focused task → context.',
-    note: 'enter 220 ms · 16 px lift and a dimmed context. No scale, no spring.',
+    note: 'enter 220 ms decelerating, dismiss settle 180 ms accelerating · 16 px lift, dimmed context. No scale, no spring.',
   },
   {
     id: 'send',
@@ -290,14 +290,22 @@ const timing = (
   toValue: number,
   duration: number,
   delay = 0,
+  direction: 'enter' | 'exit' = 'enter',
 ): Animated.CompositeAnimation =>
   Animated.timing(value, {
     toValue,
     duration,
     delay,
-    // Platform default. `Easing.out(Easing.quad)` is the closest RN equivalent
-    // of the system curve and carries no overshoot — nothing here springs.
-    easing: Easing.out(Easing.quad),
+    /*
+     * Platform default, split by direction the way every platform splits it:
+     * entrances decelerate (fast start, gentle landing) and exits accelerate
+     * (gentle start, fast departure). The installed motion skills state the
+     * same rule — entrance = ease-out family, exit = ease-in family, exits at
+     * ~65–75% of the entrance duration — and the dismissals below follow it
+     * using the frozen tokens (`settle` 180 ms against `enter` 220 ms ≈ 82%,
+     * the nearest the three frozen durations allow). No overshoot either way.
+     */
+    easing: direction === 'exit' ? Easing.in(Easing.quad) : Easing.out(Easing.quad),
     useNativeDriver: true,
   });
 
@@ -645,7 +653,11 @@ function ReportModal({ reduced }: { reduced: boolean }): React.JSX.Element {
 
   const toggle = (next: boolean): void => {
     setOpen(next);
-    timing(value, next ? 1 : 0, duration('enter')).start();
+    // Enter at 220 ms decelerating; leave at 180 ms accelerating. The return
+    // to context is quicker than the arrival because the student has finished
+    // — the skills' exit rule, expressed in the frozen tokens.
+    if (next) timing(value, 1, duration('enter')).start();
+    else timing(value, 0, duration('settle'), 0, 'exit').start();
   };
 
   return (
@@ -738,7 +750,7 @@ function MessageSend({ reduced }: { reduced: boolean }): React.JSX.Element {
   const send = (): void => {
     setSent(true);
     Animated.parallel([
-      timing(draft, 0, duration('instant')),
+      timing(draft, 0, duration('instant'), 0, 'exit'),
       timing(bubble, 1, duration('instant')),
       timing(state, 1, duration('settle'), reduced ? 0 : motion.instant),
     ]).start();
