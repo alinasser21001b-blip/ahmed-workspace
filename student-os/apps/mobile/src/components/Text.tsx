@@ -59,12 +59,23 @@ export interface TextProps extends RNTextProps {
   bidi?: 'locale' | 'auto';
 }
 
+/**
+ * Unicode isolates. `FSI` opens a run whose direction is resolved from its own
+ * first strong character; `PDI` closes it. Wrapping a value in them lets the
+ * *element* keep the interface direction while the *content* still orders
+ * itself correctly — which is the only way to truncate mixed text without the
+ * ellipsis jumping to the wrong side. See the truncation note below.
+ */
+const FSI = '⁨';
+const PDI = '⁩';
+
 export function Text({
   variant = 'body',
   tone = 'default',
   align = 'start',
   bidi = 'locale',
   style,
+  children,
   ...rest
 }: TextProps): React.JSX.Element {
   const theme = useTheme();
@@ -83,11 +94,41 @@ export function Text({
     danger: theme.colors.danger,
   }[tone];
 
-  // `start`/`end` rather than `left`/`right`: the platform resolves them
-  // against the writing direction, so Arabic text aligns correctly without a
-  // separate RTL branch at every call site.
-  const textAlign: TextStyle['textAlign'] =
-    align === 'center' ? 'center' : align === 'end' ? 'right' : 'left';
+  /*
+   * TRUNCATION AND DIRECTION.
+   *
+   * `numberOfLines` becomes `text-overflow: ellipsis` on web, and the ellipsis
+   * is placed at the *element's* line end — which follows the element's
+   * resolved direction, not the page's. So an Arabic-first group name inside
+   * `dir="auto"` resolved RTL and put its ellipsis on the visual left of an
+   * English page: «…n circle — مجموعة مراجعة الفسلجة». The mirror image
+   * happened to Latin names and source URLs in the Arabic interface.
+   *
+   * The fix is not to abandon automatic resolution but to move it inward: the
+   * element takes the interface direction (so the ellipsis lands at the reading
+   * end, where a reader looks for it), and the value is wrapped in an isolate
+   * so its own bidi ordering is still resolved from its own first strong
+   * character. Isolation is applied only when the text can actually be clipped;
+   * flowing text keeps plain `dir="auto"` paragraph resolution.
+   */
+  const truncates = typeof rest.numberOfLines === 'number' && rest.numberOfLines > 0;
+  const isolate = truncates && typeof children === 'string';
+
+  // Physical values, resolved here from the interface direction. Emitting
+  // `left`/`right` blindly was the bug: react-native-web never flips a literal
+  // `left`, so the Arabic build carried `text-align: left` on every line of
+  // copy. `start` on user-written text means "follow the content", which is a
+  // browser default worth keeping rather than overriding.
+  const start: TextStyle['textAlign'] = theme.isRTL ? 'right' : 'left';
+  const end: TextStyle['textAlign'] = theme.isRTL ? 'left' : 'right';
+  const textAlign: TextStyle['textAlign'] | undefined =
+    align === 'center'
+      ? 'center'
+      : align === 'end'
+        ? end
+        : bidi === 'auto' && !isolate
+          ? undefined
+          : start;
 
   /*
    * `writingDirection` is omitted entirely for auto text rather than set to
@@ -95,10 +136,12 @@ export function Text({
    * `dir="auto"`; supplying `writingDirection` compiles to a CSS `direction`
    * rule, and an explicit CSS direction overrides the `dir` attribute — which
    * is precisely how the automatic resolution was being defeated. On native,
-   * absent `writingDirection` already means 'auto'.
+   * absent `writingDirection` already means 'auto'. Isolated (truncating) text
+   * is the deliberate exception: there the element direction must be the
+   * interface's, because that is what decides the ellipsis side.
    */
   const direction: TextStyle =
-    bidi === 'auto' ? {} : { writingDirection: theme.isRTL ? 'rtl' : 'ltr' };
+    bidi === 'auto' && !isolate ? {} : { writingDirection: theme.isRTL ? 'rtl' : 'ltr' };
 
   /*
    * A `fontWeight` override becomes a *face* change, resolved here once.
@@ -112,7 +155,7 @@ export function Text({
    */
   const flat = StyleSheet.flatten([
     theme.typography[variant] as TextStyle,
-    { color, textAlign },
+    { color, ...(textAlign ? { textAlign } : {}) },
     direction,
     style,
   ]);
@@ -127,7 +170,11 @@ export function Text({
     delete flat.fontWeight;
   }
 
-  return <RNText style={flat} {...rest} />;
+  return (
+    <RNText style={flat} {...rest}>
+      {isolate ? `${FSI}${children as string}${PDI}` : children}
+    </RNText>
+  );
 }
 
 /** The static instance for (family group, weight), per `tokens.ts → fonts`. */

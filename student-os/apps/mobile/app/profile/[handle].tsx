@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import type { ContentItem, FeedPage, Profile, Relationship } from '@sos/contracts';
+import type { ContentItem, Conversation, FeedPage, Profile, Relationship } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
@@ -76,6 +76,26 @@ export default function ProfileScreen(): React.JSX.Element {
       setRelationship(next);
     } catch {
       /* the button simply stays as it was */
+    } finally {
+      setActing(false);
+    }
+  };
+
+  /**
+   * Opens (or reopens) the direct conversation with this person and goes to
+   * it. The endpoint is idempotent per unordered pair, so tapping Message
+   * twice cannot produce two threads with the same student.
+   */
+  const openConversation = async (): Promise<void> => {
+    setActing(true);
+    try {
+      const conversation = await api.post<Conversation>('/v1/conversations', {
+        recipientHandle: handle,
+      });
+      router.push(`/chat/${conversation.id}`);
+    } catch {
+      // Blocked in either direction, or offline. The profile stays put rather
+      // than navigating to a thread that does not exist.
     } finally {
       setActing(false);
     }
@@ -188,25 +208,29 @@ export default function ProfileScreen(): React.JSX.Element {
       <View style={{ height: 2, backgroundColor: theme.colors.text }} />
 
       {/*
-       * The only number on a profile. `followerCount` and `followingCount` are
-       * real fields and are deliberately not shown: a popularity metric beside
-       * a contribution metric lets the popularity one win, which is the drift
-       * into a vanity page this contract is written against.
+       * THE NUMBER THAT IS NOT HERE.
+       *
+       * A profile used to open with one display-sized figure labelled
+       * "contribution". The audit traced it to `profiles.contribution_score`:
+       * a column created with `DEFAULT 0` and a non-negativity check that no
+       * migration, service, trigger, job or seed ever writes. Every real
+       * student's profile therefore showed a 30 px `0` forever; the lively
+       * numbers people remembered seeing (12, 120, 25) existed only in the
+       * preview fixtures.
+       *
+       * Rendering a constant as if it were an achievement is the exact shape
+       * of a fake feature, so it is gone. The alternative — inventing a
+       * formula here — would be worse: a reputation number is a product
+       * decision with real social consequences, not a client-side sum. The
+       * column stays reserved, and 06-LEARNING-ARCHITECTURE.md records what a
+       * real computation would have to decide.
+       *
+       * `followerCount`/`followingCount` remain deliberately unshown for the
+       * original reason: a popularity metric beside anything else wins.
+       *
+       * What a profile carries instead is what it always should have: an
+       * academic identity, declared interests, and the person's actual posts.
        */}
-      <View
-        accessibilityLabel={`${localizeDigits(locale, profile.contributionScore)}, ${t('profile.contributionScore')}`}
-        style={{ flexDirection: 'row', alignItems: 'baseline', gap: theme.spacing.sm }}
-      >
-        {/* Display-sized, mono, on one baseline with its caption — frame 5d.
-            Mono because it is a numeral, display-sized because it is the only
-            number a profile is allowed. */}
-        <Text variant="numeric" style={{ fontSize: 30, lineHeight: 36 }}>
-          {localizeDigits(locale, profile.contributionScore)}
-        </Text>
-        <Text variant="metadata" tone="muted">
-          {t('profile.contributionScore')}
-        </Text>
-      </View>
 
       {profile.interests.length > 0 ? (
         <View style={{ gap: theme.spacing.sm }}>
@@ -245,19 +269,38 @@ export default function ProfileScreen(): React.JSX.Element {
         ) : relationship ? (
           // Not following → a filled Follow. Following → an outlined
           // "Following"; there is no dominant action on a profile you follow.
-          relationship.isFollowing ? (
-            <SecondaryAction
-              label={t('social.following')}
-              onPress={() => void toggleFollow()}
-              disabled={acting}
-            />
-          ) : (
-            <DominantAction
-              label={t('social.follow')}
-              onPress={() => void toggleFollow()}
-              loading={acting}
-            />
-          )
+          //
+          // Beside it, Message. `POST /v1/conversations` is idempotent per
+          // unordered pair and has existed since the messaging module landed,
+          // but nothing in the app ever called it: the Chat tab could only
+          // show conversations that already existed, and its own empty state
+          // sent you to search, which sent you to a profile, which offered no
+          // way to write to anyone. That was the one broken link in an
+          // otherwise complete messaging core.
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md }}>
+            <View style={{ flex: 1 }}>
+              {relationship.isFollowing ? (
+                <SecondaryAction
+                  label={t('social.following')}
+                  onPress={() => void toggleFollow()}
+                  disabled={acting}
+                />
+              ) : (
+                <DominantAction
+                  label={t('social.follow')}
+                  onPress={() => void toggleFollow()}
+                  loading={acting}
+                />
+              )}
+            </View>
+            <View style={{ flex: 1 }}>
+              <SecondaryAction
+                label={t('profile.message')}
+                onPress={() => void openConversation()}
+                disabled={acting}
+              />
+            </View>
+          </View>
         ) : null}
       </View>
 

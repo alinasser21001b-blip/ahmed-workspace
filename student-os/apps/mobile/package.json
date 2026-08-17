@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:unit": "vitest run --passWithNoTests",
-    "build:web": "tsx scripts/check-api-url.ts && expo export --platform web --output-dir dist --clear"
+    "build:web": "tsx scripts/check-api-url.ts && expo export --platform web --output-dir dist --clear && node scripts/patch-web-shell.mjs dist"
   },
   "dependencies": {
     "@expo-google-fonts/ibm-plex-mono": "^0.4.1",

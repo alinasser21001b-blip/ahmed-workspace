@@ -48,7 +48,23 @@ fi
 # what the DEPLOY_PRIME_URL version was reaching for in the first place.
 export EXPO_PUBLIC_API_URL=same-origin
 
-printf '\nBuilding the client against its own origin\n\n'
+# Realtime off, because this host cannot serve it.
+#
+# The WebSocket server and its client are both complete and both work against
+# the long-lived Fastify process. A Netlify Function cannot hold a connection
+# open — it is invoked per request and answers through `app.inject()` — so the
+# upgrade at /v1/realtime fails every time. Left unsaid, the client would retry
+# on a jittered backoff for the entire session against an endpoint that can
+# never answer.
+#
+# This is a statement about the host, not a feature switch: messaging still
+# sends and loads over HTTP, and both chat screens carry the translated line
+# saying live delivery is unavailable. Moving the API to a runtime that can
+# hold a socket is the documented unblock (09-EXTERNAL-SERVICES.md); such a
+# build simply does not set this.
+export EXPO_PUBLIC_REALTIME=0
+
+printf '\nBuilding the client against its own origin (realtime disabled: this host cannot hold a socket)\n\n'
 
 # Workspace packages first, then the API: the function imports `apps/api/dist`,
 # which does not exist until tsc has run.

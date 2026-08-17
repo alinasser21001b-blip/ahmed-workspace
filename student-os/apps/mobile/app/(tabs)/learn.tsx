@@ -7,7 +7,7 @@ import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { InkBand, MetadataLine, SectionHeader, TopBar } from '../../src/components/editorial';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
 import { Text } from '../../src/components/Text';
-import { useI18n } from '../../src/i18n/index';
+import { localizeDigits, useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { Enter } from '../../src/motion/index';
@@ -219,6 +219,42 @@ export default function Learn(): React.JSX.Element {
             ) : null}
           </>
         )}
+
+        {/*
+         * Saved — the destination for the bookmark. `savedCount` is the
+         * server's own figure, already carried by `/v1/learn` and, until now,
+         * fetched and thrown away on every visit. It is stated only when there
+         * is something to state: a "0" beside Saved is a scoreboard, not
+         * information.
+         */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            overview.savedCount > 0
+              ? `${t('learn.saved.open')}, ${localizeDigits(locale, overview.savedCount)}`
+              : t('learn.saved.open')
+          }
+          onPress={() => router.push('/saved')}
+          style={{
+            minHeight: 48,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.border,
+            paddingVertical: theme.spacing.md,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.md,
+          }}
+        >
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text variant="bodyStrong">{t('learn.saved.open')}</Text>
+          </View>
+          {overview.savedCount > 0 ? (
+            <Text variant="numeric" tone="muted">
+              {localizeDigits(locale, overview.savedCount)}
+            </Text>
+          ) : null}
+          <DirectionalIcon direction="forward" size={18} color={theme.colors.textFaint} />
+        </Pressable>
 
         {/* Classrooms — a destination, always reachable. */}
         <Pressable

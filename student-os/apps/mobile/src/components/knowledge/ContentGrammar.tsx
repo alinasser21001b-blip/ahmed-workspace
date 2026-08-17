@@ -93,6 +93,8 @@ export function ContentGrammar({
   sources,
   onPress,
   onPressAuthor,
+  onPressTopic,
+  actions,
 }: {
   item: ContentItem;
   density?: ContentDensity;
@@ -100,6 +102,20 @@ export function ContentGrammar({
   sources?: Pick<ContentSource, 'citation' | 'pageRef'>[];
   onPress?: () => void;
   onPressAuthor?: () => void;
+  /**
+   * Opens the post's own topic. Classification is the first thing a reader
+   * sees on every row, and in an academic feed it is also the most useful
+   * thing to follow — "more like this" here means the curriculum, not a
+   * recommendation engine.
+   */
+  onPressTopic?: () => void;
+  /**
+   * The interaction row, when the surface offers one. Passed in rather than
+   * built here so that the grammar keeps describing the object and the screen
+   * keeps owning what can be done to it — the feed acts on its own list state,
+   * the detail screen on a single fetched item.
+   */
+  actions?: React.ReactNode;
 }): React.JSX.Element {
   const theme = useTheme();
   const { t, locale } = useI18n();
@@ -125,7 +141,18 @@ export function ContentGrammar({
   const body = (
     <View style={{ gap: theme.spacing.sm, paddingVertical: theme.spacing.lg }}>
       {/* 1 — classification frames the claim, so it is read first. */}
-      <MetadataLine parts={classification} tone="structure" />
+      {onPressTopic ? (
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={classification.filter(Boolean).join(' · ')}
+          onPress={onPressTopic}
+          hitSlop={6}
+        >
+          <MetadataLine parts={classification} tone="structure" />
+        </Pressable>
+      ) : (
+        <MetadataLine parts={classification} tone="structure" />
+      )}
 
       {/* 2 — the knowledge body, in the editorial voice: Newsreader for
           Latin, Plex Arabic 600 for Arabic. This is the voice that makes a
@@ -185,15 +212,30 @@ export function ContentGrammar({
     </View>
   );
 
-  if (!onPress) return body;
+  // The actions sit outside the pressable body: tapping "like" must like, not
+  // open the post underneath it.
+  if (!onPress) {
+    return actions ? (
+      <View>
+        {body}
+        {actions}
+      </View>
+    ) : (
+      body
+    );
+  }
+
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}
-    >
-      {body}
-    </Pressable>
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => ({ opacity: pressed ? 0.9 : 1 })}
+      >
+        {body}
+      </Pressable>
+      {actions}
+    </View>
   );
 }
 

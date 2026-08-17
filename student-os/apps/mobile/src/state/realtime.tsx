@@ -32,6 +32,30 @@ const RECONNECT_BASE_MS = 1000;
 const RECONNECT_CAP_MS = 30_000;
 const TYPING_DEBOUNCE_MS = 1200;
 
+/**
+ * Whether this build should attempt a socket at all.
+ *
+ * Realtime is complete on both sides and works against a long-lived Fastify
+ * process. It cannot work on the deployed host: a Netlify Function is invoked
+ * per request and translates the request through `app.inject()`, so it never
+ * touches a socket and the upgrade fails every single time. Without this flag
+ * a deployed build spends the student's whole session retrying a connection
+ * that is architecturally impossible — jittered backoff to a 30 s cap, for as
+ * long as the tab is open, with a console error each round.
+ *
+ * So a build that is being deployed to a host which cannot hold a socket says
+ * so at build time (`EXPO_PUBLIC_REALTIME=0`), and the client stays honestly
+ * offline instead of pretending the connection is a moment away. The chat
+ * screens already render the permanent, translated "live delivery is
+ * unavailable — messages send and load normally" line from that status, which
+ * is the truth in this deployment.
+ *
+ * The default is ON. A build that says nothing gets the full product; only a
+ * host that is known to be incapable turns it off, and 04-ENVIRONMENT-CONTRACT.md
+ * records which environments set it. It is never inferred from a hostname.
+ */
+const REALTIME_ENABLED = process.env.EXPO_PUBLIC_REALTIME !== '0';
+
 export type ConnectionStatus = 'connecting' | 'open' | 'offline';
 
 interface RealtimeValue {
@@ -87,6 +111,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }): React.J
      * true in production on the current host.
      */
     if (IS_PREVIEW_MODE) return;
+    /*
+     * The same reasoning, for a real build on a host that cannot hold a
+     * socket. See REALTIME_ENABLED above: retrying forever against a runtime
+     * that can never upgrade is not resilience, it is noise.
+     */
+    if (!REALTIME_ENABLED) return;
     const token = getAccessToken();
     if (sessionStatus !== 'signedIn' || !token) return;
     if (socket.current && socket.current.readyState <= WebSocket.OPEN) return;

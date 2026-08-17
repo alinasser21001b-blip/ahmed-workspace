@@ -2,26 +2,43 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ContentItem, Profile } from '@sos/contracts';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActionSheet, ConfirmDialog } from '../../src/components/ActionSheet';
+import { Avatar } from '../../src/components/surfaces';
 import { Hairline, MetadataLine, SectionHeader } from '../../src/components/editorial';
+import { ContentActions } from '../../src/components/knowledge/ContentActions';
 import { ContentGrammar } from '../../src/components/knowledge/ContentGrammar';
+import { ReportSheet } from '../../src/components/ReportSheet';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
 import { Text } from '../../src/components/Text';
 import { localizeDigits, useI18n } from '../../src/i18n/index';
+import { bumpContentVersion } from '../../src/state/content-events';
 import { useSession } from '../../src/state/session';
 import { useFeed } from '../../src/state/useFeed';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { Enter } from '../../src/motion/index';
 
 /**
- * Home — per 11-HOME.md.
+ * Today — the primary academic social feed (owner decision, non-negotiable).
  *
  * Header (Student OS · date · cohort) → 2 px rule → section groups → tab bar.
  * Sections are classification statements, not engagement buckets:
  * "Classified to your topics" and "Under challenge". Each item is a
  * ContentGrammar row separated by hairlines. No cards. The eleven-pill badge
  * stack is gone.
+ *
+ * What changed in the recovery pass: Today used to be a reading surface that
+ * sent every act one screen deeper. The whole social loop — read, like,
+ * comment, save, open the author, open the topic, report, compose, return —
+ * now closes on this screen, against the endpoints the API has carried all
+ * along (`PUT /v1/content/:id/reaction`, `…/bookmark`, `POST /v1/reports`,
+ * cursor pagination on `/v1/feed`). Nothing here is a new counter or a new
+ * ranking: the numbers are the server's, and the order is still the feed's
+ * classification order, not an engagement score.
+ *
+ * The interaction model is the familiar one; the visual language is not. No
+ * cards, no pill stacks, no colour standing in for a state.
  *
  * Home has no dominant action; reading is the action. The resume band exists
  * in the design only for an open practice attempt, and no endpoint exposes
@@ -40,6 +57,10 @@ export default function Home(): React.JSX.Element {
   const feed = useFeed('home');
 
   const [profile, setProfile] = useState<Profile | null>(null);
+  /** The post whose overflow menu is open, and the sheets it can raise. */
+  const [menuFor, setMenuFor] = useState<ContentItem | null>(null);
+  const [reportFor, setReportFor] = useState<ContentItem | null>(null);
+  const [deleteFor, setDeleteFor] = useState<ContentItem | null>(null);
 
   useEffect(() => {
     void api
@@ -47,6 +68,26 @@ export default function Home(): React.JSX.Element {
       .then(setProfile)
       .catch(() => setProfile(null));
   }, [api]);
+
+  /**
+   * Deleting your own post. The endpoint has always existed
+   * (`DELETE /v1/content/:id`); nothing in the app ever called it, so a
+   * student could publish but never retract — the one asymmetry in the social
+   * model that no product would ship on purpose.
+   */
+  const deletePost = useCallback(
+    async (item: ContentItem): Promise<void> => {
+      try {
+        await api.request(`/v1/content/${item.id}`, { method: 'DELETE' });
+        bumpContentVersion();
+      } catch {
+        // The list is unchanged and the post is still there: refreshing is
+        // the honest recovery, not a local removal that lies about the server.
+        void feed.refresh();
+      }
+    },
+    [api, feed],
+  );
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: { item: Row }[] }) => {
@@ -113,6 +154,23 @@ export default function Home(): React.JSX.Element {
         >
           <Ionicons name="search-outline" size={22} color={theme.colors.text} />
         </Pressable>
+        {/*
+         * Your own face, as the way back to your own profile and to Settings.
+         * Before this, a student could reach their own profile only by finding
+         * one of their own posts — so account deletion, blocked accounts and
+         * the whole settings group sat behind an accident.
+         */}
+        {profile ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('nav.profile')}
+            onPress={() => router.push(`/profile/${profile.handle}`)}
+            hitSlop={8}
+            style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Avatar name={profile.displayName} size={28} />
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           // `compose.title`, not `nav.create`: this glyph opens the composer,
@@ -187,11 +245,36 @@ export default function Home(): React.JSX.Element {
                 density="feed"
                 onPress={() => router.push(`/post/${row.item.id}`)}
                 onPressAuthor={() => router.push(`/profile/${row.item.author.handle}`)}
+                onPressTopic={
+                  row.item.academic.topics[0]
+                    ? () => router.push(`/topic/${row.item.academic.topics[0]!.id}`)
+                    : undefined
+                }
+                actions={
+                  <ContentActions
+                    item={row.item}
+                    onToggleReaction={() => void feed.toggleReaction(row.item)}
+                    onToggleBookmark={() => void feed.toggleBookmark(row.item)}
+                    // Comments live on the post, where the thread is. The act
+                    // that belongs to the feed is deciding to join it.
+                    onComment={() => router.push(`/post/${row.item.id}`)}
+                    onMore={() => setMenuFor(row.item)}
+                  />
+                }
               />
               <Hairline />
             </View>
           );
         }}
+        onEndReached={() => void feed.loadMore()}
+        onEndReachedThreshold={0.6}
+        ListFooterComponent={
+          feed.status === 'loadingMore' ? (
+            <View style={{ paddingVertical: theme.spacing.xl }}>
+              <ActivityIndicator color={theme.colors.textMuted} />
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           <EmptyState
             title={t('feed.empty.title')}
@@ -206,6 +289,59 @@ export default function Home(): React.JSX.Element {
             tintColor={theme.colors.text}
           />
         }
+      />
+
+      {/*
+       * The quiet half of the social model. A student who meets something
+       * wrong in the feed can act on it there: report it, or — for their own
+       * post — withdraw it. Blocking stays on the profile, where you can see
+       * whom you are blocking; the report sheet offers that route on
+       * confirmation, which is the path the profile screen already uses.
+       */}
+      <ActionSheet
+        visible={menuFor !== null}
+        onClose={() => setMenuFor(null)}
+        items={
+          menuFor === null
+            ? []
+            : menuFor.viewer.isAuthor
+              ? [
+                  {
+                    label: t('post.delete'),
+                    tone: 'danger' as const,
+                    onPress: () => setDeleteFor(menuFor),
+                  },
+                ]
+              : [
+                  { label: t('post.report'), onPress: () => setReportFor(menuFor) },
+                  {
+                    label: t('post.openProfile'),
+                    onPress: () => router.push(`/profile/${menuFor.author.handle}`),
+                  },
+                ]
+        }
+      />
+      {reportFor ? (
+        <ReportSheet
+          visible
+          onClose={() => setReportFor(null)}
+          targetType="content"
+          targetId={reportFor.id}
+        />
+      ) : null}
+      <ConfirmDialog
+        visible={deleteFor !== null}
+        title={t('post.delete.confirm.title')}
+        body={t('post.delete.confirm.body')}
+        confirmLabel={t('post.delete')}
+        cancelLabel={t('action.cancel')}
+        danger
+        onCancel={() => setDeleteFor(null)}
+        onConfirm={() => {
+          const target = deleteFor;
+          setDeleteFor(null);
+          if (target) void deletePost(target);
+        }}
       />
     </SafeAreaView>
   );
