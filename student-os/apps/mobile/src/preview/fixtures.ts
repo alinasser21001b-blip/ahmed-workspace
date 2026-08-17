@@ -27,6 +27,7 @@ import type {
   PracticeAnswerResult,
   PracticeQuestion,
   PracticeSession,
+  PrivacySettings,
   Profile,
   ProfileSummary,
   Program,
@@ -1234,6 +1235,39 @@ export function search(query: string): SearchResults {
       })),
     groups: matches(studyGroup.name) || matches(studyGroup.description) ? [studyGroup] : [],
     communities: [],
+    topics: academicTopics
+      .filter((topic) => matches(topic.nameAr) || matches(topic.nameEn) || matches(topic.slug))
+      .map((topic) => {
+        const progress = evidence.get(topic.id);
+        const seen = progress?.seen ?? 0;
+        return {
+          id: topic.id,
+          name: localisedName(topic.nameAr, topic.nameEn),
+          subjectName: localisedName('الفسلجة', 'Physiology'),
+          courseName: localisedName('الفسلجة', 'Physiology'),
+          viewer:
+            seen > 0
+              ? {
+                  questionsSeen: seen,
+                  questionsCorrect: progress?.correct ?? 0,
+                  lowConfidence: seen < MIN_QUESTIONS_FOR_CONFIDENCE,
+                }
+              : null,
+        };
+      }),
+    classrooms:
+      matches(classroom.title) || matches(classroom.courseName) || matches('MED204')
+        ? [
+            {
+              id: classroom.id,
+              title: classroom.title,
+              courseName: classroom.courseName,
+              courseCode: 'MED204',
+              memberCount: classroom.memberCount,
+              viewer: { isMember: true, canRead: true, canJoin: false },
+            },
+          ]
+        : [],
   };
 }
 
@@ -1264,6 +1298,23 @@ export const supportLinks: SupportLinks = {
   supportEmail: null,
 };
 
+const initialPrivacy = (): PrivacySettings => ({
+  profileVisibility: 'stage',
+  defaultPostVisibility: 'stage',
+  whoCanMessage: 'stage',
+  showOnlineStatus: true,
+  showLastSeen: true,
+  showActivity: true,
+  searchable: true,
+});
+
+export let privacy = initialPrivacy();
+
+export function updatePrivacy(patch: Partial<PrivacySettings>): PrivacySettings {
+  privacy = { ...privacy, ...patch };
+  return privacy;
+}
+
 // ---------------------------------------------------------------------------
 // reset — a deleted account (or a test) starts the world over
 
@@ -1275,5 +1326,6 @@ export function resetWorld(): void {
   conversationStore = initialConversations();
   relationships = initialRelationships();
   lectureProgress.clear();
+  privacy = initialPrivacy();
   idCounter = 0;
 }

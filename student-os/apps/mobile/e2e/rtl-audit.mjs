@@ -354,6 +354,7 @@ const SCREENS = [
   { name: 'classroom-detail', path: `/classrooms/${classroom.id}` },
   { name: 'classroom-new', path: '/classrooms/new' },
   { name: 'lecture', path: `/lecture/${auditLecture.id}` },
+  { name: 'privacy', path: '/settings/privacy' },
 ];
 
 for (const viewport of VIEWPORTS) {

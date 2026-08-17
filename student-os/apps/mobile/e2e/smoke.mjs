@@ -270,6 +270,15 @@ check(Array.isArray(normalised.content), 'Arabic search with folded letters retu
 const englishSearch = await search(A, 'nephrotic');
 check(englishSearch.content.length >= 1, 'English search finds English content');
 
+const topicSearch = await search(A, 'Nephrotic', 'topics');
+check(
+  topicSearch.topics.some((topic) => /nephrotic/i.test(topic.name)),
+  'topic search finds Nephrotic Syndrome',
+);
+
+const classroomSearch = await search(A, 'قاعة', 'classrooms');
+check(Array.isArray(classroomSearch.classrooms), 'classroom search returns a classrooms array');
+
 const mixedSearch = await search(A, 'Respiratory');
 check(mixedSearch.content.length >= 1, 'search finds English inside a mixed-language post');
 

@@ -185,13 +185,27 @@ describe('fixture transport — search, relationships, compliance', () => {
   it('search exposes only the contract-supported result classes', async () => {
     const results = await call<SearchResults>('GET', '/v1/search', {}, q({ q: 'الفسلجة' }));
     expect(Object.keys(results.payload).sort()).toEqual([
+      'classrooms',
       'communities',
       'content',
       'groups',
       'people',
       'query',
+      'topics',
     ]);
     expect(results.payload.groups).toHaveLength(1);
+    expect(results.payload.classrooms.map((row) => row.id)).toContain('classroom-1');
+  });
+
+  it('finds a topic by name and carries the viewer’s evidence', async () => {
+    const results = await call<SearchResults>('GET', '/v1/search', {}, q({ q: 'acid' }));
+    const hit = results.payload.topics.find((topic) => topic.id === 't-acid-base');
+    expect(hit).toBeDefined();
+    expect(hit?.viewer).toEqual({
+      questionsSeen: 6,
+      questionsCorrect: 4,
+      lowConfidence: false,
+    });
   });
 
   it('block and unblock mutate only fixture state, and the block list follows', async () => {

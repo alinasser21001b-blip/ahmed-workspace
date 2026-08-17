@@ -45,6 +45,37 @@ function readJson(path) {
 
 process.stdout.write('\nApp Store release gate\n\n');
 
+// --- 0. Preview fixtures must not ship in a store build ---------------------
+//
+// EXPO_PUBLIC_PREVIEW_MODE is inlined at export time. A store or production
+// web build that has it set is a fixture build, not the product. The flag
+// being unset is necessary and not sufficient — the artifact must also not
+// contain the fixture people, which is asserted when a web export is present.
+
+{
+  const flag = process.env.EXPO_PUBLIC_PREVIEW_MODE ?? '';
+  if (flag === '1' || flag === 'true') {
+    fail(
+      'EXPO_PUBLIC_PREVIEW_MODE is unset for a store build',
+      `got "${flag}" — a preview fixture build cannot be submitted`,
+    );
+  } else {
+    ok('EXPO_PUBLIC_PREVIEW_MODE is unset');
+  }
+
+  const dist = join(MOBILE, 'dist');
+  if (existsSync(dist)) {
+    const { stdout } = await run('grep', ['-R', '--fixed-strings', 'Layla Hassan', dist], {
+      encoding: 'utf8',
+    }).catch((error) => ({ stdout: typeof error.stdout === 'string' ? error.stdout : '' }));
+    if (stdout.trim()) {
+      fail('production web bundle contains no preview fixtures', 'found "Layla Hassan" in apps/mobile/dist');
+    } else {
+      ok('production web bundle contains no preview fixture names');
+    }
+  }
+}
+
 // --- 1. Production API address ----------------------------------------------
 //
 // Read directly, not inferred: the same loopback/HTTPS rules the app itself
