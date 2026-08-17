@@ -28,6 +28,7 @@ import { PreviewBanner } from '../src/preview/PreviewBanner';
 import { RealtimeProvider } from '../src/state/realtime';
 import { SessionProvider } from '../src/state/session';
 import { ThemeProvider } from '../src/theme/ThemeProvider';
+import { installWebCanvas } from '../src/theme/web-canvas';
 
 /**
  * Root layout: providers, writing direction, fonts, and the top-level
@@ -37,6 +38,10 @@ import { ThemeProvider } from '../src/theme/ThemeProvider';
  * leaves half the tree mirrored, so the device locale is read at startup and
  * applied before the first paint.
  */
+// At module scope, before any render: the canvas rule must exist before the
+// first paint, and first paint is already held until the fonts resolve.
+installWebCanvas();
+
 export default function RootLayout(): React.JSX.Element | null {
   /*
    * The frozen faces — four families, nine static instances, no variable
@@ -72,7 +77,9 @@ export default function RootLayout(): React.JSX.Element | null {
         <ThemeProvider>
           <SessionProvider>
             <RealtimeProvider>
-            <StatusBar style="auto" />
+            {/* Dark glyphs on the paper ground — the theme no longer follows the
+                OS scheme, so the status bar must not either. */}
+            <StatusBar style="dark" />
             <PreviewBanner />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />

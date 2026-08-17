@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { useColorScheme, I18nManager } from 'react-native';
+import { I18nManager } from 'react-native';
 import { isRTLLocale, useI18n } from '../i18n/index';
-import { darkColors, lightColors, radius, shadow, spacing, typography, typographyFor, type ThemeColors } from './tokens';
+import { lightColors, radius, shadow, spacing, typography, typographyFor, type ThemeColors } from './tokens';
 
 /**
  * Theme access.
@@ -24,9 +24,23 @@ export interface Theme {
 const ThemeContext = createContext<Theme | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }): React.JSX.Element {
-  const scheme = useColorScheme();
   const { locale } = useI18n();
-  const isDark = scheme === 'dark';
+
+  /*
+   * Light, always — not "light unless the OS says dark".
+   *
+   * The frozen identity is the paper/ink system; the dark theme is explicitly
+   * DEFERRED and unreviewed (`FRAME-MAP.md` marks the one dark frame as an
+   * unapproved exploration, and no dark palette was ever accepted). Following
+   * `useColorScheme()` here meant every student and reviewer whose device is
+   * in dark mode was shown a theme nobody approved, as the default — which is
+   * exactly how the owner first saw the product.
+   *
+   * `darkColors` stays in tokens.ts for the future review that ships it, but
+   * nothing selects it until that review happens. When it does, this is the
+   * one line that changes.
+   */
+  const isDark = false;
 
   /*
    * Direction comes from the LOCALE, not from `I18nManager.isRTL`.
@@ -49,7 +63,7 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.JSX.
    */
   const theme = useMemo<Theme>(
     () => ({
-      colors: isDark ? darkColors : lightColors,
+      colors: lightColors,
       spacing,
       radius,
       typography: typographyFor(isRTLLocale(locale)),
