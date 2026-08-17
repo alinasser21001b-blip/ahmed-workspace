@@ -11,6 +11,28 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# ---------------------------------------------------------------------------
+# The dedicated preview site builds fixtures, never the real system.
+#
+# `student-os-preview`'s production branch is the preview branch, so its
+# deploys run this script in the *production* context — which builds the API
+# function and, when a database is attached, migrates and seeds it. That is
+# exactly what a student preview must never do. The first deploy after the
+# site's base directory was fixed did it: one live function, a real client,
+# published at the preview URL.
+#
+# The site therefore carries EXPO_PUBLIC_PREVIEW_MODE=1 in its own Netlify
+# environment, and this guard hands the whole build to the preview script:
+# fixture client, no function bundled (so /v1/* has nothing to reach), no
+# connection string ever resolved, no migration, no seed. Fail-closed by
+# construction — the real production site never sets the variable, and an
+# unset variable takes the unchanged path below.
+# ---------------------------------------------------------------------------
+if [ "${EXPO_PUBLIC_PREVIEW_MODE:-}" = "1" ]; then
+  printf '\nEXPO_PUBLIC_PREVIEW_MODE=1 — building the fixture preview, not the system\n\n'
+  exec bash "$(dirname "$0")/netlify-preview-build.sh"
+fi
+
 # The API and the client are served from the same origin, so the client does not
 # need to be told a host at all — it uses whichever one served the page.
 #
