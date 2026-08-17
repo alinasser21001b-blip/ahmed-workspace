@@ -36,8 +36,23 @@ function check(condition, label) {
  * `count()` sees text from screens the user cannot see. Every assertion here
  * is about what is on screen, so visibility is the right test.
  */
+/**
+ * Exact text matching, tolerant of the bidi isolates the text primitive adds.
+ *
+ * Single-line text that can be clipped is wrapped in U+2068…U+2069 so its
+ * ellipsis lands at the reading end (see `src/components/Text.tsx`). Those are
+ * invisible formatting characters — a screen reader ignores them — but they sit
+ * in the DOM, so an `exact: true` match on the human-readable string no longer
+ * matches. Matching on the string with optional isolates keeps these
+ * assertions exact about what a person sees.
+ */
+function exactly(text) {
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return new RegExp(`^\u2068?${escaped}\u2069?$`, 'u');
+}
+
 async function visibleCount(page, text) {
-  const locator = page.getByText(text, { exact: true });
+  const locator = page.getByText(exactly(text));
   const total = await locator.count();
   let seen = 0;
   for (let i = 0; i < total; i += 1) {
@@ -48,7 +63,7 @@ async function visibleCount(page, text) {
 
 async function waitVisible(page, text, timeout = 20_000) {
   await page
-    .getByText(text, { exact: true })
+    .getByText(exactly(text))
     .filter({ visible: true })
     .first()
     .waitFor({ state: 'visible', timeout });
@@ -243,9 +258,20 @@ async function run(locale, width) {
 
   // --- profile ------------------------------------------------------------
   await page.goto(`${BASE}/profile/layla.hassan`, { waitUntil: 'networkidle' });
+  /*
+   * The contribution score is gone, and its absence is now the assertion.
+   *
+   * It read `profiles.contribution_score`, a column with `DEFAULT 0` that no
+   * code in the repository ever writes — so every real student saw a permanent
+   * zero, while these preview fixtures showed a lively 12 and made the number
+   * look earned. This test used to certify that illusion.
+   */
   const contribution = locale === 'ar' ? 'نقاط المساهمة' : 'Contribution score';
-  await waitVisible(page, contribution);
-  check(true, 'profile renders the contribution score');
+  await waitVisible(page, locale === 'ar' ? 'المنشورات' : 'Posts');
+  check(
+    (await visibleCount(page, contribution)) === 0,
+    'profile shows no unearned contribution score',
+  );
   const followWord = locale === 'ar' ? 'تتابعه' : 'Following';
   check(
     await visibleCount(page, followWord) > 0,

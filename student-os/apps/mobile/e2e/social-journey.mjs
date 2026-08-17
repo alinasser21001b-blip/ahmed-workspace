@@ -78,6 +78,39 @@ const body = () => page.locator('body').innerText();
  * the innermost element that contains both the post's text and its actions,
  * and the assertions mean what they say.
  */
+/**
+ * Brings the post under test into the list's rendered window.
+ *
+ * The feed is virtualised and grows every time this journey runs, so a row can
+ * legitimately not be in the DOM yet. Scrolling until it is keeps the test
+ * honest about the feature (the row IS reachable) rather than depending on the
+ * post happening to land in the first window.
+ */
+async function scrollTo(postText) {
+  for (let attempt = 0; attempt < 14; attempt += 1) {
+    if ((await page.getByText(postText, { exact: false }).count()) > 0) {
+      await page.getByText(postText, { exact: false }).last().scrollIntoViewIfNeeded();
+      return true;
+    }
+    /*
+     * The list scrolls its own container, not the window — a wheel event aimed
+     * at the page does nothing, which is why an earlier version of this helper
+     * scrolled fourteen times and found nothing. Drive whichever element is
+     * actually scrollable, and walk it back to the top first: the row we want
+     * is the newest post, so it is above wherever the list was left.
+     */
+    await page.evaluate((step) => {
+      const scrollers = Array.from(document.querySelectorAll('div')).filter(
+        (node) => node.scrollHeight > node.clientHeight + 20,
+      );
+      for (const scroller of scrollers) scroller.scrollTop += step;
+      window.scrollBy(0, step);
+    }, attempt === 0 ? -100_000 : 700);
+    await page.waitForTimeout(450);
+  }
+  return false;
+}
+
 function actionIn(postText, label) {
   return page
     .locator('div')
@@ -133,6 +166,7 @@ try {
   check((await body()).includes(postBody), 'the new post is in the Today feed');
 
   console.log('step 3 — like and unlike, on the feed itself');
+  check(await scrollTo(postBody), 'the post is reachable in the feed list');
   const like = actionIn(postBody, 'إعجاب');
   check(await like.isVisible(), 'the feed row carries a like control');
   await like.click();
@@ -157,6 +191,7 @@ try {
   );
 
   console.log('step 4 — save, read back on Saved, unsave');
+  await scrollTo(postBody);
   await actionIn(postBody, 'حفظ').click();
   await settle('14-saved', 1800);
   check(
@@ -183,6 +218,7 @@ try {
   await settle('18-back-to-learn', 1500);
   await visibleText('اليوم').click();
   await settle('19-today', 1800);
+  check(await scrollTo(postBody), 'the post is still reachable after returning to Today');
   await actionIn(postBody, 'تعليق').click();
   await settle('20-post-detail', 2000);
   const comment = `التصنيف حسب مرحلة الاعتلال مفيد هنا — ${stamp}`;
@@ -193,6 +229,7 @@ try {
 
   await page.getByLabel('رجوع').last().click();
   await settle('22-feed-after-comment', 2000);
+  await scrollTo(postBody);
   check(
     (await page
       .locator('div')

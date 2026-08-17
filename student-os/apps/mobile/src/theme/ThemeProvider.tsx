@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { I18nManager } from 'react-native';
+import { I18nManager, View, type ViewProps } from 'react-native';
 import { isRTLLocale, useI18n } from '../i18n/index';
 import { lightColors, radius, shadow, spacing, typography, typographyFor, type ThemeColors } from './tokens';
 
@@ -74,7 +74,42 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.JSX.
     [isDark, isRTL, locale],
   );
 
-  return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;
+  /*
+   * The direction context react-native-web actually reads.
+   *
+   * Every logical style in this codebase — `borderStartWidth`, `paddingStart`,
+   * `marginStart` — is compiled to a physical property at render time, and
+   * react-native-web decides which physical side that is from the element's
+   * own `dir` prop or the nearest ancestor that set one (its
+   * `writingDirection`, see `StyleSheet/index.js`). It does NOT read
+   * `document.dir`, and `I18nManager.isRTL` is false on web.
+   *
+   * Nothing in the app ever set that prop, so the context stayed 'ltr' and
+   * every logical style resolved to its left-hand form in Arabic too. The
+   * provenance rule — a 2 px teal border that should hug the start of the
+   * citation — sat on the left of a right-aligned Arabic line, detached from
+   * the text it belongs to. Visual QA caught it; no assertion did, because the
+   * RTL audit measures document direction rather than which side a border
+   * landed on.
+   *
+   * One `dir` at the root fixes the whole class: every logical property below
+   * this point now resolves against the interface language, on every screen,
+   * without a single call site branching on direction.
+   */
+  /*
+   * `dir` is a web-only prop, so it is not in React Native's `ViewProps` and
+   * has to be passed through a cast. On native it is simply ignored, where
+   * `I18nManager` already does this job.
+   */
+  const directionProps = { dir: isRTL ? 'rtl' : 'ltr' } as unknown as ViewProps;
+
+  return (
+    <ThemeContext.Provider value={theme}>
+      <View {...directionProps} style={{ flex: 1 }}>
+        {children}
+      </View>
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme(): Theme {

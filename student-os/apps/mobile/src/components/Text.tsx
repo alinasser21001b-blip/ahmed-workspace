@@ -108,11 +108,21 @@ export function Text({
    * element takes the interface direction (so the ellipsis lands at the reading
    * end, where a reader looks for it), and the value is wrapped in an isolate
    * so its own bidi ordering is still resolved from its own first strong
-   * character. Isolation is applied only when the text can actually be clipped;
-   * flowing text keeps plain `dir="auto"` paragraph resolution.
+   * character.
+   *
+   * SINGLE LINE ONLY, and that limit is the whole of the lesson. Applying this
+   * to a multi-line body puts a paragraph of English inside an RTL paragraph,
+   * and the trailing full stop moves to the left-hand end: «Second line.»
+   * renders as «.Second line». Visual QA caught exactly that in the Arabic feed
+   * — the same defect this file's own comment warns about further down,
+   * reintroduced by the fix for its mirror image.
+   *
+   * So: names, titles and labels that get clipped are isolated; flowing text a
+   * student wrote keeps plain `dir="auto"` paragraph resolution, where the
+   * clamp's ellipsis already lands at the end of the content's own direction.
    */
-  const truncates = typeof rest.numberOfLines === 'number' && rest.numberOfLines > 0;
-  const isolate = truncates && typeof children === 'string';
+  const flatChildren = flattenText(children);
+  const isolate = rest.numberOfLines === 1 && flatChildren !== null;
 
   // Physical values, resolved here from the interface direction. Emitting
   // `left`/`right` blindly was the bug: react-native-web never flips a literal
@@ -172,9 +182,33 @@ export function Text({
 
   return (
     <RNText style={flat} {...rest}>
-      {isolate ? `${FSI}${children as string}${PDI}` : children}
+      {isolate ? `${FSI}${flatChildren}${PDI}` : children}
     </RNText>
   );
+}
+
+/**
+ * The children as one string, or `null` if they are not purely textual.
+ *
+ * JSX hands `<Text>{label} — sample data</Text>` over as an array of strings,
+ * not as one, so a plain `typeof children === 'string'` test misses exactly the
+ * interpolated lines most likely to mix scripts — a Latin name beside Arabic
+ * copy is the case the isolate exists for. Anything containing elements is left
+ * alone: wrapping a component tree in isolate characters is not meaningful.
+ */
+function flattenText(children: React.ReactNode): string | null {
+  if (typeof children === 'string') return children;
+  if (typeof children === 'number') return String(children);
+  if (Array.isArray(children)) {
+    const parts: string[] = [];
+    for (const child of children) {
+      if (typeof child === 'string') parts.push(child);
+      else if (typeof child === 'number') parts.push(String(child));
+      else return null;
+    }
+    return parts.join('');
+  }
+  return null;
 }
 
 /** The static instance for (family group, weight), per `tokens.ts → fonts`. */
