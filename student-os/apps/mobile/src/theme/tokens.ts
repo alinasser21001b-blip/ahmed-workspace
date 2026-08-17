@@ -209,23 +209,91 @@ export const radius = {
  * `metadata`; anything smaller fails the contrast and Dynamic Type rules in
  * `docs/design-handoff/06-TYPOGRAPHY.md` and `23-ACCESSIBILITY.md`.
  */
-export const typography = {
-  display: { fontSize: 30, lineHeight: 40, fontWeight: '700' },
-  /** Latin only. Arabic uses `displayArabic`, which needs more leading. */
-  displaySerif: { fontSize: 32, lineHeight: 38, fontWeight: '500' },
-  /** Arabic only. Taller line box: the script carries more vertical detail. */
-  displayArabic: { fontSize: 30, lineHeight: 46, fontWeight: '600' },
-  title: { fontSize: 22, lineHeight: 32, fontWeight: '700' },
-  heading: { fontSize: 18, lineHeight: 28, fontWeight: '600' },
-  body: { fontSize: 16, lineHeight: 26, fontWeight: '400' },
-  bodyStrong: { fontSize: 16, lineHeight: 26, fontWeight: '600' },
-  label: { fontSize: 14, lineHeight: 22, fontWeight: '600' },
-  /** Interface facts: timestamps, counts, roles, source lines. The metadata role. */
-  metadata: { fontSize: 13, lineHeight: 20, fontWeight: '500' },
-  /** Mono, tabular. Numeric and reference roles only — counts, pH, doses, page refs. */
-  numeric: { fontSize: 15, lineHeight: 22, fontWeight: '500' },
-  caption: { fontSize: 13, lineHeight: 20, fontWeight: '500' },
+/**
+ * Font faces — the four frozen families, static weights only
+ * (`06-TYPOGRAPHY.md`, `tokens.json → fontsToBundle`). The names are the
+ * registration names `expo-font` is given in `app/_layout.tsx`; each name IS
+ * a weight, so no role sets `fontWeight` alongside a family — asking the
+ * renderer to synthesize a bolder stroke over a real 500 file is how faux
+ * bold sneaks in.
+ */
+export const fonts = {
+  serif400: 'Newsreader_400Regular',
+  serif500: 'Newsreader_500Medium',
+  sans400: 'IBMPlexSans_400Regular',
+  sans500: 'IBMPlexSans_500Medium',
+  sans600: 'IBMPlexSans_600SemiBold',
+  arabic400: 'IBMPlexSansArabic_400Regular',
+  arabic500: 'IBMPlexSansArabic_500Medium',
+  arabic600: 'IBMPlexSansArabic_600SemiBold',
+  mono500: 'IBMPlexMono_500Medium',
 } as const;
+
+/**
+ * The role table from `06-TYPOGRAPHY.md`, expressed per script.
+ *
+ * Latin and Arabic do not share a display face: Newsreader has no Arabic
+ * coverage, so the display *role* is constant and the *voice* changes by
+ * script — Newsreader 500 against IBM Plex Sans Arabic 600, whose numbers
+ * differ so the optical weight matches. Arabic line heights run taller
+ * throughout because the script carries more vertical detail; an Arabic
+ * screen is legitimately taller than the same English screen.
+ *
+ * Resolved once in the ThemeProvider from the locale, so every call site
+ * keeps reading `theme.typography.body` and stays script-unaware.
+ */
+export const typographyFor = (arabic: boolean) =>
+  ({
+    /** Screen title role — 30, serif voice. */
+    display: arabic
+      ? { fontFamily: fonts.arabic600, fontSize: 30, lineHeight: 44 }
+      : { fontFamily: fonts.serif500, fontSize: 30, lineHeight: 36, letterSpacing: -0.45 },
+    /** Display role — 32, mastheads. */
+    displaySerif: arabic
+      ? { fontFamily: fonts.arabic600, fontSize: 30, lineHeight: 46 }
+      : { fontFamily: fonts.serif500, fontSize: 32, lineHeight: 38, letterSpacing: -0.48 },
+    /** Explicitly-Arabic display, for screens that branch by content script. */
+    displayArabic: { fontFamily: fonts.arabic600, fontSize: 30, lineHeight: 46 },
+    /** Sub-screen title — modal headers, dialog titles. Display voice. */
+    title: arabic
+      ? { fontFamily: fonts.arabic600, fontSize: 22, lineHeight: 32 }
+      : { fontFamily: fonts.serif500, fontSize: 22, lineHeight: 30, letterSpacing: -0.33 },
+    /**
+     * Knowledge body (`EditorialHeading level="knowledge"`): the editorial
+     * voice for the content students actually read — feed, search, profile
+     * posts, topic previews. Newsreader 400 / Plex Arabic 600 per `06`.
+     */
+    heading: arabic
+      ? { fontFamily: fonts.arabic600, fontSize: 20, lineHeight: 33 }
+      : { fontFamily: fonts.serif400, fontSize: 20, lineHeight: 29 },
+    body: arabic
+      ? { fontFamily: fonts.arabic400, fontSize: 15.5, lineHeight: 29 }
+      : { fontFamily: fonts.sans400, fontSize: 15.5, lineHeight: 25 },
+    bodyStrong: arabic
+      ? { fontFamily: fonts.arabic600, fontSize: 15.5, lineHeight: 29 }
+      : { fontFamily: fonts.sans600, fontSize: 15.5, lineHeight: 25 },
+    /** Button/link role — 15.5, weight 600. */
+    label: arabic
+      ? { fontFamily: fonts.arabic600, fontSize: 15.5, lineHeight: 26 }
+      : { fontFamily: fonts.sans600, fontSize: 15.5, lineHeight: 22 },
+    /** Interface facts: timestamps, counts, roles, source lines. 13/20. */
+    metadata: arabic
+      ? { fontFamily: fonts.arabic500, fontSize: 13, lineHeight: 22 }
+      : { fontFamily: fonts.sans500, fontSize: 13, lineHeight: 20 },
+    /** Mono, tabular. Numeric and reference roles only. */
+    numeric: {
+      fontFamily: fonts.mono500,
+      fontSize: 15,
+      lineHeight: 22,
+      fontVariant: ['tabular-nums'],
+    },
+    caption: arabic
+      ? { fontFamily: fonts.arabic400, fontSize: 13, lineHeight: 22 }
+      : { fontFamily: fonts.sans400, fontSize: 13, lineHeight: 20 },
+  }) as const;
+
+/** Latin table, kept for the type and for rare pre-provider call sites. */
+export const typography = typographyFor(false);
 
 export type TypographyVariant = keyof typeof typography;
 

@@ -108,6 +108,7 @@ export default tseslint.config(
         WebSocket: 'readonly',
         FormData: 'readonly',
         Blob: 'readonly',
+        URL: 'readonly',
       },
     },
   },

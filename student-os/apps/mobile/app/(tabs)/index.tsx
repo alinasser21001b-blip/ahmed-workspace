@@ -8,10 +8,11 @@ import { Hairline, MetadataLine, SectionHeader } from '../../src/components/edit
 import { ContentGrammar } from '../../src/components/knowledge/ContentGrammar';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
 import { Text } from '../../src/components/Text';
-import { useI18n } from '../../src/i18n/index';
+import { localizeDigits, useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useFeed } from '../../src/state/useFeed';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Home — per 11-HOME.md.
@@ -29,7 +30,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
  */
 
 type Row =
-  | { kind: 'section'; key: string; title: string; tone: 'structure' | 'challenged' }
+  | { kind: 'section'; key: string; title: string; tone: 'structure' | 'challenged'; count?: number }
   | { kind: 'item'; key: string; item: ContentItem };
 
 export default function Home(): React.JSX.Element {
@@ -64,11 +65,23 @@ export default function Home(): React.JSX.Element {
     const classified = feed.items.filter((item) => item.signals.provenance !== 'disputed');
     const list: Row[] = [];
     if (classified.length > 0) {
-      list.push({ kind: 'section', key: 'section-classified', title: t('feed.classified'), tone: 'structure' });
+      list.push({
+        kind: 'section',
+        key: 'section-classified',
+        title: t('feed.classified'),
+        tone: 'structure',
+        count: classified.length,
+      });
       for (const item of classified) list.push({ kind: 'item', key: item.id, item });
     }
     if (challenged.length > 0) {
-      list.push({ kind: 'section', key: 'section-challenged', title: t('feed.underChallenge'), tone: 'challenged' });
+      list.push({
+        kind: 'section',
+        key: 'section-challenged',
+        title: t('feed.underChallenge'),
+        tone: 'challenged',
+        count: challenged.length,
+      });
       for (const item of challenged) list.push({ kind: 'item', key: item.id, item });
     }
     return list;
@@ -145,7 +158,7 @@ export default function Home(): React.JSX.Element {
           paddingTop: theme.spacing.lg,
           paddingBottom: theme.spacing.xxl,
         }}
-        ListHeaderComponent={header}
+        ListHeaderComponent={<Enter>{header}</Enter>}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 60, minimumViewTime: 800 }}
         renderItem={({ item: row, index }) => {
@@ -157,7 +170,13 @@ export default function Home(): React.JSX.Element {
                   paddingBottom: theme.spacing.xs,
                 }}
               >
-                <SectionHeader title={row.title} tone={row.tone} />
+                <SectionHeader
+                  title={row.title}
+                  tone={row.tone}
+                  {...(row.count !== undefined
+                    ? { trailing: localizeDigits(locale, row.count) }
+                    : {})}
+                />
               </View>
             );
           }

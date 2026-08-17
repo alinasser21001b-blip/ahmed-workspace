@@ -1,8 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Pressable, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { localizeDigits, useI18n } from '../../i18n/index';
 import { useTheme } from '../../theme/ThemeProvider';
+import { Enter, timing, useMotion } from '../../motion/index';
 import { Hairline } from '../editorial';
 import { EvidenceDelta, type EvidencePair } from '../evidence';
 import { Text } from '../Text';
@@ -82,7 +84,7 @@ export function PracticeHeader({
           />
         ))}
       </View>
-      <Text variant="metadata" tone="inverse" accessibilityLabel={t('practice.progress', { current: index + 1, total })}>
+      <Text variant="numeric" tone="inverse" accessibilityLabel={t('practice.progress', { current: index + 1, total })}>
         {t('practice.counter', {
           current: localizeDigits(locale, index + 1),
           total: localizeDigits(locale, total),
@@ -119,6 +121,7 @@ export function AnswerOption({
 }): React.JSX.Element {
   const theme = useTheme();
   const { t, locale } = useI18n();
+  const { instant, reduced } = useMotion();
 
   const letter = (locale === 'ar' ? LETTERS_AR : LETTERS_EN)[index] ?? String(index + 1);
 
@@ -127,34 +130,59 @@ export function AnswerOption({
    * colour alone: the key carries a checkmark and the word "Correct"; a wrong
    * choice carries "You chose"; the rest dim.
    */
-  let borderColor = theme.colors.border;
-  let borderWidth = 1.5;
-  let background = theme.colors.surface;
+  /*
+   * The frame's grammar: options are hairline-separated ROWS of the page,
+   * not boxes floating on it. A choice is stated by filling the row and
+   * ruling it top and bottom at 2 px in ink — the same weight the masthead
+   * rule carries — plus a trailing check. Never colour alone.
+   */
+  let ruleColor = theme.colors.border;
+  let ruleWidth = 1;
+  let background: string = 'transparent';
   let dimmed = false;
+  let emphasized = false;
   let stateWord: string | null = null;
   let stateTone: 'default' | 'challenged' = 'default';
 
   if (!revealed && selected) {
-    borderColor = theme.colors.text;
-    borderWidth = 2;
+    ruleColor = theme.colors.text;
+    ruleWidth = 2;
     background = theme.colors.surfaceSelected;
+    emphasized = true;
   } else if (revealed) {
     if (isCorrect) {
-      borderColor = theme.colors.text;
-      borderWidth = 2;
+      ruleColor = theme.colors.text;
+      ruleWidth = 2;
       background = theme.colors.surfaceSelected;
+      emphasized = true;
       stateWord = t('practice.correct');
     } else if (wasChosen) {
-      borderColor = theme.colors.challenged;
-      borderWidth = 2;
+      ruleColor = theme.colors.challenged;
+      ruleWidth = 2;
       stateWord = t('practice.youChose');
       stateTone = 'challenged';
     } else {
-      borderColor = theme.colors.border;
-      borderWidth = 1;
       dimmed = true;
     }
   }
+
+  /*
+   * The fill arrives over `instant` as the opacity of a paper layer rather
+   * than as an animated colour: it reads the same, it stays on the
+   * compositor, and no design token is tweened.
+   *
+   * The two 2 px rules are deliberately NOT animated. They are real borders,
+   * and a border width is layout — fading them would mean either shifting the
+   * row by a pixel mid-transition or drawing a second set of lines over the
+   * first. At 120 ms the rule and the fill are not separable events, and the
+   * approved static geometry is worth more than the difference.
+   */
+  const fill = useRef(new Animated.Value(emphasized ? 1 : 0)).current;
+  useEffect(() => {
+    const animation = timing(fill, emphasized ? 1 : 0, { duration: instant, reduced });
+    animation.start();
+    return () => animation.stop();
+  }, [emphasized, fill, instant, reduced]);
 
   const a11ySuffix = revealed
     ? isCorrect
@@ -168,23 +196,44 @@ export function AnswerOption({
     <Pressable
       accessibilityRole={kind === 'multi' ? 'checkbox' : 'radio'}
       accessibilityState={{ checked: selected, disabled: revealed }}
+      // RNW 0.21 does not derive aria-checked from accessibilityState, so a
+      // screen reader heard "radio" and never which one was chosen.
+      aria-checked={selected}
       accessibilityLabel={`${label}${a11ySuffix}`}
       disabled={revealed}
       onPress={onPress}
       style={({ pressed }) => ({
-        borderColor,
-        borderWidth,
-        borderRadius: theme.radius.sm,
-        backgroundColor: background,
+        borderTopColor: ruleColor,
+        borderTopWidth: ruleWidth,
+        borderBottomColor: ruleColor,
+        borderBottomWidth: emphasized || (revealed && wasChosen && !isCorrect) ? ruleWidth : 0,
+        // Negative margin keeps adjacent hairlines from doubling where an
+        // emphasized row's bottom rule meets the next row's top rule.
+        marginTop: -1,
+        // The colour lives on the animated layer below; at rest the two are
+        // indistinguishable, which is the point.
+        backgroundColor: 'transparent',
         minHeight: 56,
-        paddingHorizontal: theme.spacing.lg,
+        paddingHorizontal: theme.spacing.xs,
         paddingVertical: theme.spacing.md,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: theme.spacing.md,
+        gap: theme.spacing.lg,
         opacity: pressed && !revealed ? 0.9 : 1,
       })}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          backgroundColor: background === 'transparent' ? 'transparent' : background,
+          opacity: fill,
+        }}
+      />
       {kind === 'multi' ? (
         <View
           accessible={false}
@@ -228,6 +277,9 @@ export function AnswerOption({
           </View>
         ) : null}
       </View>
+      {kind !== 'multi' && selected && !revealed ? (
+        <Ionicons accessible={false} name="checkmark" size={20} color={theme.colors.text} />
+      ) : null}
     </Pressable>
   );
 }
@@ -265,20 +317,32 @@ export function FeedbackPanel({
 }): React.JSX.Element {
   const theme = useTheme();
   const { t } = useI18n();
+  const { stagger } = useMotion();
 
+  /*
+   * The order is the causality: was I right → why → what changed. Each beat
+   * is `settle`, 60 ms apart, which is enough to read as consequence and not
+   * enough to read as a performance.
+   *
+   * The evidence fraction fades in with its line. It never counts up —
+   * `05-TOKENS.md` rejects the evidence tween by name, because animating the
+   * number dramatises a figure the product states quietly on purpose.
+   */
   return (
     <View style={{ gap: theme.spacing.md }}>
       {/* Verdict + why-label. Incorrect is "Why", never "Wrong". */}
-      <Text
-        variant="bodyStrong"
-        tone={isCorrect ? 'default' : 'challenged'}
-        accessibilityLiveRegion="polite"
-      >
-        {isCorrect ? t('practice.correct') : t('practice.incorrect')}
-      </Text>
+      <Enter rise={4}>
+        <Text
+          variant="bodyStrong"
+          tone={isCorrect ? 'default' : 'challenged'}
+          accessibilityLiveRegion="polite"
+        >
+          {isCorrect ? t('practice.correct') : t('practice.incorrect')}
+        </Text>
+      </Enter>
 
       {explanation ? (
-        <View style={{ gap: theme.spacing.xs }}>
+        <Enter rise={4} delay={stagger} style={{ gap: theme.spacing.xs }}>
           <Text
             variant="metadata"
             tone={isCorrect ? 'default' : 'challenged'}
@@ -287,12 +351,13 @@ export function FeedbackPanel({
             {isCorrect ? t('practice.whyRight') : t('practice.why')}
           </Text>
           <ExplanationBlock>{explanation}</ExplanationBlock>
-        </View>
+        </Enter>
       ) : null}
 
       <Hairline />
 
       {/* The evidence delta — or its honest absences. */}
+      <Enter rise={4} delay={stagger * 2}>
       {alreadyAnswered ? (
         // A stored result moved no counter; showing a delta would be a lie.
         <Text variant="metadata" tone="muted">
@@ -320,6 +385,7 @@ export function FeedbackPanel({
           ) : null}
         </View>
       )}
+      </Enter>
     </View>
   );
 }

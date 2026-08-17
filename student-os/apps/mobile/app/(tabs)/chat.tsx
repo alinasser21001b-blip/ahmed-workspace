@@ -13,6 +13,7 @@ import { localizeDigits, useI18n } from '../../src/i18n/index';
 import { useRealtime } from '../../src/state/realtime';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * The conversation list — per 15-MESSAGES.md.
@@ -102,7 +103,7 @@ export default function Chat(): React.JSX.Element {
           paddingBottom: theme.spacing.xxl,
           flexGrow: 1,
         }}
-        ListHeaderComponent={header}
+        ListHeaderComponent={<Enter>{header}</Enter>}
         refreshControl={
           <RefreshControl
             refreshing={status === 'refreshing'}

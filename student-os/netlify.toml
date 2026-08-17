@@ -18,6 +18,52 @@
   # The lockfile pins pnpm; corepack honours `packageManager` in package.json.
   NODE_VERSION = "22"
 
+# ---------------------------------------------------------------------------
+# Deploy Previews and branch deploys: the student preview.
+#
+# Production above is unchanged and stays unchanged — this only overrides the
+# non-production contexts, which Netlify serves at their own URLs.
+#
+# A Deploy Preview of this product must not be "production with a different
+# hostname". The build above bundles the API function and runs `db:migrate` and
+# `db:seed` against whatever database the site resolves, so an inherited-config
+# preview would migrate and seed the real database and then hand students a URL
+# that writes to it. That is the failure this block exists to make impossible.
+#
+# `EXPO_PUBLIC_PREVIEW_MODE` is set here rather than in the Netlify UI so that
+# the reason a build serves fixtures lives in the repository, arrives with the
+# commit, and shows up in a diff — not in a dashboard field nobody reviews.
+#
+# What is NOT set is the more important half. No `NETLIFY_DB_URL`,
+# `DATABASE_URL` or `JWT_SECRET` appears anywhere in this file, and the preview
+# build script never reads one.
+# ---------------------------------------------------------------------------
+
+[context.deploy-preview]
+  command = "bash scripts/netlify-preview-build.sh"
+  publish = "apps/mobile/dist"
+  # An empty directory, so the deploy carries no function at all. `/v1/*` then
+  # resolves to nothing and 404s, which is the correct way for a fixture build
+  # to fail: loudly, locally, and without a server on the other end.
+  functions = "netlify/no-functions"
+
+[context.deploy-preview.environment]
+  EXPO_PUBLIC_PREVIEW_MODE = "1"
+  EXPO_PUBLIC_API_URL = "same-origin"
+  NODE_VERSION = "22"
+
+# Identical treatment for a branch deploy, so the preview is the same artifact
+# whether it is reached through a pull request or through a branch subdomain.
+[context.branch-deploy]
+  command = "bash scripts/netlify-preview-build.sh"
+  publish = "apps/mobile/dist"
+  functions = "netlify/no-functions"
+
+[context.branch-deploy.environment]
+  EXPO_PUBLIC_PREVIEW_MODE = "1"
+  EXPO_PUBLIC_API_URL = "same-origin"
+  NODE_VERSION = "22"
+
 [functions]
   # No `node_bundler` here on purpose. Netlify packages v2 functions with nft
   # regardless of what this says — asking for esbuild produced an artifact

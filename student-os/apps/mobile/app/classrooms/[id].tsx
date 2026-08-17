@@ -16,6 +16,7 @@ import { Text } from '../../src/components/Text';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Classroom — per 14-CLASSROOM.md.
@@ -122,21 +123,30 @@ export default function ClassroomScreen(): React.JSX.Element {
         onBack={() => router.back()}
       />
 
-      {roleLabel ? <RoleLabel label={roleLabel} /> : null}
-
       {classroom.description ? (
         <Text variant="body" tone="secondary" bidi="auto">
           {classroom.description}
         </Text>
       ) : null}
 
-      <MetadataLine
-        parts={[
-          t('classroom.members.count', { count: classroom.memberCount }),
-          classroom.instructor?.displayName ?? null,
-          classroom.isArchived ? t('classrooms.archived') : null,
-        ]}
-      />
+      {/* Role chip and counts share one row, as frame 5a composes them. */}
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: theme.spacing.md,
+        }}
+      >
+        {roleLabel ? <RoleLabel label={roleLabel} /> : null}
+        <MetadataLine
+          parts={[
+            t('classroom.members.count', { count: classroom.memberCount }),
+            classroom.instructor?.displayName ?? null,
+            classroom.isArchived ? t('classrooms.archived') : null,
+          ]}
+        />
+      </View>
 
       {/* Teaching staff only — the server sends null to everyone else. The
           code stays LTR in both languages: a code shown right-to-left is a
@@ -164,33 +174,6 @@ export default function ClassroomScreen(): React.JSX.Element {
                   : {})}
               />
               <MemberAvatarRow members={members} total={classroom.memberCount} />
-            </View>
-          ) : null}
-
-          {/* The one dominant action a member sees. */}
-          {mostRecent ? (
-            <View
-              style={{
-                backgroundColor: theme.colors.text,
-                borderRadius: theme.radius.md,
-                padding: theme.spacing.lg,
-                gap: theme.spacing.md,
-              }}
-            >
-              <View style={{ gap: theme.spacing.xxs }}>
-                <Text variant="metadata" style={{ color: theme.colors.borderStrong }}>
-                  {t('classroom.mostRecent')}
-                </Text>
-                <Text variant="bodyStrong" tone="inverse" bidi="auto">
-                  {mostRecent.title}
-                </Text>
-              </View>
-              <DominantAction
-                label={t('classroom.openLecture')}
-                onPress={() => router.push(`/lecture/${mostRecent.id}`)}
-                inverse
-                inline
-              />
             </View>
           ) : null}
 
@@ -224,8 +207,42 @@ export default function ClassroomScreen(): React.JSX.Element {
           paddingBottom: theme.spacing.xxxl,
           flexGrow: 1,
         }}
-        ListHeaderComponent={header}
-        ListFooterComponent={isMember && lectures.length > 0 ? <Hairline /> : null}
+        ListHeaderComponent={<Enter>{header}</Enter>}
+        ListFooterComponent={
+          isMember && mostRecent ? (
+            /* The one dominant action a member sees — the ink band opening
+               the most recent lecture. It sits at the foot of the content,
+               above the tab bar, scrolling with it (14 §Scrolling). */
+            <View style={{ paddingTop: theme.spacing.xl, gap: theme.spacing.md }}>
+              <Hairline />
+              <View
+                style={{
+                  backgroundColor: theme.colors.text,
+                  borderRadius: theme.radius.md,
+                  padding: theme.spacing.lg,
+                  gap: theme.spacing.md,
+                }}
+              >
+                <View style={{ gap: theme.spacing.xxs }}>
+                  <Text variant="metadata" style={{ color: theme.colors.borderStrong }}>
+                    {t('classroom.mostRecent')}
+                  </Text>
+                  <Text variant="heading" tone="inverse" bidi="auto">
+                    {mostRecent.title}
+                  </Text>
+                </View>
+                <DominantAction
+                  label={t('classroom.openLecture')}
+                  onPress={() => router.push(`/lecture/${mostRecent.id}`)}
+                  inverse
+                  inline
+                />
+              </View>
+            </View>
+          ) : isMember && lectures.length > 0 ? (
+            <Hairline />
+          ) : null
+        }
         refreshControl={
           <RefreshControl
             refreshing={status === 'refreshing'}

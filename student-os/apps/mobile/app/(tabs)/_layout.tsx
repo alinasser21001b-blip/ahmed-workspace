@@ -4,21 +4,20 @@ import { StyleSheet, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useI18n } from '../../src/i18n/index';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { fonts } from '../../src/theme/tokens';
 
 /** Tab bar height before the safe-area inset is added. */
 const TAB_BAR_HEIGHT = 74;
 
 /**
- * Primary navigation (§54).
+ * Primary navigation — the frozen five (04-NAVIGATION.md).
  *
- * Exactly five destinations: Home, Groups, Create, Learn, Chat. Profile lives
- * behind the avatar, notifications and search are global. The temptation is to
- * keep adding tabs; the constraint is the point, because a ten-tab bar means
- * nothing is primary.
- *
- * `Learn` is deliberately its own destination rather than a section inside
- * Home. If studying is reachable only by scrolling past a social feed, the
- * product is a social app with coursework attached.
+ * Today · Topics · Learn · Rooms · Chat. Composing does not get a tab: a tab
+ * answers "where am I", and Compose is an act, reached from Home's masthead
+ * glyph and from the surfaces that publish. `Learn` is deliberately its own
+ * destination rather than a section inside Home — if studying is reachable
+ * only by scrolling past a feed, the product is a social app with coursework
+ * attached.
  */
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -89,29 +88,31 @@ export default function TabsLayout(): React.JSX.Element {
          * The label is never the only carrier — the glyph and position state it
          * too. Do not copy this exception to any other surface.
          */
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        /*
+         * 12 px is the floor here and it is a deliberate, isolated exception:
+         * five Arabic labels clip at 13 on a 360 px screen. The face is the
+         * real 600 instance — the navigator styles its own Text, so the
+         * primitive's faux-bold guard does not cover this call site.
+         */
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontFamily: theme.isRTL ? fonts.arabic600 : fonts.sans600,
+        },
         tabBarItemStyle: { paddingHorizontal: 0 },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: t('nav.home'),
-          tabBarIcon: (props) => <TabIcon name="home-outline" {...props} />,
+          title: t('nav.today'),
+          tabBarIcon: (props) => <TabIcon name="reader-outline" {...props} />,
         }}
       />
       <Tabs.Screen
-        name="groups"
+        name="topics"
         options={{
-          title: t('nav.groups'),
-          tabBarIcon: (props) => <TabIcon name="people-outline" {...props} />,
-        }}
-      />
-      <Tabs.Screen
-        name="create"
-        options={{
-          title: t('nav.create'),
-          tabBarIcon: (props) => <TabIcon name="add-circle-outline" bump={4} {...props} />,
+          title: t('nav.topics'),
+          tabBarIcon: (props) => <TabIcon name="library-outline" {...props} />,
         }}
       />
       <Tabs.Screen
@@ -122,10 +123,17 @@ export default function TabsLayout(): React.JSX.Element {
         }}
       />
       <Tabs.Screen
+        name="rooms"
+        options={{
+          title: t('nav.rooms'),
+          tabBarIcon: (props) => <TabIcon name="people-outline" {...props} />,
+        }}
+      />
+      <Tabs.Screen
         name="chat"
         options={{
           title: t('nav.chat'),
-          tabBarIcon: (props) => <TabIcon name="chatbubbles-outline" {...props} />,
+          tabBarIcon: (props) => <TabIcon name="chatbubble-ellipses-outline" {...props} />,
         }}
       />
     </Tabs>

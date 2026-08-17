@@ -7,13 +7,14 @@ import { useState } from 'react';
 import { Image, Pressable, TextInput, View } from 'react-native';
 import { ApiError, NetworkError } from '../src/api/client';
 import { Button } from '../src/components/Button';
-import { DominantAction, SectionHeader } from '../src/components/editorial';
+import { ChipPicker, DominantAction, SecondaryAction, SectionHeader } from '../src/components/editorial';
 import { Text } from '../src/components/Text';
 import { Screen } from '../src/components/states';
 import { useI18n, type TranslationKey } from '../src/i18n/index';
 import { bumpContentVersion } from '../src/state/content-events';
 import { API_BASE_URL, useSession } from '../src/state/session';
 import { useTheme } from '../src/theme/ThemeProvider';
+import { Enter } from '../src/motion/index';
 
 /**
  * Post composer (§56).
@@ -126,6 +127,7 @@ export default function Compose(): React.JSX.Element {
 
   return (
     <Screen scroll>
+      <Enter>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text accessibilityRole="header" variant="title">
           {t('compose.title')}
@@ -191,22 +193,14 @@ export default function Compose(): React.JSX.Element {
             onPress={() => setAttachment(null)}
           />
         </View>
-      ) : (
-        <Button
-          label={uploading ? t('compose.uploading') : t('compose.addImage')}
-          variant="secondary"
-          loading={uploading}
-          onPress={() => void pickImage()}
-          fullWidth
-        />
-      )}
+      ) : null}
 
       {/* The audience is the loudest decision and the only pre-selected
           control: a default nobody noticed is how a private note reaches a
           cohort. */}
       <View style={{ gap: theme.spacing.sm, display: groupId ? 'none' : 'flex' }}>
         <SectionHeader title={t('compose.whoCanSee')} />
-        <ChoiceRow
+        <ChipPicker
           label={t('compose.whoCanSee')}
           options={VISIBILITY_OPTIONS.map((option) => ({
             value: option.value,
@@ -225,7 +219,7 @@ export default function Compose(): React.JSX.Element {
        */}
       <View style={{ gap: theme.spacing.sm }}>
         <SectionHeader title={t('compose.whatKind')} trailing={t('compose.optional')} />
-        <ChoiceRow
+        <ChipPicker
           label={`${t('compose.whatKind')}, ${t('compose.optional')}`}
           options={KNOWLEDGE_TYPES.map((value) => ({
             value,
@@ -238,7 +232,7 @@ export default function Compose(): React.JSX.Element {
 
       <View style={{ gap: theme.spacing.sm }}>
         <SectionHeader title={t('compose.difficulty')} trailing={t('compose.optional')} />
-        <ChoiceRow
+        <ChipPicker
           label={`${t('compose.difficulty')}, ${t('compose.optional')}`}
           options={DIFFICULTIES.map((value) => ({
             value,
@@ -267,12 +261,25 @@ export default function Compose(): React.JSX.Element {
         {t('compose.clearHint')}
       </Text>
 
-      <DominantAction
-        label={t('compose.publish')}
-        onPress={() => void publish()}
-        loading={publishing}
-        disabled={!canPublish}
-      />
+      {/* Frame 5d's closing row: the outline Image entry beside the ink
+          Publish. One dominant action; Image is secondary by construction. */}
+      <View style={{ flexDirection: 'row', gap: theme.spacing.md }}>
+        {attachment === null ? (
+          <SecondaryAction
+            label={uploading ? t('compose.uploading') : t('compose.addImage')}
+            disabled={uploading}
+            onPress={() => void pickImage()}
+          />
+        ) : null}
+        <DominantAction
+          label={t('compose.publish')}
+          onPress={() => void publish()}
+          loading={publishing}
+          disabled={!canPublish}
+          style={{ flex: 1 }}
+        />
+      </View>
+      </Enter>
     </Screen>
   );
 }
@@ -284,60 +291,6 @@ export default function Compose(): React.JSX.Element {
  * behaved this way since Phase 2 and the classification pickers reuse it rather
  * than inventing a second look for the same decision.
  */
-function ChoiceRow<T extends string>({
-  options,
-  selected,
-  onSelect,
-  label,
-}: {
-  options: { value: T; label: string }[];
-  selected: T | null;
-  onSelect: (value: T) => void;
-  /** Labels the radiogroup, so the section title is announced with the chips. */
-  label: string;
-}): React.JSX.Element {
-  const theme = useTheme();
-  return (
-    <View
-      accessibilityRole="radiogroup"
-      accessibilityLabel={label}
-      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}
-    >
-      {options.map((option) => {
-        const active = selected === option.value;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={option.label}
-            onPress={() => onSelect(option.value)}
-            style={{
-              borderRadius: theme.radius.pill,
-              borderWidth: active ? 0 : 1.5,
-              borderColor: theme.colors.borderStrong,
-              // A choice made is an ink fill — the same weight the dominant
-              // action carries, and never teal.
-              backgroundColor: active ? theme.colors.text : 'transparent',
-              paddingHorizontal: theme.spacing.lg,
-              minHeight: 44,
-              justifyContent: 'center',
-            }}
-          >
-            <Text
-              variant="metadata"
-              tone={active ? 'inverse' : 'secondary'}
-              style={{ fontWeight: active ? '600' : '500' }}
-            >
-              {option.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 function uploadErrorKey(caught: unknown): TranslationKey {
   if (caught instanceof NetworkError) return 'state.offline';
   if (caught instanceof ApiError) {

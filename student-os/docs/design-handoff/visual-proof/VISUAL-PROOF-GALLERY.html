@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Student OS Visual Proof</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{
+  --paper:#F7F6F3; --card:#FFFFFF; --ink:#14181F; --muted:#6E6A60;
+  --line:#DEE2E9; --rule:#14181F; --structure:#2C3A82; --accent:#178774;
+  --shadow:0 1px 2px rgba(11,16,32,.06),0 8px 24px rgba(11,16,32,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F1216; --card:#161A20; --ink:#ECEFF3; --muted:#9BA3AE;
+    --line:#2A303A; --rule:#ECEFF3; --structure:#93A4F0; --accent:#4FCFB4;
+    --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 28px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F1216; --card:#161A20; --ink:#ECEFF3; --muted:#9BA3AE;
+  --line:#2A303A; --rule:#ECEFF3; --structure:#93A4F0; --accent:#4FCFB4;
+  --shadow:0 1px 2px rgba(0,0,0,.5),0 8px 28px rgba(0,0,0,.45);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font:400 16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:34px 20px 80px}
+
+header{border-bottom:2px solid var(--rule);padding-bottom:16px;margin-bottom:8px}
+h1{font-size:30px;line-height:1.2;margin:0 0 6px;letter-spacing:-.01em;font-weight:600}
+.sub{color:var(--muted);font-size:14.5px;margin:0}
+.meta{color:var(--muted);font:500 12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:10px;word-break:break-all}
+
+.legend{display:flex;flex-wrap:wrap;gap:18px;margin:22px 0 10px;font-size:13.5px;color:var(--muted)}
+.legend b{color:var(--ink);font-weight:600}
+
+nav.index{margin:18px 0 30px}
+.index h2{font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--structure);margin:0 0 10px;font-weight:600}
+.index ol{list-style:none;margin:0;padding:0;display:grid;gap:6px;
+  grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.index a{display:flex;align-items:baseline;gap:9px;text-decoration:none;color:var(--ink);
+  padding:9px 11px;border:1px solid var(--line);border-radius:7px;background:var(--card);
+  min-height:44px}
+.index a:hover{border-color:var(--ink)}
+.index .n{font:500 12px ui-monospace,Menlo,monospace;color:var(--muted);min-width:20px}
+.index .ar{margin-inline-start:auto;font-size:11.5px;color:var(--muted);letter-spacing:.04em}
+
+section.sheet{margin:40px 0;scroll-margin-top:18px}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin-bottom:4px}
+.head h3{font-size:22px;margin:0;font-weight:600;letter-spacing:-.005em}
+.tag{font:500 11.5px ui-monospace,Menlo,monospace;padding:3px 7px;border-radius:5px;
+  background:var(--structure);color:#fff}
+.tag.ar{background:var(--accent)}
+.frameref{color:var(--muted);font-size:13.5px}
+.sides{display:flex;gap:8px;margin:10px 0 12px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.sides span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dot.ref{background:var(--structure)}
+.dot.impl{background:var(--accent)}
+
+figure{margin:0}
+.shot{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;
+  background:var(--card);box-shadow:var(--shadow);cursor:zoom-in}
+figcaption{margin-top:9px;font-size:13px;color:var(--muted)}
+
+.pager{display:flex;justify-content:space-between;gap:12px;margin-top:16px}
+.pager a,.pager span{flex:1;text-align:center;padding:12px 14px;border:1px solid var(--line);
+  border-radius:8px;text-decoration:none;color:var(--ink);background:var(--card);font-size:14px;
+  min-height:44px;display:flex;align-items:center;justify-content:center}
+.pager a:hover{border-color:var(--ink)}
+.pager span{opacity:.4}
+
+#lb{position:fixed;inset:0;background:rgba(8,10,14,.94);display:none;z-index:50;
+  overflow:auto;padding:56px 14px 20px;-webkit-overflow-scrolling:touch}
+#lb.open{display:block}
+#lb img{display:block;margin:0 auto;max-width:none;image-rendering:auto}
+#lb .bar{position:fixed;top:0;left:0;right:0;height:48px;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;padding:0 14px;background:rgba(8,10,14,.96);color:#fff;
+  font-size:14px}
+#lb button{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;
+  border-radius:7px;padding:8px 13px;font-size:14px;min-height:38px;cursor:pointer}
+#lb .fit{font:500 12.5px ui-monospace,Menlo,monospace;opacity:.8}
+
+@media (max-width:640px){
+  .wrap{padding:22px 14px 60px}
+  h1{font-size:24px}
+  .index ol{grid-template-columns:1fr 1fr}
+}
+</style>
+</head><body>
+<div class="wrap">
+<header>
+<h1>Student OS — visual proof</h1>
+<p class="sub">Fourteen comparison sheets at 390&nbsp;px. Left is the approved Claude Design reference frame; right is the current Student OS implementation.</p>
+<p class="meta">HEAD c607c9ae4cb47f1e847422845652feecc3028fc2 · OWNER_VISUAL_APPROVAL = PENDING · images unmodified from docs/design-handoff/visual-proof/pairs/</p>
+</header>
+<div class="legend">
+<span><b>Tap or click</b> any sheet to open it at full resolution.</span>
+<span><b>← →</b> move between sheets while zoomed; <b>Esc</b> closes.</span>
+</div>
+<nav class="index"><h2>The fourteen screens</h2><ol>
+<li><a href="#home"><span class="n">01</span><span>Home</span></a></li>
+<li><a href="#learn"><span class="n">02</span><span>Learn</span></a></li>
+<li><a href="#topic"><span class="n">03</span><span>Topic</span></a></li>
+<li><a href="#practice"><span class="n">04</span><span>Practice</span></a></li>
+<li><a href="#classroom"><span class="n">05</span><span>Classroom</span></a></li>
+<li><a href="#messages"><span class="n">06</span><span>Messages</span></a></li>
+<li><a href="#search"><span class="n">07</span><span>Search</span></a></li>
+<li><a href="#profile"><span class="n">08</span><span>Profile</span></a></li>
+<li><a href="#compose"><span class="n">09</span><span>Compose</span></a></li>
+<li><a href="#settings"><span class="n">10</span><span>Settings</span></a></li>
+<li><a href="#home-ar"><span class="n">11</span><span>Home</span><span class="ar">AR / RTL</span></a></li>
+<li><a href="#learn-ar"><span class="n">12</span><span>Learn</span><span class="ar">AR / RTL</span></a></li>
+<li><a href="#topic-ar"><span class="n">13</span><span>Topic</span><span class="ar">AR / RTL</span></a></li>
+<li><a href="#practice-ar"><span class="n">14</span><span>Practice</span><span class="ar">AR / RTL</span></a></li>
+</ol></nav>
+<section class="sheet" id="home">
+<div class="head">
+<span class="tag">EN</span>
+<h3>01 · Home</h3>
+<span class="frameref">Reference frame <b>3a[0]</b> · spec <b>11</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/home.png" alt="Home — reference beside implementation" data-title="Home" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 3a[0]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<span>← start</span>
+<a href="#learn">Learn →</a>
+</div>
+</section>
+<section class="sheet" id="learn">
+<div class="head">
+<span class="tag">EN</span>
+<h3>02 · Learn</h3>
+<span class="frameref">Reference frame <b>3a[1]</b> · spec <b>12</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/learn.png" alt="Learn — reference beside implementation" data-title="Learn" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 3a[1]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#home">← Home</a>
+<a href="#topic">Topic →</a>
+</div>
+</section>
+<section class="sheet" id="topic">
+<div class="head">
+<span class="tag">EN</span>
+<h3>03 · Topic</h3>
+<span class="frameref">Reference frame <b>3a[2]</b> · spec <b>12</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/topic.png" alt="Topic — reference beside implementation" data-title="Topic" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 3a[2]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#learn">← Learn</a>
+<a href="#practice">Practice →</a>
+</div>
+</section>
+<section class="sheet" id="practice">
+<div class="head">
+<span class="tag">EN</span>
+<h3>04 · Practice</h3>
+<span class="frameref">Reference frame <b>3a[3]</b> · spec <b>13</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/practice.png" alt="Practice — reference beside implementation" data-title="Practice" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 3a[3]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#topic">← Topic</a>
+<a href="#classroom">Classroom →</a>
+</div>
+</section>
+<section class="sheet" id="classroom">
+<div class="head">
+<span class="tag">EN</span>
+<h3>05 · Classroom</h3>
+<span class="frameref">Reference frame <b>5a[0]</b> · spec <b>14</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/classroom.png" alt="Classroom — reference beside implementation" data-title="Classroom" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 5a[0]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#practice">← Practice</a>
+<a href="#messages">Messages →</a>
+</div>
+</section>
+<section class="sheet" id="messages">
+<div class="head">
+<span class="tag">EN</span>
+<h3>06 · Messages</h3>
+<span class="frameref">Reference frame <b>5b[0]</b> · spec <b>15</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/messages.png" alt="Messages — reference beside implementation" data-title="Messages" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 5b[0]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#classroom">← Classroom</a>
+<a href="#search">Search →</a>
+</div>
+</section>
+<section class="sheet" id="search">
+<div class="head">
+<span class="tag">EN</span>
+<h3>07 · Search</h3>
+<span class="frameref">Reference frame <b>5c[0]</b> · spec <b>16</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/search.png" alt="Search — reference beside implementation" data-title="Search" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 5c[0]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#messages">← Messages</a>
+<a href="#profile">Profile →</a>
+</div>
+</section>
+<section class="sheet" id="profile">
+<div class="head">
+<span class="tag">EN</span>
+<h3>08 · Profile</h3>
+<span class="frameref">Reference frame <b>5d[0]</b> · spec <b>17</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/profile.png" alt="Profile — reference beside implementation" data-title="Profile" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 5d[0]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#search">← Search</a>
+<a href="#compose">Compose →</a>
+</div>
+</section>
+<section class="sheet" id="compose">
+<div class="head">
+<span class="tag">EN</span>
+<h3>09 · Compose</h3>
+<span class="frameref">Reference frame <b>5d[1]</b> · spec <b>18</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/compose.png" alt="Compose — reference beside implementation" data-title="Compose" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 5d[1]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#profile">← Profile</a>
+<a href="#settings">Settings →</a>
+</div>
+</section>
+<section class="sheet" id="settings">
+<div class="head">
+<span class="tag">EN</span>
+<h3>10 · Settings</h3>
+<span class="frameref">No reference frame — never drawn · spec <b>21 · 24</b></span>
+</div>
+<div class="sides">
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/settings.png" alt="Settings — reference beside implementation" data-title="Settings" loading="lazy">
+<figcaption>Implementation / Student OS only. No approved frame exists for this screen; it is specified in prose, not drawn.</figcaption>
+</figure>
+<div class="pager">
+<a href="#compose">← Compose</a>
+<a href="#home-ar">Home — Arabic →</a>
+</div>
+</section>
+<section class="sheet" id="home-ar">
+<div class="head">
+<span class="tag ar">AR</span>
+<h3>11 · Home — Arabic</h3>
+<span class="frameref">Reference frame <b>3b[0]</b> · spec <b>22</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/home-ar.png" alt="Home — Arabic — reference beside implementation" data-title="Home — Arabic" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 3b[0]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#settings">← Settings</a>
+<a href="#learn-ar">Learn — Arabic →</a>
+</div>
+</section>
+<section class="sheet" id="learn-ar">
+<div class="head">
+<span class="tag ar">AR</span>
+<h3>12 · Learn — Arabic</h3>
+<span class="frameref">Reference frame <b>3b[1]</b> · spec <b>22</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/learn-ar.png" alt="Learn — Arabic — reference beside implementation" data-title="Learn — Arabic" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 3b[1]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#home-ar">← Home — Arabic</a>
+<a href="#topic-ar">Topic — Arabic →</a>
+</div>
+</section>
+<section class="sheet" id="topic-ar">
+<div class="head">
+<span class="tag ar">AR</span>
+<h3>13 · Topic — Arabic</h3>
+<span class="frameref">Reference frame <b>3b[2]</b> · spec <b>22</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/topic-ar.png" alt="Topic — Arabic — reference beside implementation" data-title="Topic — Arabic" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 3b[2]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#learn-ar">← Learn — Arabic</a>
+<a href="#practice-ar">Practice — Arabic →</a>
+</div>
+</section>
+<section class="sheet" id="practice-ar">
+<div class="head">
+<span class="tag ar">AR</span>
+<h3>14 · Practice — Arabic</h3>
+<span class="frameref">Reference frame <b>3b[3]</b> · spec <b>22</b></span>
+</div>
+<div class="sides">
+<span><i class="dot ref"></i>Left — Reference / Claude Design</span>
+<span><i class="dot impl"></i>Right — Implementation / Student OS</span>
+</div>
+<figure>
+<img class="shot" src="pairs/practice-ar.png" alt="Practice — Arabic — reference beside implementation" data-title="Practice — Arabic" loading="lazy">
+<figcaption>Left — Reference / Claude Design (approved frame 3b[3]). Right — Implementation / Student OS (current build).</figcaption>
+</figure>
+<div class="pager">
+<a href="#topic-ar">← Topic — Arabic</a>
+<span>end →</span>
+</div>
+</section>
+</div>
+<div id="lb"><div class="bar"><span id="lbtitle"></span><span class="fit">full resolution — scroll to pan</span><span><button id="lbprev">←</button> <button id="lbnext">→</button> <button id="lbclose">Close</button></span></div><img id="lbimg" alt=""></div>
+<script>
+(function(){
+  var lb = document.getElementById('lb');
+  var lbImg = document.getElementById('lbimg');
+  var lbTitle = document.getElementById('lbtitle');
+  var shots = Array.prototype.slice.call(document.querySelectorAll('.shot'));
+  var current = -1;
+
+  function open(i){
+    current = i;
+    var el = shots[i];
+    lbImg.src = el.currentSrc || el.src;
+    lbTitle.textContent = el.getAttribute('data-title');
+    lb.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    lb.scrollTop = 0;
+  }
+  function close(){
+    lb.classList.remove('open');
+    document.body.style.overflow = '';
+    if (current >= 0) shots[current].scrollIntoView({block:'center'});
+  }
+  function step(d){
+    var next = current + d;
+    if (next < 0 || next >= shots.length) return;
+    open(next);
+  }
+
+  shots.forEach(function(el, i){ el.addEventListener('click', function(){ open(i); }); });
+  document.getElementById('lbclose').addEventListener('click', close);
+  document.getElementById('lbprev').addEventListener('click', function(){ step(-1); });
+  document.getElementById('lbnext').addEventListener('click', function(){ step(1); });
+  lb.addEventListener('click', function(e){ if (e.target === lb) close(); });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && lb.classList.contains('open')) return close();
+    if (e.key === 'ArrowRight') { if (lb.classList.contains('open')) step(1); }
+    if (e.key === 'ArrowLeft')  { if (lb.classList.contains('open')) step(-1); }
+  });
+})();
+</script>
+</body></html>

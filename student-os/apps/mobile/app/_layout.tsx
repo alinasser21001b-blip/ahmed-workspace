@@ -1,3 +1,23 @@
+/*
+ * Imported per face, not from the package index.
+ *
+ * Each `@expo-google-fonts/*` index re-exports every weight and italic as a
+ * `require()` of its .ttf, and Metro cannot tree-shake an asset require — so
+ * importing three weights from the index shipped all sixty-eight faces,
+ * including italics this design never sets. The per-face entry points pull
+ * exactly what is named. Same nine faces render; the unused ones stop
+ * travelling.
+ */
+import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono/500Medium';
+import { IBMPlexSans_400Regular } from '@expo-google-fonts/ibm-plex-sans/400Regular';
+import { IBMPlexSans_500Medium } from '@expo-google-fonts/ibm-plex-sans/500Medium';
+import { IBMPlexSans_600SemiBold } from '@expo-google-fonts/ibm-plex-sans/600SemiBold';
+import { IBMPlexSansArabic_400Regular } from '@expo-google-fonts/ibm-plex-sans-arabic/400Regular';
+import { IBMPlexSansArabic_500Medium } from '@expo-google-fonts/ibm-plex-sans-arabic/500Medium';
+import { IBMPlexSansArabic_600SemiBold } from '@expo-google-fonts/ibm-plex-sans-arabic/600SemiBold';
+import { Newsreader_400Regular } from '@expo-google-fonts/newsreader/400Regular';
+import { Newsreader_500Medium } from '@expo-google-fonts/newsreader/500Medium';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { getLocales } from 'expo-localization';
@@ -10,19 +30,41 @@ import { SessionProvider } from '../src/state/session';
 import { ThemeProvider } from '../src/theme/ThemeProvider';
 
 /**
- * Root layout: providers, writing direction, and the top-level navigator.
+ * Root layout: providers, writing direction, fonts, and the top-level
+ * navigator.
  *
  * Direction is decided once, here, before anything renders. Flipping it later
  * leaves half the tree mirrored, so the device locale is read at startup and
  * applied before the first paint.
  */
-export default function RootLayout(): React.JSX.Element {
+export default function RootLayout(): React.JSX.Element | null {
+  /*
+   * The frozen faces — four families, nine static instances, no variable
+   * axes (`06-TYPOGRAPHY.md` §Loading, `tokens.json → fontsToBundle`).
+   * Rendering is held until they resolve: a script-swap flash is worse than
+   * a moment of blank, because the Arabic fallback is a system face at a
+   * visibly different weight and the swap would happen mid-read.
+   */
+  const [fontsLoaded] = useFonts({
+    Newsreader_400Regular,
+    Newsreader_500Medium,
+    IBMPlexSans_400Regular,
+    IBMPlexSans_500Medium,
+    IBMPlexSans_600SemiBold,
+    IBMPlexSansArabic_400Regular,
+    IBMPlexSansArabic_500Medium,
+    IBMPlexSansArabic_600SemiBold,
+    IBMPlexMono_500Medium,
+  });
+
   const initialLocale = useMemo<Locale>(() => {
     const deviceLanguage = getLocales()[0]?.languageCode;
     const locale: Locale = deviceLanguage === 'en' ? 'en' : 'ar';
     applyDirection(locale);
     return locale;
   }, []);
+
+  if (!fontsLoaded) return null;
 
   return (
     <SafeAreaProvider>
@@ -63,6 +105,13 @@ export default function RootLayout(): React.JSX.Element {
                 name="practice/[topicId]"
                 options={{ presentation: 'fullScreenModal' }}
               />
+              {/*
+               * The preview feedback form. Registered unconditionally because
+               * the route table is static, and harmless in production: the
+               * screen renders a sentence rather than a form when the build is
+               * not a preview, and nothing links to it there.
+               */}
+              <Stack.Screen name="preview-feedback" options={{ presentation: 'modal' }} />
             </Stack>
             </RealtimeProvider>
           </SessionProvider>

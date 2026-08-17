@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { useColorScheme, I18nManager } from 'react-native';
 import { isRTLLocale, useI18n } from '../i18n/index';
-import { darkColors, lightColors, radius, shadow, spacing, typography, type ThemeColors } from './tokens';
+import { darkColors, lightColors, radius, shadow, spacing, typography, typographyFor, type ThemeColors } from './tokens';
 
 /**
  * Theme access.
@@ -40,17 +40,24 @@ export function ThemeProvider({ children }: { children: ReactNode }): React.JSX.
    */
   const isRTL = isRTLLocale(locale) || I18nManager.isRTL;
 
+  /*
+   * The type roles resolve per script: Newsreader carries the Latin display
+   * voice and has no Arabic coverage, so the Arabic table swaps every serif
+   * role to IBM Plex Sans Arabic 600 with the taller leading the script
+   * needs (`06-TYPOGRAPHY.md`). Locale is the resolution key — the same one
+   * that decides direction.
+   */
   const theme = useMemo<Theme>(
     () => ({
       colors: isDark ? darkColors : lightColors,
       spacing,
       radius,
-      typography,
+      typography: typographyFor(isRTLLocale(locale)),
       shadow,
       isDark,
       isRTL,
     }),
-    [isDark, isRTL],
+    [isDark, isRTL, locale],
   );
 
   return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;

@@ -247,6 +247,7 @@ export default function Onboarding(): React.JSX.Element {
                         key={topic.id}
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: active }}
+                        aria-checked={active}
                         onPress={() =>
                           setSelectedTopics((current) =>
                             active

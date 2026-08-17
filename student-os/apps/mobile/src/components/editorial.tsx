@@ -44,10 +44,13 @@ export function SectionHeader({
   title,
   tone = 'default',
   trailing,
+  onTrailingPress,
 }: {
   title: string;
   tone?: 'default' | 'structure' | 'challenged';
   trailing?: string;
+  /** When set, the trailing text becomes a 44 px link (See all, New, Browse). */
+  onTrailingPress?: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
   return (
@@ -67,7 +70,19 @@ export function SectionHeader({
       >
         {title}
       </Text>
-      {trailing ? (
+      {trailing && onTrailingPress ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={trailing}
+          onPress={onTrailingPress}
+          hitSlop={10}
+          style={{ minHeight: 44, justifyContent: 'center' }}
+        >
+          <Text variant="metadata" tone="structure" style={{ fontWeight: '600' }}>
+            {trailing}
+          </Text>
+        </Pressable>
+      ) : trailing ? (
         <Text variant="metadata" tone="muted">
           {trailing}
         </Text>
@@ -139,11 +154,13 @@ export function DominantAction({
   loading = false,
   inline = false,
   inverse = false,
+  style,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
+  style?: ViewStyle;
   /** Topic's inline Practise: 44 px, self-sized. Default is the 54 px footer. */
   inline?: boolean;
   /** Paper fill on an ink band (Learn's Start). */
@@ -171,16 +188,19 @@ export function DominantAction({
       accessibilityState={{ disabled: inert, busy: loading }}
       disabled={inert}
       onPress={onPress}
-      style={({ pressed }) => ({
-        backgroundColor: background,
-        borderRadius: theme.radius.sm,
-        minHeight: inline ? 44 : 54,
-        paddingHorizontal: theme.spacing.xl,
-        alignItems: 'center',
-        justifyContent: 'center',
-        alignSelf: inline ? 'flex-start' : 'stretch',
-        opacity: pressed && !inert ? 0.85 : 1,
-      })}
+      style={({ pressed }) => [
+        {
+          backgroundColor: background,
+          borderRadius: theme.radius.sm,
+          minHeight: inline ? 44 : 54,
+          paddingHorizontal: theme.spacing.xl,
+          alignItems: 'center',
+          justifyContent: 'center',
+          alignSelf: inline ? ('flex-start' as const) : ('stretch' as const),
+          opacity: pressed && !inert ? 0.85 : 1,
+        },
+        style,
+      ]}
     >
       {loading ? (
         <ActivityIndicator color={labelColor} />
@@ -275,6 +295,73 @@ export function InkBand({
         </Text>
       </View>
       <DominantAction label={actionLabel} onPress={onPress} disabled={disabled} inverse inline />
+    </View>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// ChipPicker — a single-choice row of chips
+
+/**
+ * One choice from a few, laid out as wrapping chips.
+ *
+ * The selected chip is an ink fill — the same weight the dominant action
+ * carries, never teal, and never colour alone: the fill, the label weight and
+ * the announced selected state all change together, so the choice survives
+ * greyscale and a screen reader alike.
+ */
+export function ChipPicker<T extends string>({
+  options,
+  selected,
+  onSelect,
+  label,
+}: {
+  options: { value: T; label: string }[];
+  selected: T | null;
+  onSelect: (value: T) => void;
+  /** Labels the radiogroup, so the section title is announced with the chips. */
+  label: string;
+}): React.JSX.Element {
+  const theme = useTheme();
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      accessibilityLabel={label}
+      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}
+    >
+      {options.map((option) => {
+        const active = selected === option.value;
+        return (
+          <Pressable
+            key={option.value}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
+            aria-checked={active}
+            accessibilityLabel={option.label}
+            onPress={() => onSelect(option.value)}
+            style={{
+              borderRadius: theme.radius.pill,
+              borderWidth: active ? 0 : 1.5,
+              borderColor: theme.colors.borderStrong,
+              // A choice made is an ink fill — the same weight the dominant
+              // action carries, and never teal.
+              backgroundColor: active ? theme.colors.text : 'transparent',
+              paddingHorizontal: theme.spacing.lg,
+              minHeight: 44,
+              justifyContent: 'center',
+            }}
+          >
+            <Text
+              variant="metadata"
+              tone={active ? 'inverse' : 'secondary'}
+              style={{ fontWeight: active ? '600' : '500' }}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

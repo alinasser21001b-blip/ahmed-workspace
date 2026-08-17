@@ -337,7 +337,7 @@ const SCREENS = [
   { name: 'feed', path: '/' },
   { name: 'chat-list', path: '/(tabs)/chat' },
   { name: 'chat-thread', path: `/chat/${directConversation.id}` },
-  { name: 'groups', path: '/(tabs)/groups' },
+  { name: 'rooms', path: '/(tabs)/rooms' },
   { name: 'group-detail', path: `/group/${group.id}` },
   { name: 'group-new', path: '/group/new' },
   { name: 'search', path: '/search' },

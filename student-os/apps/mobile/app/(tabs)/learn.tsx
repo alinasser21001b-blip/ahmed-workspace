@@ -10,6 +10,7 @@ import { Text } from '../../src/components/Text';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Learn — the frozen hierarchy from 12-LEARN-TOPIC.md.
@@ -108,7 +109,7 @@ export default function Learn(): React.JSX.Element {
       })}
     >
       <View style={{ flex: 1, gap: 2 }}>
-        <Text variant="bodyStrong" bidi="auto" tone={dashed ? 'secondary' : 'default'}>
+        <Text variant="heading" bidi="auto" tone={dashed ? 'secondary' : 'default'}>
           {topic.name}
         </Text>
         <MetadataLine
@@ -136,6 +137,7 @@ export default function Learn(): React.JSX.Element {
           />
         }
       >
+        <Enter>
         <TopBar title={t('learn.title')} />
         <Text variant="metadata" tone="muted" style={{ marginTop: -theme.spacing.md }}>
           {t('learn.builtFrom')}
@@ -146,7 +148,7 @@ export default function Learn(): React.JSX.Element {
             <EmptyState
               title={t('learn.empty.real.title')}
               body={t('learn.empty.real.body')}
-              action={{ label: t('nav.home'), onPress: () => router.push('/(tabs)') }}
+              action={{ label: t('nav.today'), onPress: () => router.push('/(tabs)') }}
             />
           </View>
         ) : (
@@ -242,6 +244,7 @@ export default function Learn(): React.JSX.Element {
         <Text variant="metadata" tone="muted">
           {t('learn.privateToYou')}
         </Text>
+        </Enter>
       </ScrollView>
     </SafeAreaView>
   );

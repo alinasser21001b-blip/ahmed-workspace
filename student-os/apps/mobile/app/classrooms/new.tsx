@@ -156,6 +156,7 @@ export default function NewClassroom(): React.JSX.Element {
                     key={course.id}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: active }}
+                    aria-checked={active}
                     accessibilityLabel={course.nameEn}
                     onPress={() => setCourseId(course.id)}
                     style={{
@@ -189,6 +190,7 @@ export default function NewClassroom(): React.JSX.Element {
                     key={option}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: active }}
+                    aria-checked={active}
                     accessibilityLabel={label}
                     onPress={() => setVisibility(option)}
                     style={{

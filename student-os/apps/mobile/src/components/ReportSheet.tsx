@@ -1,7 +1,7 @@
 import type { CreateReportRequest, ReportReason, ReportTargetType } from '@sos/contracts';
 import { useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
-import { Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Animated, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '../api/client';
 import { DominantAction, SectionHeader, SecondaryAction } from './editorial';
@@ -10,6 +10,7 @@ import type { TranslationKey } from '../i18n/index';
 import { useI18n } from '../i18n/index';
 import { useSession } from '../state/session';
 import { useTheme } from '../theme/ThemeProvider';
+import { useModalTransition } from '../motion/index';
 
 /**
  * The report form (App Review Guideline 1.2 — "a mechanism to report offensive
@@ -60,6 +61,15 @@ export function ReportSheet({
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<'idle' | 'filed' | 'duplicate' | 'error'>('idle');
 
+  /*
+   * context → focused task → context. The surface lifts 16 px and fades over
+   * `enter`; it leaves over `settle`, accelerating, because the student has
+   * finished and the way back should not dawdle. No scale: a modal that grows
+   * from a point claims it came from that point, and this one came from a
+   * menu item.
+   */
+  const { surface } = useModalTransition(visible);
+
   function reset(): void {
     setReason(null);
     setDetails('');
@@ -99,11 +109,14 @@ export function ReportSheet({
       // Screen-filling, not a peek: the reason list, the detail field and the
       // action are all reachable without dragging the surface.
       presentationStyle="fullScreen"
-      animationType="slide"
+      // `none`, because the approved entrance is the one below — a 16 px lift
+      // and a fade, not the platform slide. Two transitions would fight.
+      animationType="none"
       // Deliberate dismissal only — an explicit Cancel and the system back
       // gesture. There is no tap-outside, which would discard a typed reason.
       onRequestClose={dismiss}
     >
+      <Animated.View style={[{ flex: 1 }, surface]}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
         <ScrollView
           contentContainerStyle={{ padding: theme.spacing.xl, gap: theme.spacing.lg }}
@@ -186,6 +199,7 @@ export function ReportSheet({
                       key={r}
                       accessibilityRole="radio"
                       accessibilityState={{ selected: active }}
+                      aria-checked={active}
                       accessibilityLabel={t(`report.reason.${r}` as TranslationKey)}
                       onPress={() => setReason(r)}
                       style={{
@@ -259,6 +273,7 @@ export function ReportSheet({
           )}
         </ScrollView>
       </SafeAreaView>
+      </Animated.View>
     </Modal>
   );
 }

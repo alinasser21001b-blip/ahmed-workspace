@@ -8,6 +8,7 @@ import { SectionHeader } from '../../src/components/surfaces';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 import { useSupportLinks } from '../../src/state/support-links';
 
 /**
@@ -48,6 +49,7 @@ export default function SettingsScreen(): React.JSX.Element {
       <ScrollView
         contentContainerStyle={{ padding: theme.spacing.xl, gap: theme.spacing.xl }}
       >
+        <Enter>
         <TopBar title={t('settings.title')} onBack={() => router.back()} rule={false} />
 
         <View>
@@ -110,6 +112,7 @@ export default function SettingsScreen(): React.JSX.Element {
             onPress={() => router.push('/settings/delete-account')}
           />
         </View>
+        </Enter>
       </ScrollView>
     </SafeAreaView>
   );
