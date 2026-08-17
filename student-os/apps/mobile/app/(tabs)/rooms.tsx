@@ -11,6 +11,7 @@ import { Text } from '../../src/components/Text';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Rooms — the fourth tab of the frozen five (04-NAVIGATION.md).
@@ -92,6 +93,7 @@ export default function Rooms(): React.JSX.Element {
           />
         }
       >
+        <Enter>
         <Text accessibilityRole="header" variant="displaySerif">
           {t('nav.rooms')}
         </Text>
@@ -191,6 +193,7 @@ export default function Rooms(): React.JSX.Element {
             </View>
           </>
         }
+        </Enter>
       </ScrollView>
     </SafeAreaView>
   );

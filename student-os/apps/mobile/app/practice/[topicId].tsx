@@ -17,6 +17,7 @@ import { ApiError, NetworkError } from '../../src/api/client';
 import { localizeDigits, useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Practice — the focus mode, implementing the state machine from
@@ -262,6 +263,13 @@ export default function PracticeScreen(): React.JSX.Element {
           gap: theme.spacing.lg,
         }}
       >
+        {/*
+         * Each question arrives rather than cutting: keyed by index, so the
+         * stem and its options settle in place when the student moves on.
+         * This is progression inside one focused workspace — there is no
+         * screen transition here, because the student did not leave.
+         */}
+        <Enter key={`q-${index}`} rise={8}>
         {/* The stem — the largest text on screen at every step, in the
             editorial voice: 24/34 Newsreader for Latin, 22/40 Plex Arabic 600
             for Arabic (06-TYPOGRAPHY role table). */}
@@ -278,7 +286,7 @@ export default function PracticeScreen(): React.JSX.Element {
           </Text>
         ) : null}
 
-        <View>
+        <View style={{ marginTop: theme.spacing.lg }}>
           {question.options.map((option, optionIndex) => (
             <AnswerOption
               key={option.id}
@@ -293,6 +301,7 @@ export default function PracticeScreen(): React.JSX.Element {
             />
           ))}
         </View>
+        </Enter>
 
         {result ? (
           <FeedbackPanel

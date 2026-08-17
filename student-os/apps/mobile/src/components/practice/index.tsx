@@ -1,8 +1,10 @@
+import { useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, View } from 'react-native';
+import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { localizeDigits, useI18n } from '../../i18n/index';
 import { useTheme } from '../../theme/ThemeProvider';
+import { Enter, timing, useMotion } from '../../motion/index';
 import { Hairline } from '../editorial';
 import { EvidenceDelta, type EvidencePair } from '../evidence';
 import { Text } from '../Text';
@@ -119,6 +121,7 @@ export function AnswerOption({
 }): React.JSX.Element {
   const theme = useTheme();
   const { t, locale } = useI18n();
+  const { instant, reduced } = useMotion();
 
   const letter = (locale === 'ar' ? LETTERS_AR : LETTERS_EN)[index] ?? String(index + 1);
 
@@ -163,6 +166,24 @@ export function AnswerOption({
     }
   }
 
+  /*
+   * The fill arrives over `instant` as the opacity of a paper layer rather
+   * than as an animated colour: it reads the same, it stays on the
+   * compositor, and no design token is tweened.
+   *
+   * The two 2 px rules are deliberately NOT animated. They are real borders,
+   * and a border width is layout — fading them would mean either shifting the
+   * row by a pixel mid-transition or drawing a second set of lines over the
+   * first. At 120 ms the rule and the fill are not separable events, and the
+   * approved static geometry is worth more than the difference.
+   */
+  const fill = useRef(new Animated.Value(emphasized ? 1 : 0)).current;
+  useEffect(() => {
+    const animation = timing(fill, emphasized ? 1 : 0, { duration: instant, reduced });
+    animation.start();
+    return () => animation.stop();
+  }, [emphasized, fill, instant, reduced]);
+
   const a11ySuffix = revealed
     ? isCorrect
       ? `, ${t('practice.a11yCorrectAnswer')}`
@@ -175,6 +196,9 @@ export function AnswerOption({
     <Pressable
       accessibilityRole={kind === 'multi' ? 'checkbox' : 'radio'}
       accessibilityState={{ checked: selected, disabled: revealed }}
+      // RNW 0.21 does not derive aria-checked from accessibilityState, so a
+      // screen reader heard "radio" and never which one was chosen.
+      aria-checked={selected}
       accessibilityLabel={`${label}${a11ySuffix}`}
       disabled={revealed}
       onPress={onPress}
@@ -186,7 +210,9 @@ export function AnswerOption({
         // Negative margin keeps adjacent hairlines from doubling where an
         // emphasized row's bottom rule meets the next row's top rule.
         marginTop: -1,
-        backgroundColor: background,
+        // The colour lives on the animated layer below; at rest the two are
+        // indistinguishable, which is the point.
+        backgroundColor: 'transparent',
         minHeight: 56,
         paddingHorizontal: theme.spacing.xs,
         paddingVertical: theme.spacing.md,
@@ -196,6 +222,18 @@ export function AnswerOption({
         opacity: pressed && !revealed ? 0.9 : 1,
       })}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          backgroundColor: background === 'transparent' ? 'transparent' : background,
+          opacity: fill,
+        }}
+      />
       {kind === 'multi' ? (
         <View
           accessible={false}
@@ -279,20 +317,32 @@ export function FeedbackPanel({
 }): React.JSX.Element {
   const theme = useTheme();
   const { t } = useI18n();
+  const { stagger } = useMotion();
 
+  /*
+   * The order is the causality: was I right → why → what changed. Each beat
+   * is `settle`, 60 ms apart, which is enough to read as consequence and not
+   * enough to read as a performance.
+   *
+   * The evidence fraction fades in with its line. It never counts up —
+   * `05-TOKENS.md` rejects the evidence tween by name, because animating the
+   * number dramatises a figure the product states quietly on purpose.
+   */
   return (
     <View style={{ gap: theme.spacing.md }}>
       {/* Verdict + why-label. Incorrect is "Why", never "Wrong". */}
-      <Text
-        variant="bodyStrong"
-        tone={isCorrect ? 'default' : 'challenged'}
-        accessibilityLiveRegion="polite"
-      >
-        {isCorrect ? t('practice.correct') : t('practice.incorrect')}
-      </Text>
+      <Enter rise={4}>
+        <Text
+          variant="bodyStrong"
+          tone={isCorrect ? 'default' : 'challenged'}
+          accessibilityLiveRegion="polite"
+        >
+          {isCorrect ? t('practice.correct') : t('practice.incorrect')}
+        </Text>
+      </Enter>
 
       {explanation ? (
-        <View style={{ gap: theme.spacing.xs }}>
+        <Enter rise={4} delay={stagger} style={{ gap: theme.spacing.xs }}>
           <Text
             variant="metadata"
             tone={isCorrect ? 'default' : 'challenged'}
@@ -301,12 +351,13 @@ export function FeedbackPanel({
             {isCorrect ? t('practice.whyRight') : t('practice.why')}
           </Text>
           <ExplanationBlock>{explanation}</ExplanationBlock>
-        </View>
+        </Enter>
       ) : null}
 
       <Hairline />
 
       {/* The evidence delta — or its honest absences. */}
+      <Enter rise={4} delay={stagger * 2}>
       {alreadyAnswered ? (
         // A stored result moved no counter; showing a delta would be a lie.
         <Text variant="metadata" tone="muted">
@@ -334,6 +385,7 @@ export function FeedbackPanel({
           ) : null}
         </View>
       )}
+      </Enter>
     </View>
   );
 }

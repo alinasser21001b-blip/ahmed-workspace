@@ -12,6 +12,7 @@ import { localizeDigits, useI18n, type TranslationKey } from '../../src/i18n/ind
 import { useContentVersion } from '../../src/state/content-events';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Topic — the reading surface, per 12-LEARN-TOPIC.md.
@@ -151,6 +152,7 @@ export default function TopicScreen(): React.JSX.Element {
               key={entry.knowledgeType}
               accessibilityRole="button"
               accessibilityState={{ selected: filter === entry.knowledgeType }}
+              aria-checked={filter === entry.knowledgeType}
               accessibilityLabel={`${t(`knowledge.type.${entry.knowledgeType}` as TranslationKey)}, ${entry.count}`}
               onPress={() =>
                 setFilter((current) => (current === entry.knowledgeType ? null : entry.knowledgeType))
@@ -192,7 +194,7 @@ export default function TopicScreen(): React.JSX.Element {
         data={items}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: theme.spacing.xl, paddingBottom: theme.spacing.xxxl }}
-        ListHeaderComponent={header}
+        ListHeaderComponent={<Enter>{header}</Enter>}
         ItemSeparatorComponent={Hairline}
         renderItem={({ item }) => (
           <ContentGrammar

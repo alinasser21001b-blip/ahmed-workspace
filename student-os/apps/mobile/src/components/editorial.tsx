@@ -337,6 +337,7 @@ export function ChipPicker<T extends string>({
             key={option.value}
             accessibilityRole="radio"
             accessibilityState={{ selected: active }}
+            aria-checked={active}
             accessibilityLabel={option.label}
             onPress={() => onSelect(option.value)}
             style={{

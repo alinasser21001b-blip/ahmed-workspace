@@ -56,6 +56,7 @@ function ChoiceRow<T extends string>({
             key={option.value}
             accessibilityRole="radio"
             accessibilityState={{ selected: active }}
+            aria-checked={active}
             onPress={() => onChange(option.value)}
             style={{
               flexDirection: 'row',

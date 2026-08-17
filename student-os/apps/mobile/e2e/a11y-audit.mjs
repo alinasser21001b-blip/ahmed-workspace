@@ -66,6 +66,7 @@ for (const locale of ['ar', 'en']) {
 
   const unnamed = [];
   const small = [];
+  const stateless = [];
   let headings = 0;
   let liveRegions = 0;
 
@@ -74,7 +75,7 @@ for (const locale of ['ar', 'en']) {
     await page.waitForTimeout(600);
 
     const report = await page.evaluate((minTarget) => {
-      const out = { unnamed: [], small: [], headings: 0, live: 0 };
+      const out = { unnamed: [], small: [], stateless: [], headings: 0, live: 0 };
 
       const named = (el) =>
         (el.getAttribute('aria-label') || '').trim().length > 0 ||
@@ -96,12 +97,25 @@ for (const locale of ['ar', 'en']) {
           out.small.push(`${Math.round(r.width)}x${Math.round(r.height)} ${(el.getAttribute('aria-label') || el.innerText || '').slice(0, 40)}`);
         }
       }
+      /*
+       * A selectable control must say which state it is in, not only what it
+       * is. React Native Web does not derive aria-checked from
+       * accessibilityState, so this went unnoticed until the motion pass:
+       * every answer option announced "radio" and never "selected".
+       */
+      for (const el of document.querySelectorAll('[role="radio"],[role="checkbox"],[role="switch"]')) {
+        if (!visible(el)) continue;
+        if (el.getAttribute('aria-checked') === null && el.getAttribute('aria-selected') === null) {
+          out.stateless.push((el.getAttribute('aria-label') || el.innerText || '').slice(0, 45));
+        }
+      }
       out.headings = document.querySelectorAll('[role="heading"],h1,h2,h3').length;
       out.live = document.querySelectorAll('[aria-live]').length;
       return out;
     }, MIN_TARGET);
 
     unnamed.push(...report.unnamed.map((h) => `${name}: ${h}`));
+    stateless.push(...report.stateless.map((h) => `${name}: ${h}`));
     small.push(...report.small.map((h) => `${name}: ${h}`));
     headings += report.headings;
     liveRegions += report.live;
@@ -115,6 +129,11 @@ for (const locale of ['ar', 'en']) {
 
   check(unnamed.length === 0, 'every visible control has an accessible name', unnamed.slice(0, 4).join(' | '));
   check(small.length === 0, `every control meets the ${MIN_TARGET}px target`, small.slice(0, 4).join(' | '));
+  check(
+    stateless.length === 0,
+    'every selectable control announces its state',
+    stateless.slice(0, 4).join(' | '),
+  );
   check(headings > 0, 'screens expose heading roles');
   check(liveRegions > 0, 'live regions are present for announced changes');
 

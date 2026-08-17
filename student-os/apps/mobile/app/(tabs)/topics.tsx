@@ -10,6 +10,7 @@ import { Text } from '../../src/components/Text';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Topics — the second tab of the frozen five (04-NAVIGATION.md).
@@ -97,6 +98,7 @@ export default function Topics(): React.JSX.Element {
           />
         }
       >
+        <Enter>
         <View style={{ gap: theme.spacing.xs }}>
           <Text accessibilityRole="header" variant="displaySerif">
             {t('nav.topics')}
@@ -137,6 +139,7 @@ export default function Topics(): React.JSX.Element {
             </View>
           ))
         )}
+        </Enter>
       </ScrollView>
     </SafeAreaView>
   );

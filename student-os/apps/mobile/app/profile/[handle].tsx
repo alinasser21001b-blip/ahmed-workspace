@@ -21,6 +21,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../src/components/state
 import { localizeDigits, useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Student profile (§7).
@@ -316,7 +317,7 @@ export default function ProfileScreen(): React.JSX.Element {
           paddingBottom: theme.spacing.xxxl,
           flexGrow: 1,
         }}
-        ListHeaderComponent={header}
+        ListHeaderComponent={<Enter>{header}</Enter>}
         ListEmptyComponent={
           <View style={{ minHeight: 180 }}>
             <EmptyState

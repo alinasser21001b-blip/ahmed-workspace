@@ -9,6 +9,7 @@ import { Screen } from '../../src/components/states';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Request a password reset link.
@@ -53,6 +54,7 @@ export default function ForgotPassword(): React.JSX.Element {
   if (sent) {
     return (
       <Screen scroll>
+        <Enter>
         {/*
          * The sent state replaces the form on the same route, and announces
          * itself: without a live region a screen-reader user submits and hears
@@ -75,12 +77,14 @@ export default function ForgotPassword(): React.JSX.Element {
           label={t('auth.backToSignIn')}
           onPress={() => router.replace('/(auth)/sign-in')}
         />
+        </Enter>
       </Screen>
     );
   }
 
   return (
     <Screen scroll>
+        <Enter>
       <View style={{ gap: theme.spacing.xs, marginTop: theme.spacing.xxl }}>
         <Text accessibilityRole="header" variant="display">
           {t('auth.forgotPassword.title')}
@@ -114,6 +118,7 @@ export default function ForgotPassword(): React.JSX.Element {
           {t('auth.backToSignIn')}
         </Text>
       </Link>
-    </Screen>
+        </Enter>
+      </Screen>
   );
 }

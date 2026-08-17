@@ -14,6 +14,7 @@ import { useI18n, type TranslationKey } from '../src/i18n/index';
 import { bumpContentVersion } from '../src/state/content-events';
 import { API_BASE_URL, useSession } from '../src/state/session';
 import { useTheme } from '../src/theme/ThemeProvider';
+import { Enter } from '../src/motion/index';
 
 /**
  * Post composer (§56).
@@ -126,6 +127,7 @@ export default function Compose(): React.JSX.Element {
 
   return (
     <Screen scroll>
+      <Enter>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text accessibilityRole="header" variant="title">
           {t('compose.title')}
@@ -277,6 +279,7 @@ export default function Compose(): React.JSX.Element {
           style={{ flex: 1 }}
         />
       </View>
+      </Enter>
     </Screen>
   );
 }

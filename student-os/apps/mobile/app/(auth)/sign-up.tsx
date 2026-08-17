@@ -8,6 +8,7 @@ import { Screen } from '../../src/components/states';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 import { messageKeyFor } from './sign-in';
 
 /** Account creation. Academic identity is collected afterwards, in onboarding. */
@@ -42,6 +43,7 @@ export default function SignUp(): React.JSX.Element {
 
   return (
     <Screen scroll>
+      <Enter>
       <View style={{ gap: theme.spacing.xs, marginTop: theme.spacing.xxl }}>
         <Text variant="display">{t('auth.signUp.title')}</Text>
         <Text variant="body" tone="muted">
@@ -85,6 +87,7 @@ export default function SignUp(): React.JSX.Element {
           {t('auth.haveAccount')}
         </Text>
       </Link>
+      </Enter>
     </Screen>
   );
 }

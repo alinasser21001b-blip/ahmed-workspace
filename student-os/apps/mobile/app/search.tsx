@@ -12,6 +12,7 @@ import { Text } from '../src/components/Text';
 import { localizeDigits, useI18n } from '../src/i18n/index';
 import { useSession } from '../src/state/session';
 import { useTheme } from '../src/theme/ThemeProvider';
+import { Enter } from '../src/motion/index';
 
 /**
  * Search — per 16-SEARCH.md.
@@ -186,6 +187,13 @@ export default function Search(): React.JSX.Element {
           ) : null}
         </View>
 
+        {/*
+         * The results settle once per result set, not per row. Search has to
+         * feel instant, so this is `settle` on the group rather than a
+         * staggered cascade down the list — a stagger here would make a fast
+         * answer look slow.
+         */}
+        <Enter trigger={results} rise={4}>
         {results && results.people.length > 0 ? (
           <View>
             <SectionHeader
@@ -293,6 +301,7 @@ export default function Search(): React.JSX.Element {
             ))}
           </View>
         ) : null}
+        </Enter>
 
         {/*
          * Stated, not hidden. Topics are the most navigable object in the

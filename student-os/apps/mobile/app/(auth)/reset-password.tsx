@@ -9,6 +9,7 @@ import { Screen } from '../../src/components/states';
 import { useI18n, type TranslationKey } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Redeem a reset token for a new password.
@@ -52,6 +53,7 @@ export default function ResetPassword(): React.JSX.Element {
 
   return (
     <Screen scroll>
+      <Enter>
       <View style={{ gap: theme.spacing.xs, marginTop: theme.spacing.xxl }}>
         <Text accessibilityRole="header" variant="display">
           {t('auth.resetPassword.title')}
@@ -96,6 +98,7 @@ export default function ResetPassword(): React.JSX.Element {
           {t('auth.backToSignIn')}
         </Text>
       </Link>
+      </Enter>
     </Screen>
   );
 }

@@ -12,6 +12,7 @@ import { localizeDigits, useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useFeed } from '../../src/state/useFeed';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Home — per 11-HOME.md.
@@ -157,7 +158,7 @@ export default function Home(): React.JSX.Element {
           paddingTop: theme.spacing.lg,
           paddingBottom: theme.spacing.xxl,
         }}
-        ListHeaderComponent={header}
+        ListHeaderComponent={<Enter>{header}</Enter>}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 60, minimumViewTime: 800 }}
         renderItem={({ item: row, index }) => {

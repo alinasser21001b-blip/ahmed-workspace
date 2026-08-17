@@ -108,6 +108,7 @@ export default function Classrooms(): React.JSX.Element {
               key={option}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
+              aria-checked={active}
               accessibilityLabel={t(`classrooms.${option}` as TranslationKey)}
               onPress={() => setScope(option)}
               style={{

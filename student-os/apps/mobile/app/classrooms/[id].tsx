@@ -16,6 +16,7 @@ import { Text } from '../../src/components/Text';
 import { useI18n } from '../../src/i18n/index';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { Enter } from '../../src/motion/index';
 
 /**
  * Classroom — per 14-CLASSROOM.md.
@@ -206,7 +207,7 @@ export default function ClassroomScreen(): React.JSX.Element {
           paddingBottom: theme.spacing.xxxl,
           flexGrow: 1,
         }}
-        ListHeaderComponent={header}
+        ListHeaderComponent={<Enter>{header}</Enter>}
         ListFooterComponent={
           isMember && mostRecent ? (
             /* The one dominant action a member sees — the ink band opening
