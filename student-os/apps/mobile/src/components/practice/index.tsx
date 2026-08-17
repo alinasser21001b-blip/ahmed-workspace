@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Animated, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { localizeDigits, useI18n } from '../../i18n/index';

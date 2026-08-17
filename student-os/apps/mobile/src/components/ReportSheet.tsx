@@ -1,6 +1,6 @@
 import type { CreateReportRequest, ReportReason, ReportTargetType } from '@sos/contracts';
 import { useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Animated, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '../api/client';

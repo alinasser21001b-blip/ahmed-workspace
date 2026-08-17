@@ -1,5 +1,5 @@
 import type { SearchResults } from '@sos/contracts';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, TextInput, View } from 'react-native';

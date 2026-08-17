@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { MessageState } from '@sos/core';
 import { Pressable, View } from 'react-native';
 import { useI18n, type TranslationKey } from '../i18n/index';

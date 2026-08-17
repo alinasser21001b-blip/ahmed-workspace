@@ -1,17 +1,22 @@
-import {
-  IBMPlexMono_500Medium,
-} from '@expo-google-fonts/ibm-plex-mono';
-import {
-  IBMPlexSans_400Regular,
-  IBMPlexSans_500Medium,
-  IBMPlexSans_600SemiBold,
-} from '@expo-google-fonts/ibm-plex-sans';
-import {
-  IBMPlexSansArabic_400Regular,
-  IBMPlexSansArabic_500Medium,
-  IBMPlexSansArabic_600SemiBold,
-} from '@expo-google-fonts/ibm-plex-sans-arabic';
-import { Newsreader_400Regular, Newsreader_500Medium } from '@expo-google-fonts/newsreader';
+/*
+ * Imported per face, not from the package index.
+ *
+ * Each `@expo-google-fonts/*` index re-exports every weight and italic as a
+ * `require()` of its .ttf, and Metro cannot tree-shake an asset require — so
+ * importing three weights from the index shipped all sixty-eight faces,
+ * including italics this design never sets. The per-face entry points pull
+ * exactly what is named. Same nine faces render; the unused ones stop
+ * travelling.
+ */
+import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono/500Medium';
+import { IBMPlexSans_400Regular } from '@expo-google-fonts/ibm-plex-sans/400Regular';
+import { IBMPlexSans_500Medium } from '@expo-google-fonts/ibm-plex-sans/500Medium';
+import { IBMPlexSans_600SemiBold } from '@expo-google-fonts/ibm-plex-sans/600SemiBold';
+import { IBMPlexSansArabic_400Regular } from '@expo-google-fonts/ibm-plex-sans-arabic/400Regular';
+import { IBMPlexSansArabic_500Medium } from '@expo-google-fonts/ibm-plex-sans-arabic/500Medium';
+import { IBMPlexSansArabic_600SemiBold } from '@expo-google-fonts/ibm-plex-sans-arabic/600SemiBold';
+import { Newsreader_400Regular } from '@expo-google-fonts/newsreader/400Regular';
+import { Newsreader_500Medium } from '@expo-google-fonts/newsreader/500Medium';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
