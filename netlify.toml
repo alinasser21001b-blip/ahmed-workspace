@@ -1,0 +1,20 @@
+# Repository root — base directory only.
+#
+# The project is not at the repository root: everything Netlify needs lives in
+# `student-os/`, which has its own `netlify.toml` carrying the production
+# build, the preview contexts and the redirects. This file exists solely to
+# point Netlify at that directory, for sites whose base directory was never
+# set in the dashboard.
+#
+# `student-os-preview` is such a site: its Deploy Preview for PR #18 failed
+# with "Build script returned non-zero exit code: 2" because the build ran
+# here — where there is no package.json, no lockfile and no build script —
+# instead of one directory down.
+#
+# Nothing else belongs in this file. With the base set, Netlify reads
+# `student-os/netlify.toml`, and that file remains the single description of
+# the build. Its `[context.deploy-preview]` and `[context.branch-deploy]`
+# blocks produce the fixture-only student preview: no API function, no
+# database connection, no migrations, `EXPO_PUBLIC_PREVIEW_MODE=1` baked in.
+[build]
+  base = "student-os"
