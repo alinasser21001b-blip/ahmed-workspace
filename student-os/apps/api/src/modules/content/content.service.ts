@@ -82,7 +82,7 @@ export function toContentItem(
       : row.group_id !== null
         ? { kind: 'group' as const, id: row.group_id, name: row.group_name ?? '' }
         : row.classroom_id !== null
-          ? { kind: 'classroom' as const, id: row.classroom_id, name: '' }
+          ? { kind: 'classroom' as const, id: row.classroom_id, name: row.classroom_title ?? '' }
           : null;
 
   return {

@@ -976,7 +976,7 @@ function initialConversations(): Map<string, ConversationState> {
       lastMessageAt: at(118),
       lastMessagePreview: 'اقرأي الفصل السابع من Guyton and Hall، صفحة 214.',
       createdAt: at(0),
-      viewer: { role: 'member', canRead: true, canSend: true, lastReadSeq: 1, unreadCount: 2, muted: false },
+      viewer: { role: 'member', canRead: true, canSend: true, cannotSendReason: null, lastReadSeq: 1, unreadCount: 2, muted: false },
     },
     messages: [
       makeMessage('m1', 'conv-1', 1, layla, 'هل راجعت جدول قيم غازات الدم؟', 100),
@@ -1004,7 +1004,7 @@ function initialConversations(): Map<string, ConversationState> {
       lastMessageAt: at(60),
       lastMessagePreview: 'Sharing my notes on the countercurrent multiplier, p. 214.',
       createdAt: at(0),
-      viewer: { role: 'member', canRead: true, canSend: true, lastReadSeq: 2, unreadCount: 0, muted: false },
+      viewer: { role: 'member', canRead: true, canSend: true, cannotSendReason: null, lastReadSeq: 2, unreadCount: 0, muted: false },
     },
     messages: [
       makeMessage('m4', 'conv-2', 1, omar, 'من عنده ملاحظات محاضرة اليوم؟', 40),

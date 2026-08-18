@@ -1,4 +1,4 @@
-import type { Conversation, Message, MessagePage } from '@sos/contracts';
+import type { CannotSendReason, Conversation, Message, MessagePage } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -16,7 +16,7 @@ import { MessageBubble, UnreadDivider } from '../../src/components/messaging';
 import { Text } from '../../src/components/Text';
 import { Avatar } from '../../src/components/surfaces';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
-import { useI18n } from '../../src/i18n/index';
+import { useI18n, type TranslationKey } from '../../src/i18n/index';
 import { useRealtime } from '../../src/state/realtime';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -30,6 +30,30 @@ import { useTheme } from '../../src/theme/ThemeProvider';
  * outbox reconciles it by `clientMessageId` and it becomes an ordinary message
  * — it never appears twice, because the two lists are keyed on the same id.
  */
+
+/**
+ * Which sentence explains a removed composer.
+ *
+ * `chat.readOnlyReason` used to be the only string here, hardcoded as "Only
+ * instructors can post here" — a rule that does not exist anywhere in the
+ * messaging policy, so it was never actually why the composer was gone. The
+ * real reasons (blocked, removed from the conversation, an account
+ * restriction) each get their own sentence; `null` — meaning `canSend` is
+ * true, or a reason the client has no copy for — falls back to the
+ * still-true-but-generic original string.
+ */
+function readOnlyReasonKey(reason: CannotSendReason | null): TranslationKey {
+  switch (reason) {
+    case 'blocked':
+      return 'chat.readOnlyReason.blocked';
+    case 'not_a_member':
+      return 'chat.readOnlyReason.notAMember';
+    case 'account_restricted':
+      return 'chat.readOnlyReason.accountRestricted';
+    default:
+      return 'chat.readOnlyReason';
+  }
+}
 
 function uuid(): string {
   // `crypto.randomUUID` is present on modern web and on Hermes; the fallback is
@@ -426,7 +450,7 @@ export default function ConversationScreen(): React.JSX.Element {
             {/* Removed, not disabled: a disabled composer invites a tap that
                 will never work. The reason replaces it. */}
             <Text variant="body" tone="secondary" align="center">
-              {t('chat.readOnlyReason')}
+              {t(readOnlyReasonKey(conversation.viewer.cannotSendReason))}
             </Text>
           </View>
         )}

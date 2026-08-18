@@ -507,7 +507,10 @@ export const ar = {
   'chat.read': 'قُرئت',
   'chat.retrySend': 'إعادة المحاولة',
   'chat.deletedMessage': 'حُذفت هذه الرسالة',
-  'chat.readOnlyReason': 'النشر هنا للتدريسيين فقط. يمكنك قراءة كل الرسائل.',
+  'chat.readOnlyReason': 'لا يمكنك إرسال رسائل في هذه المحادثة. يمكنك قراءة كل الرسائل.',
+  'chat.readOnlyReason.blocked': 'لا يمكنك إرسال رسائل هنا. يمكنك قراءة كل الرسائل.',
+  'chat.readOnlyReason.notAMember': 'لم تعد جزءاً من هذه المحادثة. يمكنك قراءة كل الرسائل.',
+  'chat.readOnlyReason.accountRestricted': 'حسابك مقيّد من إرسال الرسائل. يمكنك قراءة كل الرسائل.',
   'chat.searchPeople': 'ابحث عن أشخاص',
 
   // --- final design: search ---------------------------------------------------

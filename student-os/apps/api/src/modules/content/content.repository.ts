@@ -51,6 +51,7 @@ export interface ContentRow {
   community_name_ar: string | null;
   community_name_en: string | null;
   group_name: string | null;
+  classroom_title: string | null;
   viewer_reaction: ReactionKind | null;
   viewer_bookmarked: boolean;
   media: { id: string; mimeType: string; sizeBytes: number; width: number | null; height: number | null }[];

@@ -579,6 +579,40 @@ describe('lecture discussion', () => {
     expect((threadB.json() as FeedPage).items.some((item) => item.id === created.id)).toBe(false);
   });
 
+  it('names the classroom container rather than leaving it blank', async () => {
+    // container.name was hardcoded to '' for classroom-scoped content — the
+    // only container kind that was, unlike community and group posts, which
+    // both correctly carry their container's real name.
+    const app = await getApp();
+    const instructor = await verifiedInstructor();
+    const classroom = await createClassroom(instructor.session, {
+      title: 'قاعة طب الأطفال — المرحلة الخامسة',
+    });
+    const lecture = await publishLecture(instructor.session, classroom.id);
+
+    const posted = await app.inject({
+      method: 'POST',
+      url: `/v1/lectures/${lecture.id}/discussion`,
+      headers: auth(instructor.session),
+      payload: { body: 'A discussion post whose container name must not be blank.', mediaFileIds: [] },
+    });
+    expect(posted.statusCode).toBe(201);
+    const created = posted.json() as ContentItem;
+    expect(created.container).toEqual({
+      kind: 'classroom',
+      id: classroom.id,
+      name: 'قاعة طب الأطفال — المرحلة الخامسة',
+    });
+
+    const thread = await app.inject({
+      method: 'GET',
+      url: `/v1/lectures/${lecture.id}/discussion`,
+      headers: auth(instructor.session),
+    });
+    const fromFeed = (thread.json() as FeedPage).items.find((item) => item.id === created.id);
+    expect(fromFeed?.container?.name).toBe('قاعة طب الأطفال — المرحلة الخامسة');
+  });
+
   it('refuses a non-member both reading and posting', async () => {
     const app = await getApp();
     const instructor = await verifiedInstructor();

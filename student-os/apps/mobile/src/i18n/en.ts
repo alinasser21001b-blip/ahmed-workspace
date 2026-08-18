@@ -491,7 +491,11 @@ export const en: Record<keyof typeof ar, string> = {
   'chat.read': 'Read',
   'chat.retrySend': 'Retry',
   'chat.deletedMessage': 'This message was deleted',
-  'chat.readOnlyReason': 'Only instructors can post here. You can read every message.',
+  'chat.readOnlyReason': "You can't send messages in this conversation. You can read every message.",
+  'chat.readOnlyReason.blocked': "You can't send messages here. You can read every message.",
+  'chat.readOnlyReason.notAMember': "You're no longer part of this conversation. You can read every message.",
+  'chat.readOnlyReason.accountRestricted':
+    'Your account is restricted from sending messages. You can read every message.',
   'chat.searchPeople': 'Search people',
 
   // --- final design: search ---------------------------------------------------

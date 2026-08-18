@@ -163,6 +163,7 @@ export const ENRICHMENT_SELECT = `    SELECT
       comm.name_ar      AS community_name_ar,
       comm.name_en      AS community_name_en,
       g.name            AS group_name,
+      cls.title         AS classroom_title,
       (SELECT r.kind FROM reactions r
          WHERE r.content_id = s.id AND r.user_id = $1::uuid) AS viewer_reaction,
       EXISTS (SELECT 1 FROM bookmarks b
@@ -192,7 +193,8 @@ export const ENRICHMENT_SELECT = `    SELECT
     LEFT JOIN courses c ON c.id = s.course_id
     LEFT JOIN subjects sub ON sub.id = s.subject_id
     LEFT JOIN communities comm ON comm.id = s.community_id
-    LEFT JOIN groups g ON g.id = s.group_id`;
+    LEFT JOIN groups g ON g.id = s.group_id
+    LEFT JOIN classrooms cls ON cls.id = s.classroom_id`;
 
 export interface BuiltQuery {
   text: string;

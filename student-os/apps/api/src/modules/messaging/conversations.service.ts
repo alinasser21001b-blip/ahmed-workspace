@@ -1,4 +1,5 @@
 import type {
+  CannotSendReason,
   Conversation,
   ConversationPage,
   CreateConversationRequest,
@@ -9,6 +10,7 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
 } from '@sos/contracts';
+import type { Decision } from '@sos/core';
 import {
   canDeleteMessage,
   canEditMessage,
@@ -90,6 +92,27 @@ function toMessage(row: repo.MessageRow): Message {
   };
 }
 
+/**
+ * Maps a denied `canSend` Decision's reason code to the client-facing enum.
+ *
+ * `canSendMessage` (conversation.policy.ts) also denies for 'unauthenticated',
+ * which cannot actually reach here — this whole path requires an
+ * authenticated actor — so it falls through to `null` along with any future
+ * reason this client has no copy for yet, rather than the client crashing on
+ * a value its schema does not recognise.
+ */
+function toCannotSendReason(canSend: Decision): CannotSendReason | null {
+  if (canSend.allowed) return null;
+  switch (canSend.reason) {
+    case 'account_restricted':
+    case 'not_a_member':
+    case 'blocked':
+      return canSend.reason;
+    default:
+      return null;
+  }
+}
+
 function previewOf(row: repo.ConversationRow): string | null {
   if (row.last_message_body) return row.last_message_body.slice(0, 140);
   if (!row.last_message_kind) return null;
@@ -135,6 +158,7 @@ function toConversation(row: repo.ConversationRow, actor: Actor, _locale: Locale
       role: membership?.role ?? 'member',
       canRead: caps.canRead.allowed,
       canSend: caps.canSend.allowed,
+      cannotSendReason: toCannotSendReason(caps.canSend),
       lastReadSeq,
       unreadCount: unreadCount(lastSeq, lastReadSeq),
       muted: row.viewer_muted_until !== null && row.viewer_muted_until > new Date(),

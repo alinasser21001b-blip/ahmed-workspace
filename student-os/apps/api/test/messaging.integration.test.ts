@@ -580,6 +580,17 @@ describe('conversation authorization', () => {
     // it retroactively would be a surprise.
     const history = await read(alice, conversation.id);
     expect(history.items).toHaveLength(1);
+
+    // The client used to be told a single fixed, always-wrong reason
+    // ("Only instructors can post here") no matter why canSend was false.
+    // It has to be told the real one, so the composer's explanation is not a
+    // lie about the block the safety flow just enforced.
+    const view = await app.inject({
+      method: 'GET',
+      url: `/v1/conversations/${conversation.id}`,
+      headers: auth(alice.session),
+    });
+    expect(view.json<Conversation>().viewer.cannotSendReason).toBe('blocked');
   });
 
   it('refuses a restricted account the composer and not the thread', async () => {
@@ -601,6 +612,7 @@ describe('conversation authorization', () => {
     expect(view.statusCode).toBe(200);
     expect(view.json<Conversation>().viewer.canRead).toBe(true);
     expect(view.json<Conversation>().viewer.canSend).toBe(false);
+    expect(view.json<Conversation>().viewer.cannotSendReason).toBe('account_restricted');
 
     const write = await app.inject({
       method: 'POST',

@@ -47,11 +47,20 @@ export type MessageKind = z.infer<typeof messageKindSchema>;
  */
 export const seqSchema = z.number().int().nonnegative();
 
+/**
+ * Why `canSend` is false, when it is — so the client can say what actually
+ * happened (blocked, removed, restricted) instead of a single fixed excuse
+ * that is true for none of them. Null whenever `canSend` is true.
+ */
+export const cannotSendReasonSchema = z.enum(['account_restricted', 'not_a_member', 'blocked']);
+export type CannotSendReason = z.infer<typeof cannotSendReasonSchema>;
+
 /** What the reader may do with this conversation, as the policy computed it. */
 export const conversationViewerStateSchema = z.object({
   role: membershipRoleSchema,
   canRead: z.boolean(),
   canSend: z.boolean(),
+  cannotSendReason: cannotSendReasonSchema.nullable(),
   /** Their own read position. Everything unread is derived from it. */
   lastReadSeq: seqSchema,
   unreadCount: z.number().int().nonnegative(),
