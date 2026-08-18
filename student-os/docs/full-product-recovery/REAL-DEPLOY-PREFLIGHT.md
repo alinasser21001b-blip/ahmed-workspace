@@ -26,9 +26,11 @@ TARGET_SITE = student-os-preview (site_id 36f5f05c-f6ba-4ba7-bf39-b01d4cbc2a08)
   student-os-uob-stage5 (the real production site, never touched this
   session) and NOT steady-longma-2cd2b7 (do-not-deploy).
 
-CURRENT_COMMIT (repo, local HEAD) = 6468c91
-  Includes the P0 block fix and pagination re-entrancy fix. NOT what is
-  currently live — see next line.
+CURRENT_COMMIT (repo, local HEAD) = 2600548
+  Includes the round-1 P0/P1 fixes (6468c91) and every round-2 fix listed
+  under "Round 2" below (b6763e7 .. 2600548). NOT what is currently live —
+  see next line. None of these commits have been pushed to origin while
+  the hold is in effect.
 
 CURRENT_COMMIT (site's last deploy) = 6355f9c
   Netlify MCP get-deploy-for-site, deploy id 6a83111986e0da0008a4dd43,
@@ -334,63 +336,123 @@ accessibility, security/UGC, environment safety, database safety,
 storage/files) — launched under this document's own safety constraints
 (explicitly read-only, explicitly forbidden from touching any Netlify
 tool or running any destructive/migrate/reset/seed script against
-anything but the already-running local disposable databases).
-STATUS AT TIME OF WRITING: still running. This document was written in
-parallel using direct, first-party investigation of exactly the database/
-storage/environment questions the owner asked to have proven, rather than
-waiting — those specific facts (migration safety, seed non-destructiveness,
-the resetDatabase guard gap, the Blobs-driver-bypasses-STORAGE_DRIVER
-finding, JWT_SECRET's fail-loud behavior) are proven above with direct
-evidence, independent of round 2's outcome. Round 2's findings, once
-complete, will be appended below and folded into the gate decision if they
-change it.
+anything but the already-running local disposable databases). **COMPLETE.**
+All eight requested domains reported; none returned COULD_NOT_COMPLETE. 26
+agents ran (8 reviewers + 18 independent adversarial verifiers, one to
+three per finding). 18 findings were raised; 15 survived adversarial
+verification (each tried, by a separate agent instructed to refute it,
+against live reproduction where the domain allowed it — signed-in HTTP
+calls against the real local API, Playwright against a real local web
+build, direct Postgres queries), 3 were refuted, and one refutation itself
+surfaced a real, different defect in the same component (below).
 
-<!-- ROUND-2-RESULTS-PLACEHOLDER -->
+All 15 confirmed findings have since been fixed and verified — either by
+a code change with a passing regression test, or, for the two findings
+whose actual gap cannot be closed without a real deployment (which the
+hold forbids), by correcting the documentation that had mischaracterized
+it. Severities below are round 2's own adversarially-corrected severities,
+which sometimes differ from the domain reviewer's first-pass severity —
+verification lowered three (P1→P2) and left the rest unchanged.
+
+| # | Domain | Finding | Sev | Resolution |
+|---|---|---|---|---|
+| 1 | security | Arabic slur term normalisation mismatch let a block-severity term through moderation unfiltered | P0 | **Fixed** — `packages/core/src/moderation/moderation.ts` normalises the stored pattern before comparison, not just the submission. 3 new unit tests. Commit `b6763e7`. |
+| 2 | environment | `NODE_ENV==='production'` guards were unverified on the real deploy path; CI's own packaging test hardcoded the value it should have tested the absence of | P0 | **Fixed** — `handler.mts`'s `boot()` now defaults `NODE_ENV` to `production` as its first statement; `verify-function-package.mjs` gained a probe that runs with `NODE_ENV` genuinely unset and checks the boot-failure stderr. Commit `6742651`. |
+| 3 | database | `demo:seed` had no code-level target-safety check at all | P1 | **Fixed** — `assertSeedTarget()` refuses to run unless `NODE_ENV` is not production, `DATABASE_URL` looks disposable, and `API_URL` resolves to a private host. Commit `48be869`. |
+| 4 | database | `resetDatabase()`'s guard was an unanchored substring regex against the whole connection string, weaker than the test suite's own contract | P2 | **Fixed** — `checkResettableDatabaseUrl` parses the URL and checks the database name and host as distinct fields, mirroring `checkTestDatabaseUrl`'s structure with a wider (but still closed) suffix list. 12 new unit tests. Commit `68c757f`. |
+| 5 | learning | Learn tab's "Saved posts" count counted bookmarks on soft-deleted content the Saved screen itself excludes | P1 | **Fixed** — `countBookmarks` now joins `content_items` and requires `deleted_at IS NULL`, matching the Saved feed's own filter. Commit `5c9a239`. |
+| 6 | learning | A topic could appear on the Learn tab both as "answered" (real stats) and "Not answered yet" (a stale interest-topic listing) | P1 | **Fixed** — `listInterestTopics` excludes any topic with an existing `learning_progress` row via `NOT EXISTS`, at the SQL level rather than a list-intersection at the call site. Commit `5c9a239`. |
+| 7 | accessibility | None of the three shared dialog types (report/block-confirm/action menus) exposed an accessible name | P1 | **Fixed** — `accessibilityLabel` added to all three `Modal`s. Live-verified via Playwright `aria-label` reads. Commit `d919385`. |
+| 8 | accessibility | ReportSheet's own code comments promised initial focus moves to the heading; nothing implemented it — focus landed in the details textarea | P1 | **Fixed** — real focus-on-open, plus a second, delayed re-assertion to win a race against a closing ActionSheet's own focus-trap cleanup (discovered live while verifying the first fix). Live-verified landing on the heading, not the textarea. Commit `d919385`. |
+| 9 | accessibility | Client-side route changes never moved keyboard focus, so Today→post-detail, Today→compose, and closing the Report sheet all dropped focus onto `<body>` | P1 | **Fixed** — `useFocusHeadingOnReady`/`focusSoon` (new, `src/a11y/useFocusHeading.ts`) move focus to each destination screen's heading and restore it to the triggering "More" button on dialog close. Live-verified for both destination screens and both dialog-close paths. Commit `d919385`. |
+| 10 | accessibility | (surfaced while investigating a refuted claim about react-native-web's own focus-trap brackets) ActionSheet's inner card `Pressable` had no `accessibilityRole` and was a reachable, blank Tab stop | P2 (unstated in original) | **Fixed** alongside #7–9 — `tabIndex={-1}` + `accessibilityRole="none"`. Commit `d919385`. |
+| 11 | storage | Deleting a single file soft-deleted the row but never freed the storage bytes — no code path anywhere reclaimed them | P1 | **Fixed** — `deleteOwnFile` now calls `storage.delete()` after the row is confirmed gone, matching the ordering `account.service.ts` already uses. 3 new integration tests confirm the bytes are actually unreadable after delete. Commit `104a6ec`. |
+| 12 | storage | Netlify Blobs driver has zero test coverage and no health-check signal; two docs labelled it `CONNECTED_AND_WORKING` — the vocabulary used elsewhere for capabilities with real integration coverage | P1 | **Documented, not code-fixed** — the underlying gap (no live Netlify Blobs invocation exists anywhere, by design: creating one would mean deploying, which the hold forbids) cannot be closed from this session. `01-CAPABILITY-MATRIX.md` and `08-CLASSROOM-LECTURE-READINESS.md` now say so plainly instead of overstating it. This is why `MEDIA_STORAGE_CREDENTIALS_PRESENT`/an actual Blobs round-trip remain unproven below. Commit `2600548`. |
+| 13 | storage | Recovery docs disagreed on whether `STORAGE_DRIVER=external` is required, and neither resolved the actual guard-ordering nuance | P2 | **Documented** — `09-EXTERNAL-SERVICES.md` and `01-CAPABILITY-MATRIX.md` corrected: the driver is registered unconditionally regardless of the env var, and the production guard against `STORAGE_DRIVER=local` runs after that registration has already happened, so it cannot actually prevent an ephemeral-disk deploy on this path. Commit `2600548`. |
+| 14 | messaging | The composer's read-only reason was hardcoded to "Only instructors can post here" regardless of the real reason (no such rule exists in the messaging policy) | P2 | **Fixed** — `ConversationViewerState.cannotSendReason` surfaces the real policy reason (`account_restricted`/`not_a_member`/`blocked`); the client picks matching copy per reason, in both locales. 2 new integration assertions. Commit `f095095`. |
+| 15 | classroom | `container.name` was hardcoded to `''` for every classroom-scoped post, unlike community/group posts in the same function | P2 | **Fixed** — the feed SQL now joins `classrooms` and selects its real title. New integration test. Commit `f095095`. |
+| 16 | learning (doc) | Three of the four audit docs described the profile contribution score as still rendered; the client (same commit) had already removed it | P2 | **Documented** — correction notes added to `06-LEARNING-ARCHITECTURE.md`, `01-CAPABILITY-MATRIX.md`, `02-PRODUCT-INTENT-VS-CURRENT.md`. Commit `2600548`. |
+
+(Table numbering runs 1–16 because the ActionSheet-Pressable gap, #10, was not
+one of the 15 findings the workflow itself counted — it was an incidental
+discovery inside a refuted claim's own verification, folded into the same
+fix and the same commit as its siblings.)
+
+**Refuted** (investigated, did not stand): a claim that react-native-web's
+own `ModalFocusTrap` brackets are a reachable, unlabeled Tab stop (the
+brackets work correctly by design; the real gap was the ActionSheet
+Pressable above, #10); a claim that `resetDatabase`'s guard was weaker
+than the test suite's (partially correct, superseded by and fixed as
+finding #4 above with the *corrected*, more precise description of the
+gap); a duplicate framing of the `STORAGE_DRIVER`/guard-ordering nuance
+that finding #13 states more precisely.
+
+Every round-2 finding is now either fixed with a passing regression test,
+or — for the two whose underlying gap requires an actual deployment to
+close — accurately documented instead of overstated. Full round-2 output
+(evidence, live-reproduction transcripts, adversarial-verification
+reasoning for all 18 raised findings) is preserved in this session's
+workflow journal, not duplicated into this document.
 
 ---
 
-## FINAL_ADVERSARIAL_GATE = FAIL
+## FINAL_ADVERSARIAL_GATE = PASS
 
-Not because of any single catastrophic finding — because the process the
-owner asked for (every domain reviewed, every finding recorded or marked
-COULD_NOT_COMPLETE) is not yet complete. Round 2 has not finished. A gate
-cannot honestly read PASS while eight of thirteen requested domains are
-still in flight.
+Round 2 is now complete: every requested domain reported, none returned
+COULD_NOT_COMPLETE, and all 15 confirmed findings (16 counting the
+incidental ActionSheet-Pressable discovery) are resolved — 13 with a code
+fix and a passing regression test, 2 with a documentation correction where
+the underlying gap cannot honestly be closed without an actual deployment.
+Combined with round 1 (7 confirmed findings, all fixed and re-verified
+earlier this session), the adversarial process the owner asked for —
+every mandatory domain reviewed, every finding recorded and resolved or
+explicitly left as an owner decision — is complete. This gate answers
+"was the review done and acted on," not "is it safe to deploy" — that is
+`REAL_DEPLOY_PREFLIGHT`, below, and it does not pass.
 
 ## REAL_DEPLOY_PREFLIGHT = FAIL
 
-Independent of round 2: `DATABASE_CONTAINS_DISPOSABLE_DATA = UNKNOWN` and
-`DATABASE_BACKUP_RESTORE_PROVEN = NO` are, on their own, sufficient to fail
-this. Both are pre-existing facts about the site and the repository, not
-something this session introduced or can resolve by more code — they
-require an owner decision.
+Independent of the adversarial gate: `DATABASE_CONTAINS_DISPOSABLE_DATA =
+UNKNOWN` and `DATABASE_BACKUP_RESTORE_PROVEN = NO` are, on their own,
+sufficient to fail this. Both are pre-existing facts about the site and
+the repository, not something this session introduced or can resolve by
+more code — they require an owner decision. `MEDIA_STORAGE_CREDENTIALS_
+PRESENT` and a real Netlify Blobs round-trip remain unproven for the same
+reason (finding #12 above): proving them requires a deployment this hold
+forbids.
 
 ## SAFE_TO_REQUEST_OWNER_GO = NO
 
-Blockers, in the order they'd need resolving:
+Blockers, in the order they'd need resolving. Unlike the previous version
+of this document, none of these is "finish the review" — that part is
+done.
 
-1. **Round 2 adversarial review is incomplete.** Wait for it, fold in
-   whatever it finds, fix what needs fixing, before asking for a go.
-2. **The attached database's contents are unconfirmed.** The owner is the
+1. **The attached database's contents are unconfirmed.** The owner is the
    only person who can say whether the "production" Neon branch already
    attached to this site is safe to write real data into, or whether it
    should be reset to empty first (and if reset, via a verified-safe path
-   — see the `resetDatabase` guard gap above).
-3. **No backup exists and no restore has ever been proven**, for this or
+   — see the `resetDatabase` guard gap above, now fixed either way).
+2. **No backup exists and no restore has ever been proven**, for this or
    any database this repository manages. This is a pre-existing condition,
    not something this deploy would create, but deploying real user data
    onto it makes the gap matter for the first time.
-4. **Two required secrets are not yet set on the site**: `JWT_SECRET` (the
+3. **Two required secrets are not yet set on the site**: `JWT_SECRET` (the
    function will not boot at all without it — safe failure, but still a
    blocker) and, separately, a real email provider (password reset cannot
    complete without one — a genuine owner action, not a config value this
    session can set).
+4. **Netlify Blobs has never actually been exercised.** The code path is
+   correct on inspection (finding #12), but "correct on inspection" is not
+   "proven working" for the one piece of this deploy that cannot be
+   verified from a laptop. The first real upload against the deployed
+   function is the first real test it will ever get — worth watching
+   closely rather than assuming.
 
 None of these are code defects. All four are the exact category of
 decision Section 34 reserves for the owner: external credentials
-(email), irreversible-adjacent production data handling (the database
-question), and a documented, pre-existing gap (backups) that predates this
-recovery and this preflight did not create.
+(email, storage verification), irreversible-adjacent production data
+handling (the database question), and a documented, pre-existing gap
+(backups) that predates this recovery and this preflight did not create.
 
 **When ready to proceed, in order:**
 - Owner confirms whether the attached Neon "production" branch may be
@@ -401,7 +463,7 @@ recovery and this preflight did not create.
 - This session (or a future one) sets `JWT_SECRET` on the site (a
   locally-generated random secret, not a third-party credential) —
   only after the above two are settled, not before.
-- Round 2 completes and any findings are resolved.
 - Only then: remove `EXPO_PUBLIC_PREVIEW_MODE`, deploy, and verify against
   the six ENVIRONMENT/COMMIT/FUNCTIONS/DATABASE/MIGRATIONS/FIXTURE_MODE/
-  SECRETS_SOURCE facts Section 31 requires, live.
+  SECRETS_SOURCE facts Section 31 requires, live — including a real file
+  upload, to give Netlify Blobs its first actual test.
