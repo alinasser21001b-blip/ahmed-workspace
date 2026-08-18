@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tomorrow, 7 PM.</title>
+<meta name="description" content="Something is already planned. Open it when you have a quiet minute.">
+<meta name="theme-color" content="#0a0908">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex, nofollow">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tomorrow, 7 PM.">
+<meta property="og:description" content="Something is already planned.">
+<meta name="twitter:card" content="summary">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0908'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23e8c89a'/%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@300;400&family=IBM+Plex+Sans+Arabic:wght@200;300;400&display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+  <canvas id="atmos" aria-hidden="true"></canvas>
+  <div id="bloom" aria-hidden="true"></div>
+  <div id="vignette" aria-hidden="true"></div>
+  <div id="grain" aria-hidden="true"></div>
+
+  <main id="world"></main>
+
+  <div id="veil" aria-hidden="true"></div>
+
+  <nav id="chapters" aria-hidden="true"></nav>
+  <button id="sound" type="button" aria-label="Sound off" aria-pressed="false">♪</button>
+  <div id="ps" aria-hidden="true"></div>
+
+  <noscript>
+    <div style="position:fixed;inset:0;display:grid;place-items:center;padding:32px;text-align:center;
+                font-family:Georgia,serif;color:#f4efe6;background:#0a0908;z-index:99">
+      <p style="font-size:24px;line-height:1.6">Tomorrow.<br>Be ready at 7.</p>
+    </div>
+  </noscript>
+
+  <script type="module" src="assets/app.js"></script>
+</body>
+</html>

@@ -1,3 +1,6 @@
-# Netlify: serve the surprise experience as the site root
+# Netlify: static experience, no build step.
 [build]
-  publish = "shi-ilich"
+  publish = "experience"
+
+[build.environment]
+  NODE_VERSION = "20"
