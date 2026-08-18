@@ -65,6 +65,39 @@ describe('a lexicon term matches a whole word only', () => {
   });
 });
 
+describe('a term still matches when its own pattern was never normalised', () => {
+  /*
+   * A block-severity term seeded with taa marbuta (ة) never matched anything:
+   * `normaliseForMatching` folds ة to ه in the submission (routine in informal
+   * Arabic typing) but the stored pattern was compared raw, so the two sides
+   * could never be equal. The database's own hygiene constraint only checks
+   * ASCII lower-casing, which is a no-op for Arabic script — it caught
+   * nothing, and the term passed unfiltered through posts, comments and
+   * messages with no moderation_decisions row and no moderator-queue entry.
+   *
+   * The fix folds the PATTERN through the same normalisation at match time,
+   * so a term matches regardless of which spelling it was authored with —
+   * closing this for every current and future term, not just this one word.
+   */
+  const withMarbuta = slur('marbuta', 'شرمطة');
+
+  it('matches a submission using the folded spelling (heh) against a pattern stored with taa marbuta', () => {
+    const result = moderateText('انتي شرمطه سيئة', { terms: [withMarbuta], surface: PUBLIC });
+    expect(result.verdict).toBe('block');
+    expect(result.matches[0]!.ruleId).toBe('term:marbuta');
+  });
+
+  it('matches a submission using the exact stored spelling too', () => {
+    const result = moderateText('شرمطة', { terms: [withMarbuta], surface: PUBLIC });
+    expect(result.verdict).toBe('block');
+  });
+
+  it('the excerpt reported for a match is the pattern as authored, not the folded search key', () => {
+    const result = moderateText('شرمطة', { terms: [withMarbuta], surface: PUBLIC });
+    expect(result.matches[0]!.excerpt).toBe('شرمطة');
+  });
+});
+
 describe('threats: keyed on the addressee, not the verb', () => {
   it('blocks a first-person threat aimed at "you"', () => {
     const result = moderateText('i will kill you', { terms: [], surface: PUBLIC });

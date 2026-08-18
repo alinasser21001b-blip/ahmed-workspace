@@ -327,10 +327,27 @@ export function moderateText(
 
   for (const term of options.terms) {
     if (term.pattern.length === 0) continue;
+    /*
+     * The pattern is folded through the same normalisation as the
+     * submission, at match time, rather than trusted to have been stored
+     * pre-folded.
+     *
+     * A seeded term containing taa marbuta (ة) never matched anything: the
+     * submission passes through `normaliseForMatching`, which folds ة to ه
+     * (routine in informal Arabic typing), but the stored pattern did not,
+     * so the comparison was always between a folded string and an unfolded
+     * one. The database's own hygiene constraint only checks ASCII
+     * lower-casing, which is a no-op for Arabic script and caught nothing.
+     * Folding here — the one place both sides of every comparison already
+     * meet — makes the match correct regardless of how a term was typed
+     * when it was added, and closes the same class of miss for every other
+     * fold this module knows about (alef variants, farsi yeh/keheh), not
+     * just this one term.
+     */
+    const pattern = normaliseForMatching(term.pattern);
+    if (pattern.length === 0) continue;
     const found =
-      term.match === 'word'
-        ? containsWord(normalised, term.pattern)
-        : normalised.includes(term.pattern);
+      term.match === 'word' ? containsWord(normalised, pattern) : normalised.includes(pattern);
     if (found) {
       matches.push({
         ruleId: `term:${term.id}`,
