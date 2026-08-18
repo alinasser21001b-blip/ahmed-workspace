@@ -126,6 +126,27 @@ function netlifyBlobsDriver() {
  * resumes where it stopped instead of starting over.
  */
 async function boot(): Promise<App> {
+  /*
+   * This file has exactly one legitimate execution context: the deployed
+   * Netlify Function. Nothing set NODE_ENV for it — not netlify.toml (which
+   * only names NODE_VERSION), not the build script, not this file until now
+   * — so `apps/api`'s config schema defaulted it to 'development' on every
+   * real deploy. Two safety checks in `config.ts` key on
+   * `NODE_ENV === 'production'` (refusing `STORAGE_DRIVER=local`, requiring
+   * `MEDIA_URL_SECRET`), and with the default in effect neither ever fired:
+   * `mediaUrlSecret` silently fell back to reusing `JWT_SECRET` — quietly
+   * collapsing two secrets the code's own comment says exist specifically so
+   * rotating one does not invalidate the other — on the real, real-student-
+   * data deployment, with nothing to reveal it had happened.
+   *
+   * `??=` rather than an unconditional assignment, so a caller that has a
+   * genuine reason to set NODE_ENV before this module loads — a test harness
+   * driving this exact handler — is not overridden. Every real invocation of
+   * this function starts with it unset, so every real invocation gets
+   * 'production' from here.
+   */
+  process.env.NODE_ENV ??= 'production';
+
   // `@netlify/database` resolves to this deploy's branch of the database, so a
   // deploy preview gets its own copy rather than writing to the live one.
   if (!process.env.DATABASE_URL) {

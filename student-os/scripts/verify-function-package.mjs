@@ -273,6 +273,85 @@ check(
   leak.requestIdHeader ?? 'missing',
 );
 
+// --- 5b. NODE_ENV is not left to chance -------------------------------------
+//
+// Nothing in netlify.toml, the build script, or (until now) the handler
+// itself ever set NODE_ENV for the deployed function — every real cold start
+// ran with it unset, which the config schema defaults to 'development'. Two
+// safety checks in `apps/api`'s config key on NODE_ENV === 'production'
+// (refusing STORAGE_DRIVER=local, requiring MEDIA_URL_SECRET), and with the
+// default in effect neither ever fired — MEDIA_URL_SECRET quietly fell back
+// to reusing JWT_SECRET on the real deployment, unnoticed, because every
+// check elsewhere in this file supplies NODE_ENV: 'production' itself and so
+// never exercised the condition a real deploy is actually in.
+//
+// The fix lives in `handler.mts`'s boot(): `process.env.NODE_ENV ??=
+// 'production'`. This probe is the one place that must NOT also set
+// NODE_ENV — deliberately omitting it (and STORAGE_DRIVER, and
+// MEDIA_URL_SECRET, matching the live site's actual env-var shape) is what
+// makes this a real test of the fallback rather than a restatement of the
+// other probes above.
+//
+// The public response redacts why boot failed — correctly, that is what
+// section 5 above asserts — so the proof has to come from the server's own
+// `console.error('[boot] the API failed to start', error)`, on stderr. That
+// is a plain console call, not routed through the pino logger, so it is
+// NOT silenced by LOG_LEVEL — this probe leaves LOG_LEVEL unset entirely so
+// nothing suppresses it. With STORAGE_DRIVER left at its 'local' default,
+// config.ts refuses to boot for exactly one reason ("STORAGE_DRIVER=local
+// is not permitted in production") ONLY when it believes it is in
+// production — so that string appearing on stderr is the fallback working,
+// and its absence (boot succeeding, or failing some other way) means it is
+// not.
+
+const { NODE_ENV: _ambientNodeEnv, LOG_LEVEL: _ambientLogLevel, ...envWithoutNodeEnv } =
+  process.env;
+void _ambientNodeEnv;
+void _ambientLogLevel;
+
+const nodeEnvProbe = `
+  const { pathToFileURL } = require('node:url');
+  (async () => {
+    const mod = await import(pathToFileURL(process.argv[1]).href);
+    const response = await mod.default(new Request('https://example.invalid/health/ready'));
+    const body = await response.text();
+    process.stdout.write(JSON.stringify({ status: response.status, body }));
+  })().catch((error) => {
+    process.stdout.write(JSON.stringify({ threw: error.message }));
+  });
+`;
+
+let nodeEnvDefault = { threw: 'probe did not run' };
+let nodeEnvStderr = '';
+try {
+  const { stdout, stderr } = await execFileAsync('node', ['-e', nodeEnvProbe, handlerInArtifact], {
+    cwd: workDir,
+    env: {
+      ...envWithoutNodeEnv,
+      NODE_PATH: '',
+      // Deliberately absent: NODE_ENV, STORAGE_DRIVER, MEDIA_URL_SECRET,
+      // LOG_LEVEL — the exact set of variables the live site does not
+      // currently set (LOG_LEVEL excluded so the diagnostic isn't silenced).
+      DATABASE_URL: 'postgres://probe:hunter2@10.255.255.1:5432/nothing',
+      JWT_SECRET: 'a-secret-that-is-at-least-thirty-two-characters-long',
+      BOOTSTRAP_ADMIN_EMAIL: '',
+      BOOTSTRAP_ADMIN_PASSWORD: '',
+    },
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  nodeEnvDefault = JSON.parse(stdout);
+  nodeEnvStderr = stderr;
+} catch (error) {
+  nodeEnvDefault = { threw: error.message };
+}
+
+check(
+  'with NODE_ENV unset, the handler still defaults it to production',
+  nodeEnvDefault.status === 503 &&
+    nodeEnvStderr.includes('STORAGE_DRIVER=local is not permitted in production'),
+  `${JSON.stringify(nodeEnvDefault).slice(0, 200)} · stderr: ${nodeEnvStderr.slice(0, 200)}`,
+);
+
 // --- 6. real requests, through the artifact, against a real database --------
 //
 // The strongest thing this file can assert, and the only one that covers what a
