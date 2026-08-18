@@ -1,7 +1,8 @@
 import type { CreateReportRequest, ReportReason, ReportTargetType } from '@sos/contracts';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Animated, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { focusSoon } from '../a11y/useFocusHeading';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ApiError } from '../api/client';
 import { DominantAction, SectionHeader, SecondaryAction } from './editorial';
@@ -62,6 +63,25 @@ export function ReportSheet({
   const [outcome, setOutcome] = useState<'idle' | 'filed' | 'duplicate' | 'error'>('idle');
 
   /*
+   * The comments below used to promise focus moves to the heading on open —
+   * nothing in the file actually did it, so a keyboard/screen-reader user
+   * landed straight in the details textarea, past the heading, the Cancel
+   * button and all nine reason options. `tabIndex={-1}` makes the heading
+   * programmatically focusable without adding it to the normal tab order
+   * (it is not meant to be tabbed BACK to), and this effect is what actually
+   * moves focus there whenever the sheet opens.
+   */
+  const headingRef = useRef<View>(null);
+  useEffect(() => {
+    if (!visible) return;
+    // ReportSheet is opened from inside an ActionSheet item's onPress, which
+    // closes the ActionSheet in the same tick. See focusSoon's own comment —
+    // the closing ActionSheet's focus trap steals focus back off the heading
+    // shortly after this effect runs, and this is what wins it back.
+    return focusSoon(headingRef);
+  }, [visible]);
+
+  /*
    * context → focused task → context. The surface lifts 16 px and fades over
    * `enter`; it leaves over `settle`, accelerating, because the student has
    * finished and the way back should not dawdle. No scale: a modal that grows
@@ -115,6 +135,7 @@ export function ReportSheet({
       // Deliberate dismissal only — an explicit Cancel and the system back
       // gesture. There is no tap-outside, which would discard a typed reason.
       onRequestClose={dismiss}
+      accessibilityLabel={t('report.title')}
     >
       <Animated.View style={[{ flex: 1 }, surface]}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.surface }}>
@@ -158,18 +179,14 @@ export function ReportSheet({
                   gap: theme.spacing.md,
                 }}
               >
-                {/* Focus moves here on open, so the modal owns the screen. */}
-                {/* The modal owns focus: content behind it is inert, and a
-                    screen reader lands on this title rather than wherever it
-                    was reading before. */}
-                <Text
-                  accessibilityRole="header"
-                  accessibilityViewIsModal
-                  variant="title"
-                  style={{ flex: 1 }}
-                >
-                  {t('report.title')}
-                </Text>
+                {/* Focus moves here on open — see the effect above — so the
+                    modal owns the screen rather than dropping the reader
+                    straight into the details field. */}
+                <View ref={headingRef} tabIndex={-1} style={{ flex: 1 }}>
+                  <Text accessibilityRole="header" accessibilityViewIsModal variant="title">
+                    {t('report.title')}
+                  </Text>
+                </View>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('action.cancel')}

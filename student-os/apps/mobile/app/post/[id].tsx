@@ -1,8 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { Comment, CommentPage, ContentItem } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { focusSoon, useFocusHeadingOnReady } from '../../src/a11y/useFocusHeading';
 import { ActionSheet } from '../../src/components/ActionSheet';
 import { DirectionalIcon } from '../../src/components/DirectionalIcon';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -55,6 +56,12 @@ export default function PostDetail(): React.JSX.Element {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Arriving here from the Today feed leaves focus on <body> otherwise — this
+  // moves it to the screen's own heading once there is one to focus.
+  const headingRef = useFocusHeadingOnReady(status === 'ready');
+  // Closing the More menu or the report sheet returns here, not to <body>.
+  const moreButtonRef = useRef<View>(null);
 
   /*
    * Accepting a correction changes the post's provenance, so the card has to
@@ -167,11 +174,12 @@ export default function PostDetail(): React.JSX.Element {
           >
             <DirectionalIcon direction="back" size={24} color={theme.colors.text} />
           </Pressable>
-          <Text variant="heading" style={{ flex: 1 }}>
-            {t('post.comments.title')}
-          </Text>
+          <View ref={headingRef} tabIndex={-1} style={{ flex: 1 }}>
+            <Text variant="heading">{t('post.comments.title')}</Text>
+          </View>
           {item && !item.viewer.isAuthor ? (
             <Pressable
+              ref={moreButtonRef}
               accessibilityRole="button"
               accessibilityLabel={t('action.more')}
               onPress={() => setMenuOpen(true)}
@@ -185,12 +193,19 @@ export default function PostDetail(): React.JSX.Element {
           <>
             <ActionSheet
               visible={menuOpen}
-              onClose={() => setMenuOpen(false)}
+              onClose={() => {
+                setMenuOpen(false);
+                focusSoon(moreButtonRef);
+              }}
+              accessibilityLabel={t('action.more')}
               items={[{ label: t('profile.report', { handle: item.author.handle }), onPress: () => setReportOpen(true) }]}
             />
             <ReportSheet
               visible={reportOpen}
-              onClose={() => setReportOpen(false)}
+              onClose={() => {
+                setReportOpen(false);
+                focusSoon(moreButtonRef);
+              }}
               targetType="content"
               targetId={item.id}
             />

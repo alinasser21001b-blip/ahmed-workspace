@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ContentItem, Conversation, FeedPage, Profile, Relationship } from '@sos/contracts';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { focusSoon } from '../../src/a11y/useFocusHeading';
 import { ActionSheet, ConfirmDialog } from '../../src/components/ActionSheet';
 import { ReportSheet } from '../../src/components/ReportSheet';
 import {
@@ -44,6 +45,8 @@ export default function ProfileScreen(): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false);
   const [blockConfirmOpen, setBlockConfirmOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  // Closing the More menu or the report sheet returns here, not to <body>.
+  const moreButtonRef = useRef<View>(null);
 
   const load = useCallback(async (): Promise<void> => {
     setStatus('loading');
@@ -171,6 +174,7 @@ export default function ProfileScreen(): React.JSX.Element {
             </Pressable>
           ) : profile.viewer ? (
             <Pressable
+              ref={moreButtonRef}
               accessibilityRole="button"
               accessibilityLabel={t('profile.more')}
               onPress={() => setMenuOpen(true)}
@@ -321,7 +325,11 @@ export default function ProfileScreen(): React.JSX.Element {
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ActionSheet
         visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
+        onClose={() => {
+          setMenuOpen(false);
+          focusSoon(moreButtonRef);
+        }}
+        accessibilityLabel={t('profile.more')}
         items={[
           {
             label: relationship?.isBlocked
@@ -354,7 +362,10 @@ export default function ProfileScreen(): React.JSX.Element {
       />
       <ReportSheet
         visible={reportOpen}
-        onClose={() => setReportOpen(false)}
+        onClose={() => {
+          setReportOpen(false);
+          focusSoon(moreButtonRef);
+        }}
         targetType="profile"
         targetId={profile.userId}
         {...(profile.viewer && !profile.viewer.isSelf && !blocked

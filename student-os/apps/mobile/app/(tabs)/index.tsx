@@ -301,6 +301,7 @@ export default function Home(): React.JSX.Element {
       <ActionSheet
         visible={menuFor !== null}
         onClose={() => setMenuFor(null)}
+        accessibilityLabel={t('action.more')}
         items={
           menuFor === null
             ? []

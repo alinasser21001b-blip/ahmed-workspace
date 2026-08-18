@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Image, Pressable, TextInput, View } from 'react-native';
 import { ApiError, NetworkError } from '../src/api/client';
+import { useFocusHeadingOnReady } from '../src/a11y/useFocusHeading';
 import { Button } from '../src/components/Button';
 import { ChipPicker, DominantAction, SecondaryAction, SectionHeader } from '../src/components/editorial';
 import { Text } from '../src/components/Text';
@@ -125,13 +126,18 @@ export default function Compose(): React.JSX.Element {
 
   const canPublish = (body.trim().length > 0 || attachment !== null) && !publishing && !uploading;
 
+  // The heading is always present on mount — nothing to wait for.
+  const headingRef = useFocusHeadingOnReady(true);
+
   return (
     <Screen scroll>
       <Enter>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text accessibilityRole="header" variant="title">
-          {t('compose.title')}
-        </Text>
+        <View ref={headingRef} tabIndex={-1}>
+          <Text accessibilityRole="header" variant="title">
+            {t('compose.title')}
+          </Text>
+        </View>
         {/* 44 px and far from Publish: dismissal genuinely loses the text,
             because there is no draft persistence to fall back on. */}
         <Pressable

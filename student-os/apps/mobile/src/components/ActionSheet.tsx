@@ -23,15 +23,29 @@ export function ActionSheet({
   visible,
   onClose,
   items,
+  accessibilityLabel,
 }: {
   visible: boolean;
   onClose: () => void;
   items: ActionSheetItem[];
+  /**
+   * What a screen reader announces when this sheet opens. `Modal` sets
+   * `role="dialog"` on web but has no name source of its own — without this
+   * every instance announces only "dialog", forcing the reader to explore
+   * the whole menu to learn what it is.
+   */
+  accessibilityLabel: string;
 }): React.JSX.Element {
   const theme = useTheme();
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+      accessibilityLabel={accessibilityLabel}
+    >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="dismiss"
@@ -39,6 +53,13 @@ export function ActionSheet({
         onPress={onClose}
       >
         <Pressable
+          // Not itself an action — it exists only to stop a tap inside the
+          // card from reaching the dismiss-scrim above. Left focusable, it is
+          // a Tab stop with no accessible name and nothing to announce; both
+          // props below remove it from the tab cycle and the accessibility
+          // tree entirely.
+          tabIndex={-1}
+          accessibilityRole="none"
           style={{
             backgroundColor: theme.colors.surface,
             borderTopLeftRadius: theme.radius.lg,
@@ -108,7 +129,15 @@ export function ConfirmDialog({
 }): React.JSX.Element {
   const theme = useTheme();
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+      // `title` already says exactly what this confirmation is about — the
+      // same string a sighted user reads as the dialog's own heading.
+      accessibilityLabel={title}
+    >
       <View
         style={{
           flex: 1,
