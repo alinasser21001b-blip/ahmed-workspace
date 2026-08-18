@@ -1,0 +1,6 @@
+# Netlify: static experience, no build step.
+[build]
+  publish = "experience"
+
+[build.environment]
+  NODE_VERSION = "20"

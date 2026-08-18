@@ -1,0 +1,650 @@
+/* ============================================================
+   STOLEN HOURS — design system
+   Dark, warm, editorial. Composition over containers.
+   ============================================================ */
+
+:root{
+  /* ---- surface ---- */
+  --ink:        #0a0908;
+  --paper:      #f4efe6;
+  --paper-dim:  #a49c90;
+  --paper-faint:#6b645b;
+
+  /* ---- accent: champagne, used sparingly ---- */
+  --gold:       #e8c89a;
+  --gold-deep:  #c19a63;
+
+  /* ---- edges ---- */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --chrome: 46px;                    /* room the top chrome occupies */
+
+  /* ---- motion language ----
+     emotional: slow, soft, decelerating
+     playful:   fast, elastic
+     camera:    weighted in-and-out for spatial moves           */
+  --ease-emotional: cubic-bezier(.16, 1, .3, 1);
+  --ease-playful:   cubic-bezier(.34, 1.42, .5, 1);
+  --ease-camera:    cubic-bezier(.65, 0, .35, 1);
+  --ease-exit:      cubic-bezier(.55, 0, .78, .3);
+  --t-quick: .42s;
+  --t-base:  .9s;
+  --t-slow:  1.7s;
+  --t-cine:  2.6s;
+
+  /* ---- type ---- */
+  --display: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --mono:    "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --arabic:  "IBM Plex Sans Arabic", "Geeza Pro", "Segoe UI", system-ui, sans-serif;
+  --sans:    "IBM Plex Sans Arabic", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+*{ margin:0; padding:0; box-sizing:border-box; }
+
+/* Buttons are compositions here, never chrome: strip the native box
+   (Chromium paints a faint buttonface panel behind transparent buttons). */
+button{
+  appearance:none; -webkit-appearance:none;
+  background:none; border:none; color:inherit; font:inherit;
+}
+
+html, body{
+  height:100%;
+  overflow:hidden;
+  overscroll-behavior:none;
+  background:var(--ink);
+}
+
+body{
+  color:var(--paper);
+  font-family:var(--sans);
+  font-weight:300;
+  /* kills the 300ms delay and double-tap zoom, keeps pinch-zoom for a11y */
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  user-select:none; -webkit-user-select:none;
+}
+
+/* ============================================================
+   ATMOSPHERE LAYERS
+   ============================================================ */
+
+#atmos{ position:fixed; inset:0; width:100%; height:100%; z-index:0; }
+
+#bloom{
+  position:fixed; inset:0; z-index:1; pointer-events:none;
+  background:radial-gradient(70% 50% at 50% 58%, rgba(232,200,154,.10), transparent 72%);
+  opacity:0; transition:opacity var(--t-cine) var(--ease-emotional), background var(--t-cine) linear;
+}
+#bloom.warm{ opacity:1; }
+#bloom.cool{
+  opacity:1;
+  background:radial-gradient(70% 50% at 50% 55%, rgba(150,170,210,.07), transparent 72%);
+}
+#bloom.flare{
+  opacity:1;
+  background:radial-gradient(90% 70% at 50% 50%, rgba(232,200,154,.30), rgba(193,154,99,.08) 45%, transparent 78%);
+}
+
+#vignette{
+  position:fixed; inset:0; z-index:2; pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 45%, transparent 42%, rgba(0,0,0,.55) 100%);
+}
+
+#grain{
+  position:fixed; inset:-60%; z-index:3; pointer-events:none;
+  opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation:grain 1.2s steps(3) infinite;
+  will-change:transform;
+}
+@keyframes grain{
+  0%{transform:translate(0,0)} 33%{transform:translate(-1.5%,1%)}
+  66%{transform:translate(1%,-1.5%)} 100%{transform:translate(0,0)}
+}
+
+/* the screen-filling wipe used between chapters */
+#veil{
+  position:fixed; inset:0; z-index:40; pointer-events:none;
+  background:var(--ink); opacity:0;
+  transition:opacity var(--t-base) var(--ease-camera);
+}
+#veil.on{ opacity:1; }
+
+/* ============================================================
+   STAGE
+   ============================================================ */
+
+#world{
+  position:fixed; inset:0; z-index:10;
+  transform-origin:50% 50%;
+  will-change:transform, filter, opacity;
+}
+#world.push{
+  animation:cameraPush 1.15s var(--ease-camera) forwards;
+}
+@keyframes cameraPush{
+  0%{ transform:scale(1); filter:blur(0); opacity:1; }
+  100%{ transform:scale(1.9); filter:blur(14px); opacity:0; }
+}
+
+.scene{
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  padding:
+    calc(max(28px, var(--sat) + var(--chrome))) 26px
+    calc(max(34px, var(--sab) + 30px));
+}
+.scene-inner{
+  width:100%; max-width:min(560px, 100%);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  text-align:center;
+  gap:0;
+}
+
+/* ============================================================
+   TYPE
+   ============================================================ */
+
+.eyebrow{
+  font-family:var(--mono); font-weight:400;
+  font-size:11px; letter-spacing:.34em; text-transform:uppercase;
+  color:var(--paper-faint);
+}
+
+.statement{
+  font-family:var(--display); font-weight:400;
+  font-size:clamp(30px, 8.6vw, 46px);
+  line-height:1.22; letter-spacing:-.012em;
+  color:var(--paper);
+  text-wrap:balance;
+}
+.statement.sm{ font-size:clamp(24px, 6.4vw, 34px); }
+.statement.hero{
+  font-size:clamp(46px, 15.5vw, 88px);
+  line-height:1.02; letter-spacing:-.03em;
+}
+.statement.gold{ color:var(--gold); }
+
+.subcopy{
+  font-family:var(--sans); font-weight:300;
+  font-size:clamp(14.5px, 4vw, 17px);
+  line-height:1.85; color:var(--paper-dim);
+  text-wrap:pretty;
+}
+
+.ar{ font-family:var(--arabic); direction:rtl; }
+
+.mono-tag{
+  font-family:var(--mono); font-size:11.5px;
+  letter-spacing:.3em; text-transform:uppercase;
+  color:var(--gold-deep);
+}
+
+.gap-xs{height:10px} .gap-s{height:18px} .gap-m{height:30px}
+.gap-l{height:48px} .gap-xl{height:76px}
+
+/* ---- Rule 1: secrets arrive through blur + mask, never a plain fade ---- */
+/* The mask only ever travels on the bottom edge. The other three sides stay
+   outside the box so glows and shadows are never clipped by the reveal. */
+.veiled{
+  opacity:0;
+  filter:blur(16px);
+  transform:translateY(14px) scale(.98);
+  clip-path:inset(-60% -60% 42% -60%);
+}
+.veiled.shown{
+  opacity:1; filter:blur(0); transform:none; clip-path:inset(-60% -60% -60% -60%);
+  transition:
+    opacity var(--t-slow) var(--ease-emotional),
+    filter var(--t-slow) var(--ease-emotional),
+    transform var(--t-slow) var(--ease-emotional),
+    clip-path var(--t-slow) var(--ease-emotional);
+}
+.veiled.hiding{
+  opacity:0; filter:blur(12px); transform:translateY(-12px) scale(.99);
+  transition:opacity var(--t-base) var(--ease-exit),
+             filter var(--t-base) var(--ease-exit),
+             transform var(--t-base) var(--ease-exit);
+}
+/* ---- Rule 5: playful beats move faster and overshoot ---- */
+.veiled.quick.shown{
+  transition-duration:var(--t-quick);
+  transition-timing-function:var(--ease-playful);
+}
+
+/* ============================================================
+   THE PORTAL  (ENTER, GRINDERS, and other doorways)
+   ============================================================ */
+
+/* Blink clips a <button>'s overflow, so any light that has to spill past
+   the hit area lives on the wrapper, never inside the button. */
+.portal-wrap{
+  position:relative;
+  display:grid; place-items:center;
+  width:172px; height:172px;
+}
+.portal-wrap .core{
+  position:absolute; left:50%; top:50%;
+  width:330px; height:330px; border-radius:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  background:radial-gradient(circle closest-side,
+    rgba(232,200,154,.17) 0%, rgba(232,200,154,.07) 38%, transparent 70%);
+  transition:transform .6s var(--ease-playful), opacity .6s;
+}
+.portal{
+  position:relative;
+  display:grid; place-items:center;
+  width:100%; height:100%;
+  cursor:pointer;
+  color:var(--paper);
+  font-family:var(--mono); font-size:12px;
+  letter-spacing:.42em; text-indent:.42em; text-transform:uppercase;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+.portal .ring{
+  position:absolute; inset:1px; border-radius:50%;
+  border:1px solid rgba(232,200,154,.34);
+  transition:transform .5s var(--ease-playful), border-color .5s;
+  animation:breathe 4.6s var(--ease-emotional) infinite;
+}
+@keyframes breathe{
+  0%,100%{ transform:scale(1); opacity:.72; }
+  50%{ transform:scale(1.04); opacity:1; }
+}
+.portal .label{ position:relative; z-index:2; }
+.portal:active .ring{ transform:scale(.93); border-color:rgba(232,200,154,.85); }
+.portal-wrap:has(.portal:active) .core{ transform:translate(-50%,-50%) scale(1.2); }
+.portal:focus-visible{ outline:2px solid rgba(232,200,154,.5); outline-offset:4px; border-radius:50%; }
+.portal.firing .ring{ transform:scale(1.9); opacity:0; transition:transform .9s var(--ease-camera), opacity .9s; }
+.portal-wrap.firing .core{ transform:translate(-50%,-50%) scale(4.5); opacity:0; transition:transform 1s var(--ease-camera), opacity 1s; }
+
+/* word-shaped portal (GRINDERS) */
+.portal-word{
+  border:none; background:none; cursor:pointer; color:var(--gold);
+  font-family:var(--display); font-size:clamp(40px,13vw,74px);
+  letter-spacing:.02em; line-height:1.25;
+  padding:34px 30px;                 /* room for the glow inside the button box */
+  text-shadow:0 0 44px rgba(232,200,154,.34);
+  transition:transform .5s var(--ease-playful), text-shadow .5s;
+  touch-action:manipulation;
+}
+.portal-word:active{ transform:scale(.97); text-shadow:0 0 70px rgba(232,200,154,.6); }
+.portal-word.firing{
+  animation:wordPortal 1s var(--ease-camera) forwards;
+}
+@keyframes wordPortal{
+  to{ transform:scale(4.2); opacity:0; filter:blur(10px); }
+}
+
+/* ============================================================
+   HOLD TO REVEAL
+   ============================================================ */
+
+.holder{
+  position:relative; display:grid; place-items:center;
+  width:190px; height:190px;
+  border:none; background:none; cursor:pointer; color:var(--paper);
+  touch-action:none;                    /* we own the gesture */
+  -webkit-tap-highlight-color:transparent;
+}
+.holder svg{ position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg); }
+.holder .track{ fill:none; stroke:rgba(244,239,230,.12); stroke-width:1.5; }
+.holder .prog{
+  fill:none; stroke:var(--gold); stroke-width:1.5; stroke-linecap:round;
+  filter:drop-shadow(0 0 8px rgba(232,200,154,.6));
+  transition:stroke-dashoffset .08s linear;
+}
+.holder .hint{
+  position:relative; z-index:2; max-width:120px;
+  font-family:var(--mono); font-size:10.5px;
+  letter-spacing:.26em; text-transform:uppercase;
+  color:var(--paper-dim); line-height:1.7;
+  transition:color .3s, opacity .3s;
+}
+.holder.active .hint{ color:var(--gold); }
+.holder .pulse{
+  position:absolute; width:100%; height:100%; border-radius:50%;
+  background:radial-gradient(circle, rgba(232,200,154,.14), transparent 65%);
+  opacity:0; transform:scale(.7);
+  transition:opacity .3s, transform .3s var(--ease-emotional);
+}
+.holder.active .pulse{ opacity:1; transform:scale(1); }
+.holder.done{ animation:holdDone .8s var(--ease-playful) forwards; }
+@keyframes holdDone{ to{ transform:scale(1.16); opacity:0; } }
+
+/* the fallback that appears if holding is not working out */
+.hold-fallback{
+  margin-top:22px;
+  font-family:var(--mono); font-size:11px; letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--paper-faint); background:none;
+  border:none; border-bottom:1px solid rgba(107,100,91,.5);
+  padding:6px 2px; cursor:pointer;
+  min-height:44px;
+}
+
+/* ============================================================
+   TIME  (Rule 3: time morphs, it never just swaps)
+   ============================================================ */
+
+.clock{
+  display:inline-flex; align-items:center;
+  font-family:var(--mono); font-weight:400;
+  font-size:clamp(44px, 15vw, 76px);
+  letter-spacing:.02em; color:var(--paper);
+  font-variant-numeric:tabular-nums;
+}
+.clock .digit{
+  position:relative; display:inline-block;
+  height:1.12em; width:.62em; overflow:hidden; vertical-align:top;
+}
+.clock .digit i{
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  font-style:normal;
+  transition:transform .62s var(--ease-camera), opacity .62s var(--ease-camera);
+}
+.clock .digit i.out{ transform:translateY(-108%); opacity:0; }
+.clock .digit i.in{ transform:translateY(108%); opacity:0; }
+.clock .digit i.in.settle{ transform:translateY(0); opacity:1; }
+.clock .colon{ opacity:.45; padding:0 .04em; animation:blink 2.4s steps(2) infinite; }
+@keyframes blink{ 0%,100%{opacity:.45} 50%{opacity:.16} }
+
+/* ============================================================
+   THE SPLIT
+   ============================================================ */
+
+.split-wrap{ width:100%; display:flex; flex-direction:column; align-items:center; }
+.split-svg{ width:100%; max-width:320px; height:132px; overflow:visible; }
+.split-svg path{
+  fill:none; stroke:rgba(244,239,230,.32); stroke-width:1.25; stroke-linecap:round;
+  stroke-dasharray:var(--len); stroke-dashoffset:var(--len);
+  transition:stroke-dashoffset 1.5s var(--ease-camera);
+}
+.split-svg path.drawn{ stroke-dashoffset:0; }
+.split-svg path.hers.drawn{ stroke:rgba(232,200,154,.75); }
+.split-svg path.his.drawn{ stroke:rgba(150,170,210,.55); }
+
+.paths{
+  display:grid; grid-template-columns:1fr 1fr; gap:14px;
+  width:100%; margin-top:6px;
+}
+.path-card{ display:flex; flex-direction:column; align-items:center; gap:7px; }
+.path-card .who{
+  font-family:var(--mono); font-size:10px; letter-spacing:.3em;
+  color:var(--paper-faint);
+}
+.path-card .icon{ font-size:22px; line-height:1; }
+.path-card .where{
+  font-family:var(--display); font-size:clamp(21px,6.2vw,27px); line-height:1.1;
+}
+.path-card.hers .where{ color:var(--gold); }
+.path-card.his .where{ color:#9fb0cf; }
+.path-card .note{
+  font-size:12.5px; line-height:1.75; color:var(--paper-dim);
+  font-weight:300;
+}
+
+/* ============================================================
+   SIDE QUEST — the visual language shifts, briefly
+   ============================================================ */
+
+.quest{ width:100%; display:flex; flex-direction:column; align-items:center; }
+.quest .frame{
+  width:100%; padding:26px 20px;
+  border:1px solid rgba(159,176,207,.22);
+  background:linear-gradient(180deg, rgba(20,26,38,.6), rgba(10,12,18,.5));
+  position:relative; overflow:hidden;
+}
+.quest .frame::before{  /* scanlines */
+  content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+  background:repeating-linear-gradient(180deg, rgba(159,176,207,.05) 0 1px, transparent 1px 4px);
+}
+.quest .frame::after{   /* corner brackets */
+  content:""; position:absolute; inset:7px; pointer-events:none;
+  border:1px solid rgba(159,176,207,.16);
+  clip-path:polygon(0 0,22px 0,22px 1px,1px 1px,1px 22px,0 22px,
+                    0 100%,22px 100%,22px calc(100% - 1px),1px calc(100% - 1px),1px calc(100% - 22px),0 calc(100% - 22px),
+                    100% 0,100% 22px,calc(100% - 1px) 22px,calc(100% - 1px) 1px,calc(100% - 22px) 1px,calc(100% - 22px) 0,
+                    100% 100%,calc(100% - 22px) 100%,calc(100% - 22px) calc(100% - 1px),calc(100% - 1px) calc(100% - 1px),calc(100% - 1px) calc(100% - 22px),100% calc(100% - 22px));
+}
+.quest .qlabel{
+  font-family:var(--mono); font-size:10px; letter-spacing:.36em;
+  color:#9fb0cf; text-transform:uppercase;
+}
+.quest .qtitle{
+  font-family:var(--display); font-size:clamp(28px,8vw,38px);
+  margin-top:8px; color:var(--paper);
+}
+.quest .qclock{
+  font-family:var(--mono); font-size:clamp(30px,10vw,44px);
+  color:#c8d4ea; margin-top:18px; font-variant-numeric:tabular-nums;
+}
+.meter{
+  width:100%; height:2px; margin-top:20px;
+  background:rgba(159,176,207,.16); position:relative; overflow:hidden;
+}
+.meter i{
+  position:absolute; inset:0 100% 0 0;
+  background:linear-gradient(90deg, rgba(159,176,207,.7), #c8d4ea);
+  transition:right 1s var(--ease-camera);
+  box-shadow:0 0 12px rgba(200,212,234,.5);
+}
+.meter-label{
+  display:flex; justify-content:space-between; width:100%; margin-top:9px;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.22em;
+  color:var(--paper-faint); text-transform:uppercase;
+}
+.quest.complete .frame{
+  border-color:rgba(232,200,154,.5);
+  transition:border-color .5s;
+}
+.complete-stamp{
+  font-family:var(--mono); font-size:13px; letter-spacing:.34em;
+  color:var(--gold); text-transform:uppercase;
+  animation:stampIn .6s var(--ease-playful) forwards;
+}
+@keyframes stampIn{
+  from{ opacity:0; transform:scale(1.5); filter:blur(6px); }
+  to{ opacity:1; transform:scale(1); filter:blur(0); }
+}
+
+/* ============================================================
+   FINAL CHOICE — magnetic
+   ============================================================ */
+
+.choices{
+  display:flex; flex-direction:column; gap:16px; width:100%;
+  align-items:center;
+}
+.choice{
+  position:relative; width:100%; max-width:300px; min-height:78px;
+  display:flex; align-items:center; justify-content:center; gap:12px;
+  border:1px solid rgba(244,239,230,.14);
+  background:rgba(244,239,230,.028);
+  color:var(--paper); cursor:pointer;
+  font-family:var(--display); font-size:23px;
+  padding:20px 24px;
+  overflow:hidden;
+  touch-action:none;
+  transition:border-color .45s, background .45s, transform .28s var(--ease-playful);
+  will-change:transform;
+}
+.choice .glow{
+  position:absolute; inset:0; opacity:0; pointer-events:none;
+  transition:opacity .5s;
+}
+.choice.behave .glow{ background:radial-gradient(60% 100% at 50% 50%, rgba(232,200,154,.16), transparent 72%); }
+.choice.improvise .glow{ background:radial-gradient(60% 100% at 50% 50%, rgba(160,50,66,.26), transparent 72%); }
+.choice.near{ border-color:rgba(232,200,154,.45); }
+.choice.near .glow{ opacity:1; }
+.choice.improvise.near{ border-color:rgba(180,70,86,.6); }
+.choice .fill{
+  position:absolute; left:0; top:0; bottom:0; width:0;
+  background:rgba(232,200,154,.14);
+  transition:width .1s linear;
+}
+.choice.improvise .fill{ background:rgba(160,50,66,.24); }
+.choice.chosen{ transform:scale(1.03); }
+.choice.dismissed{ opacity:.14; transform:scale(.96); transition:opacity .6s, transform .6s; }
+.choice .txt{ position:relative; z-index:2; display:flex; align-items:center; gap:11px; }
+
+.pulse-tag{ animation:tagPulse 2.1s var(--ease-emotional) infinite; }
+@keyframes tagPulse{ 0%,100%{opacity:.5} 50%{opacity:1} }
+
+/* ============================================================
+   CHROME
+   ============================================================ */
+
+#sound{
+  position:fixed; z-index:50;
+  top:max(12px, var(--sat)); right:12px;
+  width:44px; height:44px; border-radius:50%;
+  display:grid; place-items:center;
+  border:1px solid rgba(244,239,230,.13);
+  background:rgba(10,9,8,.5); backdrop-filter:blur(8px);
+  color:var(--paper-dim); cursor:pointer;
+  font-size:14px; line-height:1;
+  transition:color .35s, border-color .35s, opacity .6s;
+  position:fixed;
+}
+#sound::after{                       /* the "muted" strike, drawn not typed */
+  content:""; position:absolute; left:12px; right:12px; top:50%;
+  height:1px; background:currentColor; opacity:.85;
+  transform:rotate(-38deg); transform-origin:center;
+  transition:opacity .3s, transform .3s var(--ease-playful);
+}
+#sound.on{ color:var(--gold); border-color:rgba(232,200,154,.4); }
+#sound.on::after{ opacity:0; transform:rotate(-38deg) scaleX(.2); }
+#sound:active{ transform:scale(.93); }
+
+#chapters{
+  position:fixed; z-index:50;
+  top:max(12px, var(--sat)); left:14px;
+  display:flex; align-items:center; gap:6px;
+  height:44px; opacity:0; transition:opacity 1s;
+}
+#chapters.on{ opacity:1; }
+#chapters b{
+  width:14px; height:1px; background:rgba(244,239,230,.16);
+  transition:background .8s var(--ease-emotional), width .8s var(--ease-emotional);
+}
+#chapters b.done{ background:rgba(232,200,154,.45); }
+#chapters b.now{ background:var(--gold); width:22px; box-shadow:0 0 10px rgba(232,200,154,.5); }
+
+/* the resume/replay affordance */
+.softlink{
+  border:none; background:none; cursor:pointer;
+  font-family:var(--mono); font-size:11px; letter-spacing:.22em;
+  text-transform:uppercase; color:var(--paper-faint);
+  padding:12px 4px; min-height:44px;
+  transition:color .4s;
+}
+.softlink:hover, .softlink:focus-visible{ color:var(--gold); }
+
+/* the hidden line */
+#ps{
+  position:fixed; z-index:60; left:50%; bottom:calc(var(--sab) + 60px);
+  transform:translateX(-50%);
+  font-family:var(--display); font-size:17px; font-style:italic;
+  color:var(--gold); white-space:nowrap;
+  opacity:0; pointer-events:none;
+  text-shadow:0 0 30px rgba(232,200,154,.4);
+  transition:opacity 1.1s var(--ease-emotional);
+}
+#ps.on{ opacity:1; }
+
+/* ============================================================
+   REDUCED MOTION — quieter, never broken
+   ============================================================ */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.2s !important;
+  }
+  .veiled{ filter:none; clip-path:none; transform:none; }
+  .veiled.shown{ filter:none; }
+  #grain{ animation:none; }
+  #world.push{ animation:none; opacity:0; transition:opacity .3s; }
+}
+
+/* ============================================================
+   LARGER SCREENS — composed, not a stretched phone
+   ============================================================ */
+@media (min-width:768px){
+  :root{ --chrome:56px; }
+  .scene-inner{ max-width:620px; }
+  .statement{ font-size:clamp(38px, 4.4vw, 56px); }
+  .statement.hero{ font-size:clamp(88px, 10vw, 132px); }
+  .subcopy{ font-size:18px; }
+  .paths{ gap:34px; max-width:520px; }
+  .choices{ flex-direction:row; justify-content:center; gap:20px; }
+  .choice{ max-width:240px; min-height:112px; }
+}
+@media (min-height:900px) and (min-width:768px){
+  .scene-inner{ gap:4px; }
+}
+/* very short phones */
+@media (max-height:640px){
+  .statement{ font-size:clamp(25px, 7.2vw, 34px); }
+  .statement.hero{ font-size:clamp(40px, 13vw, 62px); }
+  .gap-l{height:32px} .gap-xl{height:46px} .gap-m{height:22px}
+  .holder{ width:158px; height:158px; }
+  .portal{ min-width:150px; min-height:150px; }
+}
+
+/* ============================================================
+   PLACE PHOTOS — graded into the night, never pasted on top
+   ============================================================ */
+.photo-card{
+  width:min(300px, 74vw);
+  border-radius:14px;
+  overflow:hidden;
+  position:relative;
+  box-shadow:0 24px 60px rgba(0,0,0,.55);
+}
+.photo-card img{
+  display:block; width:100%; height:auto;
+  max-height:32vh; object-fit:cover;
+  filter:saturate(.88) contrast(1.04) brightness(.92);
+}
+.photo-card::after{           /* warm night grade + vignette */
+  content:""; position:absolute; inset:0;
+  background:
+    linear-gradient(180deg, rgba(10,9,8,.28), transparent 30%, transparent 62%, rgba(10,9,8,.5)),
+    radial-gradient(120% 90% at 50% 40%, transparent 55%, rgba(10,9,8,.42));
+  mix-blend-mode:multiply;
+}
+.photo-card::before{
+  content:""; position:absolute; inset:0; z-index:2; pointer-events:none;
+  box-shadow:inset 0 0 0 1px rgba(232,200,154,.22);
+  border-radius:14px;
+}
+
+.scene-photo-bg{
+  position:absolute; inset:0; z-index:-1; overflow:hidden;
+}
+.scene-photo-bg img{
+  width:100%; height:100%; object-fit:cover;
+  opacity:0; transform:scale(1.12);
+  filter:blur(2.5px) saturate(.75) brightness(.5) contrast(1.05);
+  transition:opacity 3.2s var(--ease-emotional), transform 9s var(--ease-emotional);
+}
+.scene-photo-bg.live img{ opacity:.5; transform:scale(1.02); }
+.scene-photo-bg::after{
+  content:""; position:absolute; inset:0;
+  background:
+    radial-gradient(110% 85% at 50% 46%, transparent 30%, rgba(10,9,8,.88) 88%),
+    linear-gradient(180deg, rgba(10,9,8,.82), transparent 40%, transparent 60%, rgba(10,9,8,.9));
+}
+@media (prefers-reduced-motion: reduce){
+  .scene-photo-bg img{ transform:none; transition:opacity .3s; }
+  .scene-photo-bg.live img{ transform:none; }
+}
