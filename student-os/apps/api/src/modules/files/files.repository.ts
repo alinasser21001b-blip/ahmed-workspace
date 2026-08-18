@@ -215,15 +215,25 @@ export async function attachFilesToMessage(
   return rows.map((r) => r.id);
 }
 
-export async function softDeleteFile(id: string, ownerId: string, client?: Sql): Promise<boolean> {
-  const row = await queryOne<{ id: string }>(
+/**
+ * Marks a file deleted and hands back its storage key, so the caller can
+ * free the bytes. Returns `null` when there was nothing to delete — no such
+ * file, not owned by this user, or already deleted — so a re-delete never
+ * touches storage a second time for a key that may since have been reused.
+ */
+export async function softDeleteFile(
+  id: string,
+  ownerId: string,
+  client?: Sql,
+): Promise<{ storageKey: string } | null> {
+  const row = await queryOne<{ storage_key: string }>(
     `UPDATE files SET deleted_at = now()
      WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
-     RETURNING id`,
+     RETURNING storage_key`,
     [id, ownerId],
     client,
   );
-  return row !== null;
+  return row ? { storageKey: row.storage_key } : null;
 }
 
 /** Uploads left unattached — the sweep target for abandoned composer sessions. */

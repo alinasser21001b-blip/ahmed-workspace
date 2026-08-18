@@ -6,6 +6,7 @@ import { getConfig } from '../../platform/config.js';
 import { errors } from '../../platform/errors.js';
 import { sniffImage } from '../../platform/image-meta.js';
 import { sanitizeImage } from '../../platform/image-sanitize.js';
+import { getLogger } from '../../platform/logger.js';
 import { buildStorageKey, EXTENSION_BY_MIME, getStorage } from '../../platform/storage.js';
 import * as profiles from '../users/users.repository.js';
 import * as repo from './files.repository.js';
@@ -172,7 +173,27 @@ export async function attachToContent(
   }
 }
 
+/**
+ * Deletes a file the caller owns — the row and the bytes both.
+ *
+ * The row goes first, and the storage delete happens after, outside any
+ * transaction: an object delete cannot be rolled back, so doing it before
+ * the row is confirmed gone risks freeing bytes a failed request still
+ * references. If the storage delete itself fails, that is logged rather
+ * than thrown — the row is already gone, so the file is deleted from the
+ * caller's point of view regardless, and turning a storage hiccup into a
+ * 500 for an operation that otherwise fully succeeded would be wrong.
+ */
 export async function deleteOwnFile(actor: Actor, fileId: string): Promise<void> {
   const deleted = await repo.softDeleteFile(fileId, actor.userId);
   if (!deleted) throw errors.notFound('file');
+
+  try {
+    await getStorage().delete(deleted.storageKey);
+  } catch (error) {
+    getLogger().error(
+      { err: error, fileId, storageKey: deleted.storageKey },
+      'storage object survived a file delete',
+    );
+  }
 }
