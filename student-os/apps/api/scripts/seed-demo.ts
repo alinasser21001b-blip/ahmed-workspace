@@ -31,6 +31,52 @@ import { bootstrapPlatformAdmin } from './bootstrap-admin.js';
 const API = process.env.API_URL ?? 'http://localhost:4000';
 const PASSWORD = 'correct-horse-battery';
 
+/**
+ * Refuses to run against anything that looks like a production target.
+ *
+ * This script creates three real accounts through the public signup endpoint,
+ * using a password that is hardcoded above and printed in every run's output —
+ * by design, for a disposable demo cohort. That design is exactly what makes it
+ * dangerous pointed at the wrong database: unlike `resetTestDatabase`'s strict
+ * `_test`-only contract, this is a developer convenience script with the same
+ * "not production" bar as `resetDatabase`, and until now it had no bar at all.
+ *
+ * Checked twice, for the two ways this script can reach a real deployment:
+ * DATABASE_URL, which the practice-question inserts and the admin bootstrap use
+ * directly, and API_URL, which every signup and post goes through.
+ */
+function assertSeedTarget(): void {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('demo:seed refused: NODE_ENV is production');
+  }
+
+  const dbUrl = process.env.DATABASE_URL ?? '';
+  if (!/_test|_dev|_demo|localhost|127\.0\.0\.1/.test(dbUrl)) {
+    throw new Error(
+      'demo:seed refused: DATABASE_URL does not look like a local dev, test or demo database.\n' +
+        'This script creates real accounts with a publicly documented password — it must never ' +
+        'run against a database that is not disposable.',
+    );
+  }
+
+  let apiHost: string;
+  try {
+    apiHost = new URL(API).hostname.toLowerCase();
+  } catch {
+    throw new Error(`demo:seed refused: API_URL "${API}" is not a valid URL.`);
+  }
+  const isPrivateApiHost =
+    apiHost === 'localhost' || apiHost === '127.0.0.1' || apiHost === '::1' || !apiHost.includes('.');
+  if (!isPrivateApiHost) {
+    throw new Error(
+      `demo:seed refused: API_URL "${API}" is a public host. This script must be pointed at a ` +
+        'local or container-network API, never at a deployed one.',
+    );
+  }
+}
+
+assertSeedTarget();
+
 interface Session {
   user: { id: string };
   tokens: { accessToken: string; refreshToken: string };
