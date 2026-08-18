@@ -579,6 +579,81 @@ describe('learning signals', () => {
     // behaviour exists.
     expect(overview.interestTopics.length).toBeGreaterThan(0);
   });
+
+  it('savedCount only counts bookmarks the Saved screen would actually show', async () => {
+    // A bookmark on content that is later deleted is never cleaned up — the
+    // Saved feed correctly filters deleted content out, so a raw count of the
+    // bookmarks table would permanently overcount against what that screen
+    // shows.
+    const app = await getApp();
+    const author = await onboardedUser();
+    const learner = await onboardedUser();
+    const kept = await publish(author, 'محتوى سيبقى محفوظاً.', {
+      knowledgeType: 'note',
+      topicIds: [cohort.topicIds[0]!],
+    });
+    const doomed = await publish(author, 'محتوى سيُحذف بعد حفظه.', {
+      knowledgeType: 'note',
+      topicIds: [cohort.topicIds[0]!],
+    });
+
+    for (const item of [kept, doomed]) {
+      const response = await app.inject({
+        method: 'PUT',
+        url: `/v1/content/${item.id}/bookmark`,
+        headers: auth(learner.session),
+        payload: {},
+      });
+      expect(response.statusCode).toBe(200);
+    }
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: `/v1/content/${doomed.id}`,
+      headers: auth(author.session),
+    });
+    expect(deleteResponse.statusCode).toBe(204);
+
+    const overview = await app.inject({
+      method: 'GET',
+      url: '/v1/learn',
+      headers: auth(learner.session),
+    });
+    // Two bookmarks were made, but only one target still exists.
+    expect(overview.json<LearnOverview>().savedCount).toBe(1);
+
+    const savedFeed = await app.inject({
+      method: 'GET',
+      url: '/v1/feed?scope=saved',
+      headers: auth(learner.session),
+    });
+    expect(savedFeed.json<FeedPage>().items).toHaveLength(1);
+  });
+
+  it('a topic the student has already answered does not also appear as "not answered yet"', async () => {
+    // interestTopics and focusTopics are built from two independent queries.
+    // A topic present in both used to render twice on the Learn tab — once
+    // with real answered stats, once claiming no evidence exists at all.
+    const app = await getApp();
+    const learner = await onboardedUser();
+    const answeredTopicId = cohort.topicIds[0]!; // onboardedUser declares this one as an interest
+
+    await queryOne(
+      `INSERT INTO learning_progress (user_id, topic_id, questions_seen, questions_correct, last_activity_at, weakness_score, confidence)
+       VALUES ($1, $2, 5, 4, now(), 0.2, 0.8)`,
+      [learner.session.user.id, answeredTopicId],
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/learn',
+      headers: auth(learner.session),
+    });
+    const overview = response.json<LearnOverview>();
+
+    expect(overview.focusTopics.some((t) => t.id === answeredTopicId)).toBe(true);
+    expect(overview.interestTopics.some((t) => t.id === answeredTopicId)).toBe(false);
+  });
 });
 
 // --- topics -----------------------------------------------------------------

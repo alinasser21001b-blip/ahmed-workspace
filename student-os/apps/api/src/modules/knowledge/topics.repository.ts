@@ -276,7 +276,18 @@ export async function listLearnProgress(
   );
 }
 
-/** Declared interests — the cold-start input, before any activity exists. */
+/**
+ * Declared interests — the cold-start input, before any activity exists.
+ *
+ * Excludes any topic that already has a `learning_progress` row for this
+ * user. Without that exclusion, a topic the student has actually answered
+ * questions on can appear here too (this query knows nothing about
+ * `learning_progress`), and the Learn tab then shows the same topic twice —
+ * once with real answered stats, once asserting "not answered yet". The
+ * `NOT EXISTS` here is the source of truth for that invariant rather than a
+ * limit-sized list intersection at the call site, so it holds even when a
+ * student has answered questions on more topics than `focusTopics` shows.
+ */
 export async function listInterestTopics(
   userId: string,
   limit: number,
@@ -287,6 +298,10 @@ export async function listInterestTopics(
      FROM profile_interests pi
      JOIN topics t ON t.id = pi.topic_id
      WHERE pi.user_id = $1
+       AND NOT EXISTS (
+         SELECT 1 FROM learning_progress lp
+         WHERE lp.user_id = pi.user_id AND lp.topic_id = pi.topic_id
+       )
      ORDER BY t.name_en
      LIMIT $2`,
     [userId, limit],
@@ -294,9 +309,23 @@ export async function listInterestTopics(
   );
 }
 
+/**
+ * How many of the user's bookmarks the Saved screen (`scope=saved` on
+ * `/v1/feed`) would actually show them.
+ *
+ * A bookmark row on soft-deleted content is never cleaned up — deleting a
+ * post only sets `content_items.deleted_at`, it does not touch `bookmarks` —
+ * so counting the table directly overcounts forever once anything a user
+ * saved gets deleted. Joining to `content_items` and requiring
+ * `deleted_at IS NULL` matches the same filter the Saved feed query applies,
+ * so this count and that screen can never disagree.
+ */
 export async function countBookmarks(userId: string, client?: Sql): Promise<number> {
   const row = await queryOne<{ n: string }>(
-    `SELECT count(*)::text AS n FROM bookmarks WHERE user_id = $1`,
+    `SELECT count(*)::text AS n
+     FROM bookmarks b
+     JOIN content_items ci ON ci.id = b.content_id AND ci.deleted_at IS NULL
+     WHERE b.user_id = $1`,
     [userId],
     client,
   );
