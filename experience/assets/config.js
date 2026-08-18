@@ -41,6 +41,14 @@ export const CONFIG = {
   /* Chapter 05 — the return */
   ret: { place: "GRINDERS" },
 
+  /* Photos of the places. Drop the two files into experience/assets/img/
+     with these exact names; each scene picks its photo up automatically
+     and skips it gracefully if the file is missing. */
+  photos: {
+    beitHalab: "assets/img/beit-halab.jpg",
+    grinders:  "assets/img/grinders.jpg",
+  },
+
   /* The one hidden line. Long-press or triple-tap the date stamp at the end. */
   secret: "p.s. you looked cute reading all this.",
 

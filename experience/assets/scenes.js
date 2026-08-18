@@ -135,6 +135,19 @@ export function pickup({ mount, d, stage }) {
     mount.appendChild(card);
     show(d, card, 120);
 
+    /* the place itself, graded into the night — only if the photo exists */
+    if (C.photos?.beitHalab) {
+      const probe = new Image();
+      probe.onload = () => {
+        if (d.dead) return;
+        const ph = el(`<div class="photo-card"><img src="${C.photos.beitHalab}" alt="${C.pickup.placeLatin}"></div>`);
+        card.appendChild(el(`<div class="gap-s"></div>`));
+        card.appendChild(ph);
+        show(d, ph, 60);
+      };
+      probe.src = C.photos.beitHalab;
+    }
+
     const rest = el(`<div style="width:100%"></div>`);
     mount.append(el(`<div class="gap-l"></div>`), rest);
 
@@ -361,6 +374,20 @@ export function ret({ mount, d, stage }) {
   atmos.set("warm");
   bloom("warm");
   audio.bed("warm");
+
+  /* the feeling of the place, behind everything — only if the photo exists */
+  if (C.photos?.grinders) {
+    const probe = new Image();
+    probe.onload = () => {
+      if (d.dead) return;
+      const bg = el(`<div class="scene-photo-bg" aria-hidden="true"><img src="${C.photos.grinders}" alt=""></div>`);
+      const sceneEl = mount.closest(".scene");
+      sceneEl.style.position = "absolute";
+      sceneEl.insertBefore(bg, sceneEl.firstChild);
+      requestAnimationFrame(() => bg.classList.add("live"));
+    };
+    probe.src = C.photos.grinders;
+  }
 
   const body = el(`<div></div>`);
   mount.appendChild(body);
