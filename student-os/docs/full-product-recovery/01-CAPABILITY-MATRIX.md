@@ -53,7 +53,7 @@ decision or service required), `NONE` (already correct).
 | Saved items read-back | **no screen** (`useFeed('saved')` never called) | `feed?scope=saved` | `bookmarks` | requireAuth | smoke | PARTIAL | no | — | — | PHASE_C |
 | Learn tab counts (savedCount, meaningfulActionsThisWeek) | fetched, never rendered | `GET /v1/learn` | computed | requireAuth | smoke | PARTIAL | no | — | — | PHASE_C |
 | Spaced repetition / review queue | none | none | dormant SM-2 columns on `flashcard_progress` | — | — | MISSING | no | — | product decision | REPORTED |
-| Profile contribution score | headline number on profile | read-through only | `profiles.contribution_score` DEFAULT 0, **never written by any code** | — | — | PARTIAL (renders a constant) | yes — and misleading | nothing computes it | — | PHASE_C |
+| Profile contribution score | ~~headline number on profile~~ **removed in Phase C, `apps/mobile/app/profile/[handle].tsx:219-242`** | read-through only | `profiles.contribution_score` DEFAULT 0, **never written by any code** | — | — | REMOVED — client no longer renders it; column/contract/mapping remain as unread dead weight | no | nothing computes it | — | NONE |
 
 ## C. Rooms — classrooms, lectures, groups, files
 
@@ -67,7 +67,7 @@ decision or service required), `NONE` (already correct).
 | Lecture read, discussion, reading progress | `lecture/[id].tsx` | `GET /v1/lectures/:id` etc. | `0012` | membership policy | integration | CONNECTED_AND_WORKING | yes | — | — | NONE |
 | Lecture create / publish | **none** | `POST /v1/classrooms/:id/lectures` (staff-gated, tested) | `0012` | `canTeach…` | integration | BACKEND_ONLY | no | — | — | PHASE_C |
 | Material attach to a lecture | instructor UI exists | `POST …/materials` | `files` + classroom scope | staff-only | integration | PARTIAL — images only | instructors only | `POST /v1/files` refuses non-images (no PDF) | — | REPORTED |
-| File upload / signed-URL download | composer + materials | `POST /v1/files`, `GET /v1/files/:id/raw` | `files` + Netlify Blobs | HMAC signed URL minted after policy check | integration | CONNECTED_AND_WORKING | yes | needs `STORAGE_DRIVER=external` + `MEDIA_URL_SECRET` on the site | set env vars | REPORTED (env) |
+| File upload / signed-URL download | composer + materials | `POST /v1/files`, `GET /v1/files/:id/raw` | `files` + Netlify Blobs | HMAC signed URL minted after policy check | integration **against `LocalStorageDriver` only — see correction below** | CONNECTED_AND_WORKING (local disk path); **Netlify Blobs itself has never been invoked by any test, deployed function, or health check** | yes | needs `MEDIA_URL_SECRET` on the site (`STORAGE_DRIVER` is not consulted for driver selection on this deployment — see `09-EXTERNAL-SERVICES.md` correction) | set `MEDIA_URL_SECRET`; before relying on this row, exercise a real upload against a real deployed function at least once | REPORTED (env + unverified integration) |
 
 ## D. Chat — messaging
 

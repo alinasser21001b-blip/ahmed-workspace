@@ -38,8 +38,20 @@ or use Neon's pooled string for the runtime path if that ever bites.
 | WHY | Bytes for post images and lecture materials |
 | CAN_RUN_WITHOUT_IT | Not in production; the refusal is deliberate, so uploads fail loudly instead of writing to a disk that vanishes |
 | FEATURES_BLOCKED | Image upload, lecture materials |
-| CREDENTIAL_NEEDED | None beyond the site's own environment (`STORAGE_DRIVER=external`, `MEDIA_URL_SECRET`) |
-| OWNER_ACTION | None — set during deployment |
+| CREDENTIAL_NEEDED | `MEDIA_URL_SECRET` only |
+| OWNER_ACTION | None — `MEDIA_URL_SECRET` is set during deployment |
+
+**Correction (round-2 adversarial review):** `STORAGE_DRIVER=external`, listed above in an earlier
+version of this row, is not actually consulted for driver selection on this deployment path.
+`handler.mts`'s `boot()` calls `setStorage(netlifyBlobsDriver())` unconditionally at every cold
+start (`handler.mts:136-137`), and `storage.ts`'s `getStorage()` returns that already-registered
+driver before it ever reads `STORAGE_DRIVER` (`storage.ts:90-91`). Setting the env var is harmless
+— it just never does anything on Netlify. A related nuance neither this document nor
+`01-CAPABILITY-MATRIX.md` previously captured: the production guard "`STORAGE_DRIVER=local` is not
+permitted in production" (`config.ts:115-117`) is only reachable via `getConfig()` inside
+`buildApp()` (`app.ts:44`), which runs as the *last* step of `boot()` — strictly after
+`setStorage()` has already committed the process to the Blobs driver. That guard cannot actually
+prevent an ephemeral-disk deployment on this path; it is moot here regardless of whether it fires.
 
 Two honest limits: uploads are **images only** (byte-sniffed; a PDF is refused
 with 415), and every read passes through the function rather than a CDN.

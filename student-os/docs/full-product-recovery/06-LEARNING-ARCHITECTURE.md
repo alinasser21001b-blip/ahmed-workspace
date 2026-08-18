@@ -30,7 +30,7 @@ repository root (e.g. `apps/api/src/...` means
 | Learn tab `meaningfulActionsThisWeek` | BACKEND_ONLY (computed, contracted, never rendered) | `apps/api/src/modules/knowledge/topics.service.ts:150,185`; `packages/contracts/src/knowledge/knowledge.contract.ts:239` |
 | Spaced repetition / review queues | MISSING (dormant schema; documented refusal) | `apps/api/migrations/0005_learning.sql:279-295`; `docs/design-handoff/FINAL-FREEZE.md:127` |
 | **Practice question supply (quiz authoring)** | **MISSING — no authoring route exists anywhere** | `apps/api/scripts/seed-demo.ts:169-225`; `apps/api/src/modules/learning/practice.repository.ts:27-33` |
-| Profile contribution score | PARTIAL (display wired, value is a DDL constant) | `apps/api/migrations/0002_academic_hierarchy.sql:178,188` |
+| Profile contribution score | REMOVED — client no longer renders it; see §11 correction below | `apps/mobile/app/profile/[handle].tsx:219-242` |
 | Preview-mode parity for the learning surface | PREVIEW_ONLY | `apps/mobile/src/preview/preview-mode.ts:40-48`; `apps/mobile/src/preview/fixture-transport.ts:136-156` |
 
 The one-line reading: **the learning machinery is built and connected; the learning content is
@@ -406,8 +406,19 @@ architectural.
 
 ## 11. The contribution score
 
-Status: **PARTIAL** — the display pipe is fully connected; the value is a DDL default that nothing
-ever writes.
+> **Correction (round-2 adversarial review):** the section below describes the state this audit
+> found at the time it was written. The client-side half of the defect it identifies — the profile
+> screen rendering a permanent fake zero — was fixed in this same recovery pass, in commit
+> `5b6963a`: `apps/mobile/app/profile/[handle].tsx` no longer renders `contributionScore` anywhere
+> (see the "THE NUMBER THAT IS NOT HERE" comment at lines 219-242 of that file). The column, the
+> contract field, the API mapping and the unused i18n keys/preview fixtures this section documents
+> still exist as dead weight — nothing reachable from any screen reads them — but a reader must not
+> take this section's original "PARTIAL (display wired, value is a DDL constant)" framing as the
+> current state: **the number is removed, not displayed.** `docs/full-product-recovery/13-BEFORE-AFTER.md`
+> is the document that already states this correctly.
+
+Status (as originally audited, before the correction above): **PARTIAL** — the display pipe is
+fully connected; the value is a DDL default that nothing ever writes.
 
 The number shown as the headline figure on a student's profile is
 `profiles.contribution_score`. It is created in
