@@ -41,8 +41,23 @@ function check(condition, label, detail = '') {
   }
 }
 
+/**
+ * Exact text matching, tolerant of the bidi isolates the text primitive adds.
+ *
+ * Single-line text that can be clipped is wrapped in U+2068…U+2069 so its
+ * ellipsis lands at the reading end (see `src/components/Text.tsx`). Those are
+ * invisible formatting characters — a screen reader ignores them — but they
+ * sit in the DOM, so an `exact: true` match on the human-readable string no
+ * longer matches. Matching on the string with optional isolates keeps these
+ * assertions exact about what a person sees.
+ */
+function exactly(text) {
+  const escaped = text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  return new RegExp(`^⁨?${escaped}⁩?$`, 'u');
+}
+
 async function visibleCount(page, text) {
-  const locator = page.getByText(text, { exact: true });
+  const locator = page.getByText(exactly(text));
   const total = await locator.count();
   let seen = 0;
   for (let i = 0; i < total; i += 1) {
@@ -53,14 +68,14 @@ async function visibleCount(page, text) {
 
 async function waitVisible(page, text, timeout = 25_000) {
   await page
-    .getByText(text, { exact: true })
+    .getByText(exactly(text))
     .filter({ visible: true })
     .first()
     .waitFor({ state: 'visible', timeout });
 }
 
 const clickVisible = async (page, text) =>
-  page.getByText(text, { exact: true }).filter({ visible: true }).first().click();
+  page.getByText(exactly(text)).filter({ visible: true }).first().click();
 
 const browser = await chromium.launch({
   ...(process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {}),

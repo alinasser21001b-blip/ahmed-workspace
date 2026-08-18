@@ -29,6 +29,10 @@
     "test:preview": "node apps/mobile/e2e/preview-journey.mjs",
     "test:a11y": "node apps/mobile/e2e/a11y-audit.mjs",
     "test:preview:deployed": "node apps/mobile/e2e/deployed-preview.mjs",
+    "test:social": "node apps/mobile/e2e/social-journey.mjs",
+    "test:bidi": "node apps/mobile/e2e/bidi-truncation.mjs",
+    "test:visual-qa": "node apps/mobile/e2e/visual-qa.mjs",
+    "test:bundle-clean": "node apps/mobile/e2e/bundle-cleanliness.mjs",
     "package:function": "node scripts/bundle-function.mjs",
     "verify:function": "pnpm build && node scripts/bundle-function.mjs && node scripts/verify-function-package.mjs",
     "appstore:check": "node scripts/appstore-check.mjs"

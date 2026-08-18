@@ -252,6 +252,12 @@ jobs:
           pnpm --filter @sos/api build
           pnpm --filter @sos/mobile build:web
 
+      # A resolver rule nobody checks is a comment (metro.config.js's own
+      # words for it). This runs on every CI build against the artifact that
+      # is about to be served, not on trust that the resolver did its job.
+      - name: Assert the real bundle carries no preview/fixture material
+        run: pnpm test:bundle-clean apps/mobile/dist
+
       - name: Start the API
         run: |
           node apps/api/dist/index.js > /tmp/api.log 2>&1 &
@@ -326,6 +332,19 @@ jobs:
           PLAYWRIGHT_CHROMIUM: ''
         run: pnpm test:rtl
 
+      # The Today social loop, closed on one screen: publish, like, unlike,
+      # save, read the save back on its own screen, unsave, comment, follow
+      # the classification to its topic, open a profile, report, block. Runs
+      # against the same real API and real build every other journey in this
+      # job does.
+      - name: Run the social-loop journey on Today
+        env:
+          E2E_WEB_URL: http://localhost:8081
+          E2E_API_URL: http://localhost:4000
+          E2E_SHOT_DIR: ${{ runner.temp }}/e2e-shots
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:social
+
       # Screenshots are the artefact worth keeping: an RTL layout failure is
       # visible in one and invisible in a log line.
       - name: Upload journey screenshots
@@ -383,6 +402,12 @@ jobs:
 
       - run: pnpm --filter @sos/mobile build:web
 
+      # The mirror image of the real-build check in the `journey` job: this
+      # build MUST carry its fixture world, since serving it is the entire
+      # point of a preview export.
+      - name: Assert the preview bundle carries its fixture world
+        run: pnpm test:bundle-clean apps/mobile/dist --preview
+
       - name: Serve the preview bundle
         run: |
           npx --yes serve apps/mobile/dist -l 8098 --single > /tmp/preview-web.log 2>&1 &
@@ -421,6 +446,17 @@ jobs:
           E2E_SHOT_DIR: ${{ runner.temp }}/preview-shots
           PLAYWRIGHT_CHROMIUM: ''
         run: pnpm test:preview:deployed
+
+      # RC-03: the ellipsis on a clipped mixed-script name must fall at the
+      # reading end, not wherever `dir="auto"` happened to resolve the element.
+      # Runs here because the fixture world has the mixed-script names (a
+      # deliberately Arabic-first study group, a cited Latin source URL) that
+      # trigger the defect; a real cohort's content is not guaranteed to.
+      - name: Audit bidi truncation — the ellipsis side, and isolation of mixed text
+        env:
+          E2E_WEB_URL: http://localhost:8098
+          PLAYWRIGHT_CHROMIUM: ''
+        run: pnpm test:bidi
 
       - name: Upload preview screenshots
         if: always()

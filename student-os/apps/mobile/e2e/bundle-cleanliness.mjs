@@ -72,8 +72,36 @@ const FIXTURE_MARKERS = [
   'preview dataset',
 ];
 
-/** Developer copy that never went through the translation catalogue. */
-const DEVELOPER_MARKERS = ['Motion samples', 'motion prototypes', 'preview build and are not available'];
+/**
+ * Developer/preview copy that never went through the translation catalogue,
+ * plus the working feedback form itself.
+ *
+ * `recordFeedback` is `src/preview/feedback-store.ts`'s only exported write
+ * function and appears nowhere else in the app — its presence means the real
+ * feedback form shipped, not the route stub. The banner's own marketing line
+ * is checked directly rather than by a substring of the deleted
+ * motion-samples screen: an adversarial pass found the previous list's third
+ * entry could never match anything (it was that screen's exact wording, gone
+ * along with the file, so the check passed vacuously while leaving the
+ * feedback-form leak — a materially identical bug — undetected).
+ */
+const DEVELOPER_MARKERS = [
+  'Motion samples',
+  'motion prototypes',
+  'sample data · بيانات تجريبية',
+  'recordFeedback',
+];
+
+/**
+ * NOT checked, deliberately: individual `preview.feedback.*` catalogue
+ * strings (e.g. "Tell us how this felt"). The translation catalogue is one
+ * object shared by every build, and it ships in full regardless of which
+ * routes are reachable — that is true of any i18n system and is not evidence
+ * a screen shipped. What matters is whether the FORM ships (checked via
+ * `recordFeedback`, its only call site) and whether the BANNER's own copy
+ * ships (checked directly above) — both do not, and are what the metro
+ * resolver in `metro.config.js` exists to guarantee.
+ */
 
 if (expectPreview) {
   check(
