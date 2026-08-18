@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertResettableDatabaseUrl,
   assertTestDatabaseUrl,
+  checkResettableDatabaseUrl,
   checkTestDatabaseUrl,
   DEFAULT_TEST_DATABASE_URL,
+  isSafeResettableDatabaseUrl,
   isSafeTestDatabaseUrl,
   redactUrl,
 } from '../database-safety.js';
@@ -107,6 +110,82 @@ describe('assertTestDatabaseUrl', () => {
     // is about to lose a database if they guess wrong.
     expect(message).toContain('source apps/api/.env');
     expect(message).toContain('TEST_DATABASE_URL');
+  });
+});
+
+describe('the developer-reset contract (checkResettableDatabaseUrl)', () => {
+  /*
+   * `resetDatabase` used to check a single regex, `/_test|_dev|localhost|
+   * 127\.0\.0\.1/`, against the WHOLE connection string as an OR — a
+   * substring match with no idea which field it was matching inside. These
+   * cases are exactly the ones that regex got wrong.
+   */
+
+  it.each([
+    ['a dev database', local('studentos_dev')],
+    ['a demo database', local('studentos_demo')],
+    ['a test database', local('studentos_test')],
+    ['a container hostname', 'postgres://postgres:postgres@postgres:5432/studentos_dev'],
+  ])('accepts %s', (_label, url) => {
+    expect(isSafeResettableDatabaseUrl(url, 'test')).toBe(true);
+  });
+
+  it('refuses a database literally named "...development" even though it contains "_dev"', () => {
+    // The old regex matched "_dev" as a substring of "_development" and let this through.
+    const rejection = checkResettableDatabaseUrl(local('studentos_development'), 'test');
+    expect(rejection).not.toBeNull();
+  });
+
+  it('refuses a production host even when the password merely contains the word "localhost"', () => {
+    // The old regex matched "localhost" anywhere in the string, password included — even
+    // though the database name here otherwise satisfies the disposable-suffix rule.
+    const url = 'postgres://user:localhost-backup-key@prod-primary.example.com:5432/studentos_dev';
+    const rejection = checkResettableDatabaseUrl(url, 'test');
+    expect(rejection).not.toBeNull();
+    expect(rejection?.reason).toContain('public name');
+  });
+
+  it('refuses a production-looking database on a public host even with "_test" in the username', () => {
+    // The old regex matched "_test" anywhere, including inside a username.
+    const url = 'postgres://qa_test_readonly:pw@prod.example.com:5432/production';
+    expect(isSafeResettableDatabaseUrl(url, 'test')).toBe(false);
+  });
+
+  it('refuses a public host even when the database name ends in a disposable suffix', () => {
+    expect(
+      isSafeResettableDatabaseUrl('postgres://u:p@db.prod.example.com:5432/studentos_test', 'test'),
+    ).toBe(false);
+  });
+
+  it('refuses a disposable-suffix name on a managed-host connection string', () => {
+    expect(
+      isSafeResettableDatabaseUrl(
+        'postgres://u:p@abc.eu-west-1.rds.amazonaws.com:5432/app_dev',
+        'test',
+      ),
+    ).toBe(false);
+  });
+
+  it('refuses everything when NODE_ENV is production', () => {
+    expect(isSafeResettableDatabaseUrl(local('studentos_dev'), 'production')).toBe(false);
+  });
+});
+
+describe('assertResettableDatabaseUrl', () => {
+  it('passes a safe URL through without throwing', () => {
+    expect(() =>
+      assertResettableDatabaseUrl(local('studentos_dev'), 'resetDatabase', 'test'),
+    ).not.toThrow();
+  });
+
+  it('names the refusing layer', () => {
+    let message = '';
+    try {
+      assertResettableDatabaseUrl(undefined, 'resetDatabase', 'test');
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('resetDatabase refused');
   });
 });
 

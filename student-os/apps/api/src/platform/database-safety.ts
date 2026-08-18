@@ -26,6 +26,14 @@
 /** A database is safe to destroy in tests only if its name ends with this. */
 const TEST_DATABASE_SUFFIX = '_test';
 
+/**
+ * Suffixes `pnpm db:reset` (the developer reset) may destroy. Wider than the
+ * test contract on purpose — see `checkResettableDatabaseUrl` below — but
+ * still an explicit, closed list, never a substring match against the whole
+ * connection string.
+ */
+const RESETTABLE_DATABASE_SUFFIXES = ['_test', '_dev', '_demo'];
+
 export const DEFAULT_TEST_DATABASE_URL =
   'postgres://postgres:postgres@localhost:5432/studentos_test';
 
@@ -138,6 +146,85 @@ export function assertTestDatabaseUrl(
         'is a DATABASE_URL exported into your shell — `source apps/api/.env` does exactly that. ' +
         'Run the tests from a shell without it, or unset DATABASE_URL.',
     );
+  }
+}
+
+/**
+ * Decides whether a connection string may be destroyed by the DEVELOPER reset
+ * (`pnpm db:reset`, `resetDatabase` in migrate.ts) or the demo seed's target
+ * check.
+ *
+ * Wider than `checkTestDatabaseUrl` on purpose: wiping your own development
+ * or demo database is the entire point of `pnpm db:reset`, so `_dev` and
+ * `_demo` are accepted alongside `_test`. But it enforces the SAME two
+ * structural conditions as the test contract — a disposable-looking database
+ * name suffix AND a private host — rather than the substring-anywhere-in-the-
+ * connection-string regex this used to be. That old regex matched on the
+ * whole string, so a database literally named "studentos_development" on a
+ * public production host would have satisfied it (it contains "_dev"), and
+ * so would a URL whose username or password merely happened to contain
+ * "test" or "localhost" as a substring. Parsing the URL and checking the
+ * database name and hostname as distinct fields closes both.
+ */
+export function checkResettableDatabaseUrl(
+  url: string | undefined,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): TestDatabaseRejection | null {
+  if (nodeEnv === 'production') {
+    return { reason: 'NODE_ENV is "production"; a database reset refuses to run at all.' };
+  }
+  if (!url || url.trim() === '') {
+    return { reason: 'no database URL was given.' };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { reason: `"${url}" is not a valid connection string.` };
+  }
+
+  const name = parsed.pathname.replace(/^\//, '');
+  if (name === '') {
+    return { reason: `"${redactUrl(url)}" names no database.` };
+  }
+  if (!RESETTABLE_DATABASE_SUFFIXES.some((suffix) => name.endsWith(suffix))) {
+    return {
+      reason:
+        `the database is called "${name}", which does not end in any of ` +
+        `${RESETTABLE_DATABASE_SUFFIXES.map((s) => `"${s}"`).join(', ')}. A reset drops and ` +
+        'rebuilds the whole schema, so it will only run against a database whose name says it ' +
+        'is disposable.',
+    };
+  }
+  if (!isPrivateHost(parsed.hostname)) {
+    return {
+      reason:
+        `the host "${parsed.hostname}" is a public name. A disposable database lives on ` +
+        'localhost or on a container network, never behind a public DNS name.',
+    };
+  }
+
+  return null;
+}
+
+/** True when the URL may be reset by `pnpm db:reset` (or targeted by demo:seed). */
+export function isSafeResettableDatabaseUrl(
+  url: string | undefined,
+  nodeEnv?: string | undefined,
+): boolean {
+  return checkResettableDatabaseUrl(url, nodeEnv) === null;
+}
+
+/** Throws unless the URL satisfies the developer-reset contract. */
+export function assertResettableDatabaseUrl(
+  url: string | undefined,
+  context: string,
+  nodeEnv?: string | undefined,
+): asserts url is string {
+  const rejection = checkResettableDatabaseUrl(url, nodeEnv);
+  if (rejection) {
+    throw new Error(`${context} refused: ${rejection.reason}`);
   }
 }
 

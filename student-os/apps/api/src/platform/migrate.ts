@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertTestDatabaseUrl } from './database-safety.js';
+import { assertResettableDatabaseUrl, assertTestDatabaseUrl } from './database-safety.js';
 import { getPool } from './db.js';
 
 /**
@@ -146,21 +146,18 @@ export async function migrate(
  * of time, not of care.
  *
  * This is the DEVELOPER reset, reached through `pnpm db:reset`, and it
- * deliberately permits `_dev`: wiping your own development database is the
- * entire point of the command. That permission is also why it is the wrong
- * guard for the test suite, which must never be able to reach `_dev` at all —
- * see `resetTestDatabase` below.
+ * deliberately permits `_dev` and `_demo`: wiping your own development or
+ * demo database is the entire point of the command. That permission is also
+ * why it is the wrong guard for the test suite, which must never be able to
+ * reach `_dev` at all — see `resetTestDatabase` below.
+ *
+ * The guard itself is `checkResettableDatabaseUrl` in database-safety.ts: the
+ * database name (parsed, not matched as a substring of the whole connection
+ * string) must end in a disposable suffix, and the host (also parsed) must be
+ * private. See that module for why the previous single-regex check was unsafe.
  */
 export async function resetDatabase(): Promise<void> {
-  const url = process.env.DATABASE_URL ?? '';
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('resetDatabase refused: NODE_ENV is production');
-  }
-  if (!/_test|_dev|localhost|127\.0\.0\.1/.test(url)) {
-    throw new Error(
-      'resetDatabase refused: DATABASE_URL does not look like a local dev or test database',
-    );
-  }
+  assertResettableDatabaseUrl(process.env.DATABASE_URL, 'resetDatabase');
   await getPool().query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
 }
 
