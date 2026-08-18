@@ -26,11 +26,14 @@ TARGET_SITE = student-os-preview (site_id 36f5f05c-f6ba-4ba7-bf39-b01d4cbc2a08)
   student-os-uob-stage5 (the real production site, never touched this
   session) and NOT steady-longma-2cd2b7 (do-not-deploy).
 
-CURRENT_COMMIT (repo, local HEAD) = 2600548
-  Includes the round-1 P0/P1 fixes (6468c91) and every round-2 fix listed
-  under "Round 2" below (b6763e7 .. 2600548). NOT what is currently live —
-  see next line. None of these commits have been pushed to origin while
-  the hold is in effect.
+CURRENT_COMMIT (repo, local HEAD) = tip of branch `claude/student-preview`,
+  17 commits ahead of origin. Code fixes span 6468c91 (round 1) and
+  b6763e7..2600548 (round 2, every fix in the table below); commits after
+  that are this document itself. Deliberately not pinned to a single hash
+  here — this document is edited in the same branch it describes, so a
+  literal HEAD hash would be stale the moment it is written. NOT what is
+  currently live (see next line), and nothing has been pushed to origin
+  while the hold is in effect.
 
 CURRENT_COMMIT (site's last deploy) = 6355f9c
   Netlify MCP get-deploy-for-site, deploy id 6a83111986e0da0008a4dd43,
@@ -107,7 +110,7 @@ DATABASE_BACKUP_EXISTS = NO scheduled backup of this specific database.
   redundancy exists is entirely Neon's own platform-level retention,
   which this repository has no visibility into and makes no claim about.
 
-DATABASE_BACKUP_RESTORE_PROVEN = NO — and the repository already says so
+RESTORE_PROVEN = NO — and the repository already says so
   in its own words. docs/production-ops/06-BACKUP-RESTORE.md (written
   before this session, commit 0cc2d18): "git log --oneline -- ops/ returns
   exactly one commit... There is no evidence in git history, CI, or any
@@ -278,7 +281,7 @@ ROLLBACK_PLAN = Two independent, low-effort levers, neither exercised this
        further verified this session — noted as available, not proven).
     No database rollback plan exists beyond "the migrator only ever adds";
     there is no tested path to undo a bad write to real data once one
-    happens, which is exactly what DATABASE_BACKUP_RESTORE_PROVEN = NO
+    happens, which is exactly what RESTORE_PROVEN = NO
     means in practice.
 
 EXPECTED_WRITABLE_DATA = If deployed today with all required secrets set:
@@ -315,6 +318,43 @@ PRODUCTION_DATA_RISK = The real, load-bearing risk this preflight exists
 ---
 
 ## Adversarial review status
+
+### Mandatory domain ledger
+
+All thirteen domains the owner named. Every one finished; **none** is
+recorded `COULD_NOT_COMPLETE`.
+
+| # | Mandatory domain | Round | Reviewer status | Findings confirmed |
+|---|---|---|---|---|
+| 1 | Product | 1 | COMPLETE | included in round 1's 7 confirmed |
+| 2 | Social feed | 1 | COMPLETE | 1 P0 (block broken), 2 P1 |
+| 3 | Messaging | 2 | COMPLETE | 1 (#14) |
+| 4 | Classroom / lectures | 2 | COMPLETE | 1 (#15) |
+| 5 | Learning / Practice | 2 | COMPLETE | 3 (#5, #6, #16) |
+| 6 | Arabic / RTL | 1 | COMPLETE | included in round 1's 7 confirmed |
+| 7 | Accessibility | 2 | COMPLETE | 4 (#7, #8, #9, #10) |
+| 8 | Security / UGC | 2 | COMPLETE | 1 P0 (#1) |
+| 9 | Bundle cleanliness | 1 | COMPLETE | 1 P2 (inert preview strings, disclosed in `12-QA-REPORT.md`) |
+| 10 | Runtime / deployment | 1 | COMPLETE | 1 P2 (untested env combination, disclosed in `12-QA-REPORT.md`) |
+| 11 | Environment safety | 2 | COMPLETE | 1 P0 (#2) |
+| 12 | Database safety | 2 | COMPLETE | 2 (#3, #4) |
+| 13 | Storage / files | 2 | COMPLETE | 3 (#11, #12, #13) |
+
+`COULD_NOT_COMPLETE = <none>` — no reviewer in either round terminated
+early, hit a tool or permission wall it could not work around, or returned
+without a verdict. The two round-1 P2s marked "disclosed, not fixed" are a
+deliberate scope decision recorded in `12-QA-REPORT.md`, not an incomplete
+review: both were fully investigated and neither blocks a deploy.
+
+One honest limit on the *depth* of two domains, stated so it is not
+mistaken for completeness it does not have: **Storage / files** and
+**Runtime / deployment** were reviewed exhaustively against the code and
+the local environment, but neither could exercise the actual deployed
+Netlify runtime — doing so requires the deployment this hold forbids. That
+limit is what finding #12 documents and what blocker 4 below carries
+forward. It is a bounded gap in evidence, not an unfinished review.
+
+### Round detail
 
 **Round 1** (product, social feed, bundle cleanliness, Arabic/RTL, runtime/
 deployment honesty) — COMPLETE. 9 findings raised, 7 survived independent
@@ -413,7 +453,7 @@ explicitly left as an owner decision — is complete. This gate answers
 ## REAL_DEPLOY_PREFLIGHT = FAIL
 
 Independent of the adversarial gate: `DATABASE_CONTAINS_DISPOSABLE_DATA =
-UNKNOWN` and `DATABASE_BACKUP_RESTORE_PROVEN = NO` are, on their own,
+UNKNOWN` and `RESTORE_PROVEN = NO` are, on their own,
 sufficient to fail this. Both are pre-existing facts about the site and
 the repository, not something this session introduced or can resolve by
 more code — they require an owner decision. `MEDIA_STORAGE_CREDENTIALS_
