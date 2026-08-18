@@ -289,6 +289,15 @@ try {
   // Out of the report sheet, then block — the act a student reaches for when
   // reporting is not enough. It is confirmed rather than instant, because it
   // cuts off messaging and visibility in one step.
+  //
+  // An earlier version of this test stopped here, asserting only that the
+  // confirmation dialog's own title text was on screen — which is true the
+  // instant the dialog opens, before anything has actually happened. That
+  // let a real P0 ship silently: the client sent the block request with no
+  // body at all, the server correctly rejected it with 400, and the
+  // catch block swallowed the failure — so confirming looked identical to
+  // this test whether the block worked or not. The dialog closing is not
+  // evidence; the relationship actually changing is.
   await page.keyboard.press('Escape');
   await settle('28-after-report', 1200);
   await page.getByLabel('إجراءات أخرى').last().click();
@@ -298,6 +307,28 @@ try {
   check(
     (await body()).includes('حظر'),
     'blocking asks for confirmation before it applies',
+  );
+
+  await page.getByRole('button', { name: 'حظر @amjad', exact: true }).last().click();
+  await settle('31-blocked', 2000);
+  // This text renders only from `relationship.isBlocked`, freshly reloaded
+  // from `GET /v1/profiles/:handle/relationship` after the mutation — it is
+  // not a local/optimistic flag, so seeing it is proof the server accepted
+  // the write, not just that the client believes it did.
+  check(
+    (await body()).includes('لقد حظرت هذا الشخص'),
+    'the profile reflects the block actually taking effect, not just the dialog closing',
+  );
+  const unblockButton = page.getByLabel('إلغاء حظر @amjad', { exact: true }).last();
+  check(await unblockButton.isVisible(), 'an unblock control appears once the block has taken');
+
+  // Restore state: unblocking @amjad, a shared demo account other suites and
+  // manual QA runs also rely on being reachable.
+  await unblockButton.click();
+  await settle('32-unblocked', 1800);
+  check(
+    !(await body()).includes('لقد حظرت هذا الشخص'),
+    'unblocking restores the normal profile view',
   );
 
   console.log(`\n${jsErrors.length} console/page errors`);

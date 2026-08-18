@@ -115,6 +115,15 @@ export default function ProfileScreen(): React.JSX.Element {
     try {
       const next = await api.request<Relationship>(`/v1/profiles/${handle}/block`, {
         method: relationship.isBlocked ? 'DELETE' : 'PUT',
+        // The route's body is `{ reason }` with `reason` optional — but the
+        // payload itself must still be a JSON object. Omitting `body` here
+        // sent no payload at all (the client only attaches one when it is
+        // not `undefined`), which the server correctly rejected with 400 on
+        // every single call. The catch below then swallowed that failure
+        // silently, so the confirm dialog closed as if the block had taken
+        // and it never had — the same shape of bug `toggleBookmark` in
+        // `useFeed.ts` already avoids by sending `{}` on its PUT.
+        ...(relationship.isBlocked ? {} : { body: {} }),
       });
       setRelationship(next);
     } catch {

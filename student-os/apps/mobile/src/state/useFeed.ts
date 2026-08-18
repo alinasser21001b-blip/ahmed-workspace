@@ -37,8 +37,24 @@ export function useFeed(scope: 'home' | 'saved' = 'home'): FeedState {
   const [status, setStatus] = useState<FeedStatus>('loading');
   const [hasMore, setHasMore] = useState(false);
 
+  /*
+   * Re-entrancy guard.
+   *
+   * `cursor`/`hasMore` are React state: they only update once the fetch that
+   * reads them resolves. A fast scroll fires `onEndReached` more than once
+   * before that happens, so two calls to `load('more')` both read the same
+   * stale cursor, both fetch the same page, and both append it — the same
+   * posts rendered twice, on the primary feed, from an ordinary scroll
+   * gesture. A ref (not state) is checked and set synchronously before the
+   * first `await`, so the second call inside the same tick sees it already
+   * held and returns without fetching anything.
+   */
+  const loading = useRef(false);
+
   const load = useCallback(
     async (mode: 'initial' | 'refresh' | 'more') => {
+      if (loading.current) return;
+      loading.current = true;
       setStatus(mode === 'refresh' ? 'refreshing' : mode === 'more' ? 'loadingMore' : 'loading');
       try {
         const query = new URLSearchParams({ scope, limit: '20' });
@@ -52,6 +68,8 @@ export function useFeed(scope: 'home' | 'saved' = 'home'): FeedState {
       } catch {
         // A failed "load more" must not blank the page the user is reading.
         setStatus(mode === 'more' ? 'ready' : 'error');
+      } finally {
+        loading.current = false;
       }
     },
     [api, cursor, scope],
