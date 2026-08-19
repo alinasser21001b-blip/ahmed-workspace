@@ -56,6 +56,7 @@ export default function SettingsScreen(): React.JSX.Element {
           <SectionHeader title={t('settings.account')} />
           <View>
             <Row label={t('settings.blocked')} onPress={() => router.push('/settings/blocked')} />
+            <Row label={t('settings.privacy')} onPress={() => router.push('/settings/privacy')} />
             <Row label={t('settings.signOut')} onPress={() => void signOut()} />
           </View>
         </View>

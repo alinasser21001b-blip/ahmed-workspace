@@ -41,6 +41,7 @@ const ROUTES = [
   ['/profile/layla.hassan', 'profile'],
   ['/compose', 'compose'],
   ['/settings', 'settings'],
+  ['/settings/privacy', 'privacy'],
   ['/settings/delete-account', 'delete-account'],
 ];
 

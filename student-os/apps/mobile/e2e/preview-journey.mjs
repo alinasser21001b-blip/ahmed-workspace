@@ -232,13 +232,9 @@ async function run(locale, width) {
   await page.locator('input:visible').first().fill('Layla');
   await waitVisible(page, locale === 'ar' ? 'أشخاص' : 'People');
   check(true, 'search returns people results');
-  const deferred = locale === 'ar'
-    ? 'المواضيع والقاعات غير قابلة للبحث بعد.'
-    : 'Topics and classrooms are not searchable yet.';
-  check(
-    await visibleCount(page, deferred) > 0,
-    'search states the blocked result types rather than faking them',
-  );
+  await page.locator('input:visible').first().fill('acid');
+  await waitVisible(page, locale === 'ar' ? 'مواضيع' : 'Topics');
+  check(true, 'search returns topics as a first-class result type');
   await shot('12-search');
 
   // --- profile ------------------------------------------------------------

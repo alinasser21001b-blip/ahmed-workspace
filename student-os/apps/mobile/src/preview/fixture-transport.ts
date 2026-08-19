@@ -14,9 +14,8 @@ import * as world from './fixtures';
  *  - Messaging is HTTP send/read only. Nothing here emits realtime frames,
  *    simulates typing, or pretends to live-deliver — the deployed host cannot
  *    hold a WebSocket open, and neither does this.
- *  - Search returns only the result classes the real contract supports
- *    (people, content, groups, communities). Topic and classroom search have
- *    no endpoint in production and none here.
+ *  - Search returns the six result classes the real contract supports
+ *    (people, content, groups, communities, topics, classrooms).
  *  - Push notifications do not exist in production and are not simulated.
  *  - Image upload is refused with a clear message rather than faked.
  *
@@ -120,6 +119,10 @@ export function route(method: string, path: string, query: URLSearchParams, body
     return json(world.makeMyProfile());
   }
   if (path === '/v1/me/blocks' && method === 'GET') return json(world.blockedAccounts());
+  if (path === '/v1/me/privacy' && method === 'GET') return json(world.privacy);
+  if (path === '/v1/me/privacy' && method === 'PATCH') {
+    return json(world.updatePrivacy(body as Partial<typeof world.privacy>));
+  }
   if (path === '/v1/me/account' && method === 'DELETE') {
     if (body.confirmation !== 'DELETE') {
       return error(400, 'VALIDATION_ERROR', 'Type DELETE to confirm.');

@@ -151,6 +151,15 @@ jobs:
           EXPO_PUBLIC_API_URL: https://api.studentos.example
         run: pnpm --filter @sos/mobile build:web
 
+      - name: Production bundle does not contain preview fixtures
+        run: |
+          if grep -R --fixed-strings "Layla Hassan" apps/mobile/dist >/dev/null; then
+            echo "::error::preview fixture strings leaked into the production web bundle"
+            grep -R --fixed-strings -n "Layla Hassan" apps/mobile/dist | head
+            exit 1
+          fi
+          echo "production web bundle contains no preview fixture names"
+
       # ---------------------------------------------------------------------
       # The deployment contract.
       #

@@ -186,13 +186,71 @@ export const inviteMemberRequestSchema = z.object({
 
 // --- search -----------------------------------------------------------------
 
-export const searchKindSchema = z.enum(['all', 'people', 'content', 'groups', 'communities']);
+export const searchKindSchema = z.enum([
+  'all',
+  'people',
+  'content',
+  'groups',
+  'communities',
+  'topics',
+  'classrooms',
+]);
+export type SearchKind = z.infer<typeof searchKindSchema>;
 
 export const searchQuerySchema = z.object({
   q: z.string().trim().min(2).max(100),
   kind: searchKindSchema.default('all'),
   limit: z.coerce.number().int().min(1).max(25).default(10),
 });
+
+/**
+ * A topic as a search hit — enough to navigate, plus this reader's evidence
+ * when they have answered anything here.
+ *
+ * `viewer` is null when the reader has never answered a question on the topic.
+ * The client must not invent a 0/0 fraction; the design's EvidenceFraction
+ * already refuses that, and the contract matches it.
+ *
+ * There is no lecture count, no weakness score, and no "recommended" flag.
+ * Search is navigation, not a ranking of the learner.
+ */
+export const topicSearchHitSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  subjectName: z.string(),
+  courseName: z.string(),
+  viewer: z
+    .object({
+      questionsSeen: z.number().int().nonnegative(),
+      questionsCorrect: z.number().int().nonnegative(),
+      /** True when the sample is too small to draw a conclusion from. */
+      lowConfidence: z.boolean(),
+    })
+    .nullable(),
+});
+export type TopicSearchHit = z.infer<typeof topicSearchHitSchema>;
+
+/**
+ * A classroom as a search hit.
+ *
+ * Deliberately not `classroomSummarySchema`. That shape carries `lectureCount`,
+ * and a lecture count on a row a non-member can see is a leak of the room's
+ * contents. Search reports title, course, member count, and the three gates
+ * the client needs to open the same route the list already uses.
+ */
+export const classroomSearchHitSchema = z.object({
+  id: uuidSchema,
+  title: z.string(),
+  courseName: z.string().nullable(),
+  courseCode: z.string().nullable(),
+  memberCount: z.number().int().nonnegative(),
+  viewer: z.object({
+    isMember: z.boolean(),
+    canRead: z.boolean(),
+    canJoin: z.boolean(),
+  }),
+});
+export type ClassroomSearchHit = z.infer<typeof classroomSearchHitSchema>;
 
 export const searchResultsSchema = z.object({
   query: z.string(),
@@ -207,5 +265,7 @@ export const searchResultsSchema = z.object({
   ),
   groups: z.array(groupSchema),
   communities: z.array(communitySchema),
+  topics: z.array(topicSearchHitSchema),
+  classrooms: z.array(classroomSearchHitSchema),
 });
 export type SearchResults = z.infer<typeof searchResultsSchema>;
