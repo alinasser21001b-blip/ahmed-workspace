@@ -1,0 +1,11 @@
+{
+  "name": "دوائي",
+  "short_name": "دوائي",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0D1A15",
+  "theme_color": "#0D1A15",
+  "description": "اعرف أي صيدلية قريبة فيها دواءك واحجزه."
+}
