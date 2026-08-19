@@ -17,6 +17,7 @@ import { Text } from '../../src/components/Text';
 import { Avatar } from '../../src/components/surfaces';
 import { EmptyState, ErrorState, LoadingState } from '../../src/components/states';
 import { useI18n, type TranslationKey } from '../../src/i18n/index';
+import { IS_PREVIEW_MODE } from '../../src/preview/preview-mode';
 import { useRealtime } from '../../src/state/realtime';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -291,7 +292,7 @@ export default function ConversationScreen(): React.JSX.Element {
               <Text variant="metadata" tone="primary">
                 {t('chat.typing')}
               </Text>
-            ) : connection !== 'open' ? (
+            ) : connection !== 'open' && !IS_PREVIEW_MODE ? (
               /*
                * Not "you are offline". The socket being shut is not the same
                * fact as the device having no connection, and on the current
@@ -299,6 +300,11 @@ export default function ConversationScreen(): React.JSX.Element {
                * copy would permanently tell an online student that they were
                * offline and that their messages were waiting, when both were
                * false and the messages had already sent over HTTP.
+               *
+               * Suppressed entirely in the preview build, which never opens a
+               * socket by design: warning about live delivery in a fixture
+               * world is a false alarm about a capability that world does not
+               * claim to have.
                */
               <Text variant="metadata" tone="attention">
                 {t('chat.connection.down')}

@@ -8,6 +8,7 @@
  * exactly what is named. Same nine faces render; the unused ones stop
  * travelling.
  */
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono/500Medium';
 import { IBMPlexSans_400Regular } from '@expo-google-fonts/ibm-plex-sans/400Regular';
 import { IBMPlexSans_500Medium } from '@expo-google-fonts/ibm-plex-sans/500Medium';
@@ -51,6 +52,24 @@ export default function RootLayout(): React.JSX.Element | null {
    * visibly different weight and the swap would happen mid-read.
    */
   const [fontsLoaded] = useFonts({
+    /*
+     * THE ICON FACE, and it belongs in this gate exactly as much as the text
+     * faces do.
+     *
+     * It was missing, and the consequence was not subtle: `@expo/vector-icons`
+     * registers its font lazily on its own schedule, so the tree painted as
+     * soon as the nine text faces resolved and every glyph in the product —
+     * the whole tab bar, the header controls, the send button, the reaction
+     * row — fell back to the missing-glyph box. Observed on a real phone over
+     * LTE as a screen of hollow squares, and reproduced here: the Ionicons
+     * .ttf ships in the bundle but was never requested at all (zero network
+     * requests for it, no entry in `document.fonts`).
+     *
+     * The comment below explains why text is held until its faces resolve. An
+     * icon is a glyph in a font, so the identical argument applies to it, and
+     * the fix is to say so rather than to hope the race is won.
+     */
+    ...Ionicons.font,
     Newsreader_400Regular,
     Newsreader_500Medium,
     IBMPlexSans_400Regular,

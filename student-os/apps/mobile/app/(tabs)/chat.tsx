@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, LoadingState } from '../../src/components/state
 import { Avatar } from '../../src/components/surfaces';
 import { Text } from '../../src/components/Text';
 import { localizeDigits, useI18n } from '../../src/i18n/index';
+import { IS_PREVIEW_MODE } from '../../src/preview/preview-mode';
 import { useRealtime } from '../../src/state/realtime';
 import { useSession } from '../../src/state/session';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -77,7 +78,15 @@ export default function Chat(): React.JSX.Element {
   const header = (
     <View style={{ gap: theme.spacing.lg, paddingBottom: theme.spacing.sm }}>
       <TopBar title={t('nav.chat')} />
-      {connection !== 'open' ? (
+      {/*
+        Not in the preview build. The preview deliberately never opens a
+        socket (`realtime.tsx` returns early on `IS_PREVIEW_MODE`), so the
+        status is permanently `offline` and this line would warn every
+        visitor about a failure that is not happening — the fixture world
+        has no live delivery to lose. Outside preview the warning is real
+        and stays.
+      */}
+      {connection !== 'open' && !IS_PREVIEW_MODE ? (
         <View
           style={{
             borderStartWidth: 2,
