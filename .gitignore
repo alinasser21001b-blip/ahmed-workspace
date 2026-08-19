@@ -16,3 +16,5 @@ furniture-os/**/.pytest_cache/
 medmind/.env
 medmind/.venv/
 **/.DS_Store
+# Nested clone of the separate Adlytic product repo (not part of this workspace).
+/adlytic/
