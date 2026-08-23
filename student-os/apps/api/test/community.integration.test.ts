@@ -9,6 +9,7 @@ import {
   getApp,
   onboardedUser,
   readFeed,
+  verifiedInstructor,
   type Cohort,
 } from './helpers.js';
 
@@ -692,6 +693,140 @@ describe('search', () => {
     // design, so an unrelated post with a similar term is a correct hit and
     // says nothing about whether deleted content leaks.
     expect(results.json<SearchResults>().content.map((c) => c.id)).not.toContain(post.body.id);
+  });
+});
+
+describe('topic and classroom search', () => {
+  beforeAll(async () => {
+    await getApp();
+    cohort = await ensureCohort();
+  });
+
+  it('finds a topic by English and by Arabic, including diacritics', async () => {
+    const app = await getApp();
+    const student = await onboardedUser();
+
+    const byEnglish = await app.inject({
+      method: 'GET',
+      url: '/v1/search?q=Nephrotic&kind=topics',
+      headers: auth(student.session),
+    });
+    expect(byEnglish.statusCode).toBe(200);
+    const englishHits = byEnglish.json<SearchResults>().topics;
+    expect(englishHits.map((hit) => hit.id)).toContain(cohort.topicIds[0]);
+    expect(englishHits.find((hit) => hit.id === cohort.topicIds[0])?.viewer).toBeNull();
+
+    const byArabic = await app.inject({
+      method: 'GET',
+      url: `/v1/search?q=${encodeURIComponent('المتلازمة الكلوية')}&kind=topics`,
+      headers: auth(student.session),
+    });
+    expect(byArabic.json<SearchResults>().topics.map((hit) => hit.id)).toContain(cohort.topicIds[0]);
+
+    // Tashkeel is folded by sos_normalize_arabic — the same rule content search uses.
+    const withMarks = await app.inject({
+      method: 'GET',
+      url: `/v1/search?q=${encodeURIComponent('المُتَلَازِمَة الكلوية')}&kind=topics`,
+      headers: auth(student.session),
+    });
+    expect(withMarks.json<SearchResults>().topics.map((hit) => hit.id)).toContain(cohort.topicIds[0]);
+  });
+
+  it('carries the viewer’s evidence when they have answered on the topic', async () => {
+    const app = await getApp();
+    const student = await onboardedUser();
+    await queryOne(
+      `INSERT INTO learning_progress (user_id, topic_id, questions_seen, questions_correct)
+       VALUES ($1, $2, 3, 1)
+       ON CONFLICT (user_id, topic_id) DO UPDATE
+         SET questions_seen = 3, questions_correct = 1`,
+      [student.session.user.id, cohort.topicIds[0]],
+    );
+
+    const results = await app.inject({
+      method: 'GET',
+      url: '/v1/search?q=Nephrotic&kind=topics',
+      headers: auth(student.session),
+    });
+    const hit = results.json<SearchResults>().topics.find((row) => row.id === cohort.topicIds[0]);
+    expect(hit?.viewer).toEqual({
+      questionsSeen: 3,
+      questionsCorrect: 1,
+      lowConfidence: true,
+    });
+  });
+
+  it('finds a course-visible classroom for an enrolled student, without a lecture count', async () => {
+    const app = await getApp();
+    const instructor = await verifiedInstructor();
+    const student = await onboardedUser();
+    const marker = `ZXQ ${Date.now().toString(36)}`;
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/classrooms',
+      headers: auth(instructor.session),
+      payload: {
+        courseId: cohort.courseIds[0],
+        title: `${marker} Pediatrics seminar`,
+        visibility: 'course',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const classroomId = created.json<{ id: string }>().id;
+
+    const results = await app.inject({
+      method: 'GET',
+      url: `/v1/search?q=${encodeURIComponent(marker)}&kind=classrooms`,
+      headers: auth(student.session),
+    });
+    expect(results.statusCode).toBe(200);
+    const hit = results.json<SearchResults>().classrooms.find((row) => row.id === classroomId);
+    expect(hit).toBeDefined();
+    expect(hit?.viewer.isMember).toBe(false);
+    expect(hit?.viewer.canJoin).toBe(true);
+    expect(hit?.viewer.canRead).toBe(false);
+    expect(hit).not.toHaveProperty('lectureCount');
+  });
+
+  it('keeps an unlisted classroom out of search for a non-member, and in for a member', async () => {
+    const app = await getApp();
+    const instructor = await verifiedInstructor();
+    const outsider = await onboardedUser();
+    const marker = `UNL ${Date.now().toString(36)}`;
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/classrooms',
+      headers: auth(instructor.session),
+      payload: {
+        courseId: cohort.courseIds[0],
+        title: `${marker} unlisted room`,
+        visibility: 'classroom',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const classroom = created.json<{ id: string; joinCode: string | null }>();
+
+    const outsiderHits = await app.inject({
+      method: 'GET',
+      url: `/v1/search?q=${encodeURIComponent(marker)}&kind=classrooms`,
+      headers: auth(outsider.session),
+    });
+    expect(outsiderHits.json<SearchResults>().classrooms.map((row) => row.id)).not.toContain(
+      classroom.id,
+    );
+
+    const memberHits = await app.inject({
+      method: 'GET',
+      url: `/v1/search?q=${encodeURIComponent(marker)}&kind=classrooms`,
+      headers: auth(instructor.session),
+    });
+    expect(memberHits.json<SearchResults>().classrooms.map((row) => row.id)).toContain(classroom.id);
+
+    // A join code is a bearer credential. Search must not return it.
+    expect(memberHits.json<SearchResults>().classrooms[0]).not.toHaveProperty('joinCode');
+    expect(classroom.joinCode).toBeTruthy();
   });
 });
 

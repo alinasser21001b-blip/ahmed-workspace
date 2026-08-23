@@ -315,7 +315,7 @@ export const groupsRoutes: FastifyPluginAsyncZod = async (app) => {
       config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
       schema: {
         tags: ['search'],
-        summary: 'Search people, content, groups and communities',
+        summary: 'Search people, content, groups, communities, topics and classrooms',
         querystring: searchQuerySchema,
         response: { 200: searchResultsSchema },
       },

@@ -6,6 +6,7 @@ import { Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MetadataLine, SectionHeader } from '../src/components/editorial';
 import { DirectionalIcon } from '../src/components/DirectionalIcon';
+import { EvidenceFraction } from '../src/components/evidence';
 import { AcademicRow } from '../src/components/rows';
 import { Avatar } from '../src/components/surfaces';
 import { Text } from '../src/components/Text';
@@ -21,10 +22,9 @@ import { Enter } from '../src/motion/index';
  * a title plus one metadata line. The heading carries the type, so a row never
  * repeats it, and there is no second card system.
  *
- * Only the four result classes the contract actually returns are rendered.
- * Topics and classrooms are specified in the handoff and BLOCKED — no endpoint
- * exists — so they are stated as unavailable rather than faked. That line is
- * the honest version of the product's largest gap.
+ * Only the result classes the contract actually returns are rendered. Topics
+ * are first: they are the most navigable object in the product, and Search is
+ * the screen whose job is reaching them.
  *
  * The empty-result advice says "try a shorter word" rather than "try different
  * keywords", because the index is trigram-based: prefix matching works and
@@ -76,6 +76,8 @@ export default function Search(): React.JSX.Element {
   }, [api, query]);
 
   const total =
+    (results?.topics.length ?? 0) +
+    (results?.classrooms.length ?? 0) +
     (results?.people.length ?? 0) +
     (results?.content.length ?? 0) +
     (results?.groups.length ?? 0) +
@@ -194,6 +196,74 @@ export default function Search(): React.JSX.Element {
          * answer look slow.
          */}
         <Enter trigger={results} rise={4}>
+        {results && results.topics.length > 0 ? (
+          <View>
+            <SectionHeader
+              title={t('search.topics')}
+              trailing={localizeDigits(locale, results.topics.length)}
+            />
+            {results.topics.map((topic) => (
+              <AcademicRow
+                key={topic.id}
+                chevron
+                onPress={() => router.push(`/topic/${topic.id}`)}
+                accessibilityLabel={
+                  topic.viewer
+                    ? `${topic.name}, ${topic.courseName}, ${t('evidence.fractionA11y', {
+                        correct: topic.viewer.questionsCorrect,
+                        answered: topic.viewer.questionsSeen,
+                      })}`
+                    : `${topic.name}, ${topic.courseName}`
+                }
+                trailing={
+                  topic.viewer ? (
+                    <EvidenceFraction
+                      correct={topic.viewer.questionsCorrect}
+                      answered={topic.viewer.questionsSeen}
+                    />
+                  ) : undefined
+                }
+              >
+                <View style={{ gap: 2 }}>
+                  <Text variant="title" numberOfLines={2} bidi="auto">
+                    {topic.name}
+                  </Text>
+                  <MetadataLine parts={[topic.courseName, topic.subjectName]} bidi="auto" />
+                </View>
+              </AcademicRow>
+            ))}
+          </View>
+        ) : null}
+
+        {results && results.classrooms.length > 0 ? (
+          <View>
+            <SectionHeader
+              title={t('search.classrooms')}
+              trailing={localizeDigits(locale, results.classrooms.length)}
+            />
+            {results.classrooms.map((classroom) => (
+              <AcademicRow
+                key={classroom.id}
+                chevron
+                onPress={() => router.push(`/classrooms/${classroom.id}`)}
+                accessibilityLabel={`${classroom.title}, ${classroom.courseCode ?? classroom.courseName ?? ''}`}
+              >
+                <View style={{ gap: 2 }}>
+                  <Text variant="body" numberOfLines={1} bidi="auto">
+                    {classroom.title}
+                  </Text>
+                  <MetadataLine
+                    parts={[
+                      classroom.courseCode ?? classroom.courseName,
+                      t('classroom.members.count', { count: classroom.memberCount }),
+                    ]}
+                  />
+                </View>
+              </AcademicRow>
+            ))}
+          </View>
+        ) : null}
+
         {results && results.people.length > 0 ? (
           <View>
             <SectionHeader
@@ -302,18 +372,6 @@ export default function Search(): React.JSX.Element {
           </View>
         ) : null}
         </Enter>
-
-        {/*
-         * Stated, not hidden. Topics are the most navigable object in the
-         * product and are unreachable from the screen whose only job is
-         * navigation — the handoff calls this the largest gap, so the screen
-         * says so rather than quietly omitting a section.
-         */}
-        {results && total > 0 ? (
-          <Text variant="metadata" tone="muted">
-            {t('search.deferredTopics')}
-          </Text>
-        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

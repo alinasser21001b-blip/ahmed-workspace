@@ -63,6 +63,28 @@ describe('ApiClient transport', () => {
     globalSpy.mockRestore();
   });
 
+  it('loads a lazy transport once and never reaches the network', async () => {
+    const injected = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ source: 'lazy' })));
+    const loader = vi.fn().mockResolvedValue(injected);
+    const globalSpy = vi.spyOn(globalThis, 'fetch');
+
+    const client = new ApiClient({
+      baseUrl: 'https://api.test',
+      loadFetchImpl: loader,
+    });
+
+    await expect(client.request('/v1/learn', { auth: false })).resolves.toEqual({
+      source: 'lazy',
+    });
+    await expect(client.request('/v1/me/profile', { auth: false })).resolves.toEqual({
+      source: 'lazy',
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(injected).toHaveBeenCalledTimes(2);
+    expect(globalSpy).not.toHaveBeenCalled();
+    globalSpy.mockRestore();
+  });
+
   it('sends the request to the configured base url', async () => {
     const injected = vi.fn().mockResolvedValue(jsonResponse({}));
     const client = new ApiClient({

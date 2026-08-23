@@ -67,28 +67,34 @@ export interface ApiClientOptions {
    * `fetch`, so the real path is unchanged rather than conditionally bypassed.
    */
   fetchImpl?: typeof fetch;
+  /**
+   * Lazy transport. Preview builds load the fixture module this way so it
+   * lands in its own chunk (or is dropped) when the preview flag is off,
+   * rather than being compiled into every production bundle as an eager
+   * import.
+   */
+  loadFetchImpl?: () => Promise<typeof fetch>;
 }
 
 export class ApiClient {
   private refreshInFlight: Promise<boolean> | null = null;
+  private lazyTransport: typeof fetch | undefined;
 
   constructor(private readonly options: ApiClientOptions) {}
 
-  private get transport(): typeof fetch {
-    const injected = this.options.fetchImpl;
-    if (injected) return injected;
+  private async resolveTransport(): Promise<typeof fetch> {
+    if (this.options.fetchImpl) return this.options.fetchImpl;
+    if (this.options.loadFetchImpl) {
+      this.lazyTransport ??= await this.options.loadFetchImpl();
+      return this.lazyTransport;
+    }
     /*
      * Wrapped, not returned bare.
      *
-     * `this.transport(url, init)` calls whatever the getter returns with the
-     * ApiClient as its receiver. The browser's `fetch` refuses that — it must
-     * be invoked with the global object — and throws "Illegal invocation",
-     * which surfaces here as a NetworkError on every single request.
-     *
-     * Node's fetch does not care, so this passed the unit and API suites and
-     * failed only in the browser journey, where signup never reached
-     * onboarding. The arrow function has no `this` of its own, so the inner
-     * call is an ordinary global one.
+     * Calling `fetch` as a method on the client hands it the wrong receiver.
+     * The browser's `fetch` refuses that with "Illegal invocation"; Node's
+     * does not, so the defect only appeared in a real browser. The arrow
+     * function has no `this` of its own.
      */
     return (input, init) => fetch(input, init);
   }
@@ -111,7 +117,7 @@ export class ApiClient {
       if (token) headers.authorization = `Bearer ${token}`;
 
       try {
-        return await this.transport(`${this.options.baseUrl}${path}`, {
+        return await (await this.resolveTransport())(`${this.options.baseUrl}${path}`, {
           method,
           headers,
           ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -168,7 +174,7 @@ export class ApiClient {
     if (!refreshToken) return false;
 
     try {
-      const response = await this.transport(`${this.options.baseUrl}/v1/auth/refresh`, {
+      const response = await (await this.resolveTransport())(`${this.options.baseUrl}/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -206,7 +212,7 @@ export class ApiClient {
     const send = async (): Promise<Response> => {
       const token = this.options.tokens?.getAccessToken();
       try {
-        return await this.transport(`${this.options.baseUrl}${path}`, {
+        return await (await this.resolveTransport())(`${this.options.baseUrl}${path}`, {
           method: 'POST',
           headers: token ? { authorization: `Bearer ${token}` } : {},
           body: form,

@@ -23,6 +23,10 @@ import type { GroupRow } from '../groups/groups.repository.js';
  * `@sos/core/text/arabic` and mirrored by `sos_normalize_arabic()` in migration
  * 0009. Normalising one side only would match nothing; normalising the column
  * inline would discard the index.
+ *
+ * Topics and classrooms were added in 0017. Topics are academic reference
+ * data (the same rule `GET /v1/topics/:id` follows). Classrooms reuse the
+ * `canViewClassroom` predicate: unlisted rooms are absent to non-members.
  */
 
 /** Below this, a trigram match is noise rather than a result. */
@@ -309,6 +313,113 @@ export async function searchCommunities(
       scopes.courseIds,
       limit,
     ],
+    client,
+  );
+}
+
+export interface TopicHit {
+  id: string;
+  name_ar: string;
+  name_en: string;
+  subject_name_ar: string;
+  subject_name_en: string;
+  course_name_ar: string;
+  course_name_en: string;
+  questions_seen: number | null;
+  questions_correct: number | null;
+}
+
+/**
+ * Topic search.
+ *
+ * A topic is academic reference data, not a permissioned container: every
+ * signed-in student may read the hierarchy, the same way `/v1/academic/*` and
+ * `GET /v1/topics/:id` already work. What is permission-filtered is the
+ * knowledge *inside* a topic, and that is not what this query returns.
+ *
+ * The viewer's own answered-question counts ride along so Search can render
+ * an EvidenceFraction when there is one, and omit it when there is not.
+ */
+export async function searchTopics(
+  term: SearchTerm,
+  scopes: VisibilityScopes,
+  limit: number,
+  client?: Sql,
+): Promise<TopicHit[]> {
+  return queryRows<TopicHit>(
+    `SELECT t.id, t.name_ar, t.name_en,
+            s.name_ar AS subject_name_ar, s.name_en AS subject_name_en,
+            c.name_ar AS course_name_ar, c.name_en AS course_name_en,
+            lp.questions_seen, lp.questions_correct
+     FROM topics t
+     JOIN subjects s ON s.id = t.subject_id
+     JOIN courses c ON c.id = s.course_id
+     LEFT JOIN learning_progress lp
+       ON lp.topic_id = t.id AND lp.user_id = $2::uuid
+     WHERE t.name_ar_norm ILIKE $3
+        OR t.name_en_norm ILIKE $3
+        OR GREATEST(similarity(t.name_ar_norm, $1),
+                    similarity(t.name_en_norm, $1)) >= $4
+     ORDER BY GREATEST(similarity(t.name_ar_norm, $1),
+                       similarity(t.name_en_norm, $1)) DESC,
+              t.name_en
+     LIMIT $5`,
+    [term.norm, scopes.userId, term.contains, SIMILARITY_FLOOR, limit],
+    client,
+  );
+}
+
+export interface ClassroomHit {
+  id: string;
+  course_id: string;
+  title: string;
+  instructor_id: string | null;
+  visibility: string;
+  is_archived: boolean;
+  course_name_ar: string | null;
+  course_name_en: string | null;
+  course_code: string | null;
+  member_count: number;
+  viewer_role: string | null;
+  viewer_status: string | null;
+}
+
+/**
+ * Classroom search.
+ *
+ * Membership is the filter for unlisted rooms; enrolment is the filter for
+ * course-visible ones. The SQL already encodes `canViewClassroom` — an unlisted
+ * room a non-member types the name of is absent, not 403'd. Lecture counts are
+ * not selected: a non-member learning that a room has twelve lectures is a
+ * leak of the room's contents, and search is a discovery surface.
+ */
+export async function searchClassrooms(
+  term: SearchTerm,
+  scopes: VisibilityScopes,
+  limit: number,
+  client?: Sql,
+): Promise<ClassroomHit[]> {
+  return queryRows<ClassroomHit>(
+    `SELECT k.id, k.course_id, k.title, k.instructor_id, k.visibility, k.is_archived,
+            c.name_ar AS course_name_ar, c.name_en AS course_name_en, c.code AS course_code,
+            (SELECT count(*)::int FROM classroom_members m
+               WHERE m.classroom_id = k.id AND m.status = 'active') AS member_count,
+            me.role AS viewer_role, me.status AS viewer_status
+     FROM classrooms k
+     JOIN courses c ON c.id = k.course_id
+     LEFT JOIN classroom_members me ON me.classroom_id = k.id AND me.user_id = $2::uuid
+     WHERE (k.title_norm ILIKE $3 OR similarity(k.title_norm, $1) >= $4)
+       AND (
+         me.status = 'active'
+         OR (
+           k.visibility = 'course'
+           AND NOT k.is_archived
+           AND k.course_id = ANY($5::uuid[])
+         )
+       )
+     ORDER BY similarity(k.title_norm, $1) DESC, k.created_at DESC
+     LIMIT $6`,
+    [term.norm, scopes.userId, term.contains, SIMILARITY_FLOOR, scopes.courseIds, limit],
     client,
   );
 }

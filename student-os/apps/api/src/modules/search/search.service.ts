@@ -1,9 +1,15 @@
-import type { Locale, SearchResults } from '@sos/contracts';
+import type { Locale, MembershipRole, MembershipStatus, SearchKind, SearchResults } from '@sos/contracts';
 import {
   canDiscoverGroup,
+  canJoinClassroom,
+  canReadClassroom,
+  canViewClassroom,
   canViewCommunity,
+  MIN_QUESTIONS_FOR_CONFIDENCE,
   visibilityScopesFor,
   type Actor,
+  type ClassroomRef,
+  type MaybeMembership,
 } from '@sos/core';
 import { toMembership as toCommunityMembership, toRef } from '../communities/communities.repository.js';
 import { toGroupRef, toMembership } from '../groups/groups.repository.js';
@@ -12,29 +18,50 @@ import * as repo from './search.repository.js';
 /**
  * Search orchestration.
  *
- * Runs the four searches concurrently and re-checks each result set through the
- * policy layer. The SQL already filters; running the policy again is defence in
- * depth, and it makes any divergence between the query and the policy show up
- * as a missing result rather than as a leak.
+ * Runs the six searches concurrently and re-checks each permissioned result
+ * set through the policy layer. The SQL already filters; running the policy
+ * again is defence in depth, and it makes any divergence between the query and
+ * the policy show up as a missing result rather than as a leak.
+ *
+ * Topics are academic reference data, not a container, so they have no second
+ * policy pass — the same rule `GET /v1/topics/:id` already follows.
  */
 
 function localised(ar: string | null, en: string | null, locale: Locale): string | null {
   return (locale === 'ar' ? ar : en) ?? en ?? ar;
 }
 
+function toClassroomRef(row: repo.ClassroomHit): ClassroomRef {
+  return {
+    id: row.id,
+    courseId: row.course_id,
+    instructorId: row.instructor_id,
+    visibility: row.visibility as ClassroomRef['visibility'],
+    isArchived: row.is_archived,
+  };
+}
+
+function toClassroomMembership(row: repo.ClassroomHit): MaybeMembership {
+  if (!row.viewer_status || !row.viewer_role) return null;
+  return {
+    role: row.viewer_role as MembershipRole,
+    status: row.viewer_status as MembershipStatus,
+  };
+}
+
 export async function search(
   actor: Actor,
-  query: { q: string; kind: 'all' | 'people' | 'content' | 'groups' | 'communities'; limit: number },
+  query: { q: string; kind: SearchKind; limit: number },
   locale: Locale,
 ): Promise<SearchResults> {
   const scopes = visibilityScopesFor(actor);
   const wants = (kind: string): boolean => query.kind === 'all' || query.kind === kind;
 
   /*
-   * Normalised once, here, and passed to all four searches.
+   * Normalised once, here, and passed to all six searches.
    *
    * Doing it per-repository would let one branch drift, and the drift would be
-   * invisible: Arabic search would work for people and quietly not for content.
+   * invisible: Arabic search would work for people and quietly not for topics.
    */
   const term = repo.prepareTerm(query.q);
 
@@ -48,13 +75,15 @@ export async function search(
    * makes someone unfindable, and it is applied here (via
    * `scopes.excludedUserIds`).
    */
-  const [people, content, groups, communities] = await Promise.all([
+  const [people, content, groups, communities, topics, classrooms] = await Promise.all([
     wants('people') ? repo.searchPeople(term, scopes, query.limit) : Promise.resolve([]),
     wants('content') ? repo.searchContent(term, scopes, query.limit) : Promise.resolve([]),
     wants('groups') ? repo.searchGroups(term, scopes, query.limit) : Promise.resolve([]),
     wants('communities')
       ? repo.searchCommunities(term, scopes, query.limit)
       : Promise.resolve([]),
+    wants('topics') ? repo.searchTopics(term, scopes, query.limit) : Promise.resolve([]),
+    wants('classrooms') ? repo.searchClassrooms(term, scopes, query.limit) : Promise.resolve([]),
   ]);
 
   return {
@@ -155,5 +184,47 @@ export async function search(
           canManage: false,
         },
       })),
+    topics: topics.map((row) => {
+      const seen = row.questions_seen ?? 0;
+      return {
+        id: row.id,
+        name: localised(row.name_ar, row.name_en, locale) ?? row.name_en,
+        subjectName: localised(row.subject_name_ar, row.subject_name_en, locale) ?? row.subject_name_en,
+        courseName: localised(row.course_name_ar, row.course_name_en, locale) ?? row.course_name_en,
+        viewer:
+          seen > 0
+            ? {
+                questionsSeen: seen,
+                questionsCorrect: row.questions_correct ?? 0,
+                lowConfidence: seen < MIN_QUESTIONS_FOR_CONFIDENCE,
+              }
+            : null,
+      };
+    }),
+    classrooms: classrooms
+      .filter((row) => {
+        const membership = toClassroomMembership(row);
+        return canViewClassroom(actor, toClassroomRef(row), membership).allowed;
+      })
+      .map((row) => {
+        const classroom = toClassroomRef(row);
+        const membership = toClassroomMembership(row);
+        return {
+          id: row.id,
+          title: row.title,
+          courseName: localised(row.course_name_ar, row.course_name_en, locale),
+          courseCode: row.course_code,
+          memberCount: row.member_count,
+          viewer: {
+            isMember: membership?.status === 'active',
+            canRead: canReadClassroom(actor, membership).allowed,
+            canJoin: canJoinClassroom(actor, {
+              classroom,
+              membership,
+              hasValidJoinCode: false,
+            }).allowed,
+          },
+        };
+      }),
   };
 }
