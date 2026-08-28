@@ -13,6 +13,11 @@ furniture-os/apps/web/.next/
 furniture-os/**/__pycache__/
 furniture-os/**/*.egg-info/
 furniture-os/**/.pytest_cache/
+osce/node_modules/
+osce/.next/
+osce/data/store.json
+osce/data/uploads/*
+!osce/data/uploads/.gitkeep
 medmind/.env
 medmind/.venv/
 **/.DS_Store
