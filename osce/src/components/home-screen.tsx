@@ -9,7 +9,7 @@ import { Bdi } from '@/components/bdi';
 import { useLocale } from '@/app/providers';
 import { t } from '@/i18n/copy';
 import { api, readRememberedSession } from '@/lib/client-api';
-import { formatUiCount } from '@/domain/text/arabic';
+import { formatUiCount, selectPlural } from '@/domain/text/arabic';
 import type { SpecialtySummary } from '@/lib/types';
 
 export function HomeScreen() {
@@ -76,10 +76,28 @@ export function HomeScreen() {
                 </div>
                 <div className="specialty-meta">
                   <div>
-                    {formatUiCount(specialty.examinerCount, locale)} {c.examiners}
+                    {selectPlural(locale, specialty.examinerCount, {
+                      one: locale === 'ar' ? 'فاحص واحد' : '1 examiner',
+                      two: 'فاحصان',
+                      few: `${formatUiCount(specialty.examinerCount, locale)} فاحصين`,
+                      many: `${formatUiCount(specialty.examinerCount, locale)} فاحصًا`,
+                      other:
+                        locale === 'ar'
+                          ? `${formatUiCount(specialty.examinerCount, locale)} فاحص`
+                          : `${formatUiCount(specialty.examinerCount, locale)} ${c.examiners}`,
+                    })}
                   </div>
                   <div>
-                    {formatUiCount(specialty.questionCount, locale)} {c.historicalQuestions}
+                    {selectPlural(locale, specialty.questionCount, {
+                      one: locale === 'ar' ? 'سؤال واحد' : '1 question',
+                      two: 'سؤالان',
+                      few: `${formatUiCount(specialty.questionCount, locale)} أسئلة`,
+                      many: `${formatUiCount(specialty.questionCount, locale)} سؤالًا`,
+                      other:
+                        locale === 'ar'
+                          ? `${formatUiCount(specialty.questionCount, locale)} سؤال`
+                          : `${formatUiCount(specialty.questionCount, locale)} ${c.historicalQuestions}`,
+                    })}
                   </div>
                 </div>
               </Link>

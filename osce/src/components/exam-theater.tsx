@@ -78,14 +78,14 @@ export function ExamTheater() {
   useEffect(() => {
     if (phase !== 'examiner-reveal') return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const id = window.setTimeout(() => setPhase('case-reveal'), reduced ? 200 : 1400);
+    const id = window.setTimeout(() => setPhase('case-reveal'), reduced ? 200 : 1700);
     return () => window.clearTimeout(id);
   }, [phase]);
 
   useEffect(() => {
     if (phase !== 'case-reveal') return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const id = window.setTimeout(() => setPhase('preparation'), reduced ? 200 : 1200);
+    const id = window.setTimeout(() => setPhase('preparation'), reduced ? 200 : 1500);
     return () => window.clearTimeout(id);
   }, [phase]);
 
@@ -269,7 +269,9 @@ export function ExamTheater() {
             <h1>
               <Bdi>{caseTitle}</Bdi>
             </h1>
-            <p className="scenario">{session.case?.clinicalScenario}</p>
+            <p className="scenario">
+              <Bdi>{session.case?.clinicalScenario}</Bdi>
+            </p>
           </article>
           <div style={{ height: 16 }} />
           <button className="primary-btn" type="button" onClick={() => void beginQuestions()} data-testid="start-questions">
@@ -309,13 +311,16 @@ export function ExamTheater() {
               </span>
             )}
           </div>
-          <h2 className="question-text">{currentQuestion.questionText}</h2>
+          <h2 className="question-text">
+            <Bdi>{currentQuestion.questionText}</Bdi>
+          </h2>
           <label className="kicker" htmlFor="student-answer">
             {c.studentAnswer}
           </label>
-          <textarea
+            <textarea
             id="student-answer"
             className="answer-box"
+            dir="auto"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder={c.studentAnswerHint}
@@ -331,11 +336,15 @@ export function ExamTheater() {
           {revealed && currentQuestion.expectedAnswer && (
             <section className="expected" data-testid="expected-answer">
               <h3>{c.expectedAnswer}</h3>
-              <p>{currentQuestion.expectedAnswer}</p>
+              <p>
+                <Bdi>{currentQuestion.expectedAnswer}</Bdi>
+              </p>
               {currentQuestion.explanation && (
                 <>
                   <h3>{c.explanation}</h3>
-                  <p>{currentQuestion.explanation}</p>
+                  <p>
+                    <Bdi>{currentQuestion.explanation}</Bdi>
+                  </p>
                 </>
               )}
               {evaluation && (
@@ -435,23 +444,25 @@ export function ExamTheater() {
         {scores && scores.strong.length > 0 && (
           <section>
             <h2>{c.strong}</h2>
-            <p>
+            <ul className="list-plain">
               {scores.strong.map((item) => (
-                <Bdi key={item}>{item}</Bdi>
+                <li key={item}>
+                  <Bdi>{item}</Bdi>
+                </li>
               ))}
-            </p>
+            </ul>
           </section>
         )}
         {scores && scores.needsReview.length > 0 && (
           <section>
             <h2>{c.needsReview}</h2>
-            <p>
+            <ul className="list-plain">
               {scores.needsReview.map((item) => (
-                <span key={item}>
-                  <Bdi>{item}</Bdi>{' '}
-                </span>
+                <li key={item}>
+                  <Bdi>{item}</Bdi>
+                </li>
               ))}
-            </p>
+            </ul>
           </section>
         )}
         {scores && scores.missedQuestionIds.length > 0 && (
@@ -460,7 +471,11 @@ export function ExamTheater() {
             <ul className="list-plain">
               {scores.missedQuestionIds.map((id) => {
                 const question = session.questions.find((row) => row.id === id);
-                return <li key={id}>{question?.questionText}</li>;
+                return (
+                  <li key={id}>
+                    <Bdi>{question?.questionText}</Bdi>
+                  </li>
+                );
               })}
             </ul>
           </section>
