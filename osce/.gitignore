@@ -1,0 +1,10 @@
+# OSCE local data and build output
+node_modules
+.next
+out
+data/store.json
+data/uploads/*
+!data/uploads/.gitkeep
+*.tsbuildinfo
+.DS_Store
+coverage
