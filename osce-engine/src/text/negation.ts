@@ -151,18 +151,37 @@ function longestMatch(
 }
 
 /**
+ * Per-token context, plus the token index of the trigger responsible.
+ *
+ * The trigger index is not decoration. A key point can legitimately *contain* a
+ * negation word - "antibiotics cure appendicitis WITHOUT surgery" is a single
+ * assertion, and the "without" inside it is part of the claim, not a negation
+ * of it. Without knowing where the trigger sits, a matcher reads that phrase as
+ * negated and awards no penalty for a student who asserted it. Recording the
+ * trigger position lets a caller ignore negations that originate inside the
+ * span being tested, which is also how NegEx scopes: a trigger governs the
+ * concepts around it, never the phrase it is itself a part of.
+ */
+export interface TokenContext {
+  readonly kind: ContextKind;
+  /** Index of the trigger token that set this kind, or -1 when affirmed. */
+  readonly triggerAt: number;
+}
+
+/**
  * Assigns a context kind to every token position.
  *
  * Returns a parallel array: `context[i]` is the status of `tokens[i]`.
- * Tokens that are themselves triggers are marked with the context they induce,
- * so a caller can highlight the trigger in a review UI.
  */
-export function annotateContext(
+export function annotateContextDetailed(
   tokens: readonly string[],
   options: NegationOptions = {},
-): ContextKind[] {
+): TokenContext[] {
   const scope = options.scopeTokens ?? DEFAULT_SCOPE_TOKENS;
   const detectHedges = options.detectHedges ?? true;
+  const detailed: TokenContext[] = new Array(tokens.length)
+    .fill(null)
+    .map(() => ({ kind: 'AFFIRMED' as ContextKind, triggerAt: -1 }));
   const context: ContextKind[] = new Array(tokens.length).fill('AFFIRMED');
 
   for (let i = 0; i < tokens.length; i++) {
@@ -176,8 +195,12 @@ export function annotateContext(
       for (let j = Math.max(0, i - scope); j < i; j++) {
         if (isBreak(tokens[j] as string)) continue;
         context[j] = 'NEGATED';
+        detailed[j] = { kind: 'NEGATED', triggerAt: i };
       }
-      for (let j = i; j < i + post.length; j++) context[j] = 'NEGATED';
+      for (let j = i; j < i + post.length; j++) {
+        context[j] = 'NEGATED';
+        detailed[j] = { kind: 'NEGATED', triggerAt: i };
+      }
       i += post.length - 1;
       continue;
     }
@@ -189,6 +212,7 @@ export function annotateContext(
         const t = tokens[j] as string;
         if (TERMINATOR_SET.has(t) || isBreak(t)) break;
         context[j] = 'NEGATED';
+        detailed[j] = { kind: 'NEGATED', triggerAt: i };
       }
       i += pre.length - 1;
       continue;
@@ -201,14 +225,25 @@ export function annotateContext(
         for (let j = i + hedge.length; j < limit; j++) {
           const t = tokens[j] as string;
           if (TERMINATOR_SET.has(t) || isBreak(t)) break;
-          if (context[j] === 'AFFIRMED') context[j] = 'HEDGED';
+          if (context[j] === 'AFFIRMED') {
+            context[j] = 'HEDGED';
+            detailed[j] = { kind: 'HEDGED', triggerAt: i };
+          }
         }
         i += hedge.length - 1;
       }
     }
   }
 
-  return context;
+  return detailed;
+}
+
+/** Kinds only, for callers that do not need trigger provenance. */
+export function annotateContext(
+  tokens: readonly string[],
+  options: NegationOptions = {},
+): ContextKind[] {
+  return annotateContextDetailed(tokens, options).map((c) => c.kind);
 }
 
 function isBreak(token: string): boolean {
@@ -230,6 +265,32 @@ export function spanContext(
   for (let i = start; i < end && i < context.length; i++) {
     if (context[i] === 'NEGATED') return 'NEGATED';
     if (context[i] === 'HEDGED') hedged = true;
+  }
+  return hedged ? 'HEDGED' : 'AFFIRMED';
+}
+
+/**
+ * Context of a span, counting only triggers that lie OUTSIDE it.
+ *
+ * This is the form a phrase matcher must use. Testing a matched key-point span
+ * with the plain `spanContext` reports NEGATED whenever the key point's own
+ * wording contains a negation word, which silently converts an asserted pitfall
+ * into an unpenalised one.
+ */
+export function externalSpanContext(
+  context: readonly TokenContext[],
+  start: number,
+  end: number,
+): ContextKind {
+  let hedged = false;
+  for (let i = start; i < end && i < context.length; i++) {
+    const entry = context[i] as TokenContext;
+    if (entry.kind === 'AFFIRMED') continue;
+    // A trigger inside the span is part of the matched phrase, not a negation
+    // applied to it.
+    if (entry.triggerAt >= start && entry.triggerAt < end) continue;
+    if (entry.kind === 'NEGATED') return 'NEGATED';
+    hedged = true;
   }
   return hedged ? 'HEDGED' : 'AFFIRMED';
 }
