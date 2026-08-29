@@ -1,0 +1,25 @@
+Specialty: Surgery
+Year: 2024
+
+Examiner: Dr. Ahmed Hassan
+Case: Acute Appendicitis
+
+Q1. What are the complications of appendectomy?
+A1: Wound infection, bleeding, adhesions, intra-abdominal abscess.
+Q2. How do you confirm the diagnosis?
+A2: Clinical assessment plus ultrasound; CT if uncertain.
+Q3: What is the differential diagnosis?
+
+Examiner: Dr. Sara Al-Kadhimi
+Case: Bowel Obstruction
+
+1. What are the causes of intestinal obstruction?
+2. Mention the initial management steps.
+A: IV fluids, nasogastric tube, analgesia, keep nil by mouth.
+
+Page 2
+
+Examiner: د. علي الجبوري
+Case: Thyroid Swelling
+السؤال 1: ما هي مضاعفات استئصال الغدة الدرقية؟
+الجواب: نزف، اصابة العصب الحنجري الراجع، نقص كالسيوم الدم.

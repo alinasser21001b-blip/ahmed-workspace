@@ -16,3 +16,7 @@ furniture-os/**/.pytest_cache/
 medmind/.env
 medmind/.venv/
 **/.DS_Store
+
+# osce-engine
+osce-engine/node_modules/
+osce-engine/dist/
