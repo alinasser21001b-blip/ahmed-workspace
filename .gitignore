@@ -20,3 +20,8 @@ medmind/.venv/
 # osce-engine
 osce-engine/node_modules/
 osce-engine/dist/
+osce-app/node_modules/
+osce-app/dist/
+osce-app/.next/
+osce-app/.dev.vars
+osce-app/*.tsbuildinfo

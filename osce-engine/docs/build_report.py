@@ -554,6 +554,37 @@ story.append(Paragraph(
     "Table 6. M1 and M2 together are under thirty lines and close both Critical findings.", S["caption"]))
 
 story.append(PageBreak())
+
+story.append(Paragraph("3.5 Applied to the shipped app, and verified", S["h2"]))
+story.append(Paragraph(
+    "The findings above are not left as advice. Every Critical and every cheap fix was applied to a preserved "
+    "copy of the handoff package in <font face='Courier' size='8'>osce-app/</font> and verified as far as this "
+    "environment allows.",
+    S["body"]))
+story.append(make_table(
+    ["ID", "Change", "Where", "What it does"],
+    [[f[0], f[1], f[2], f[3]] for f in D.APPLIED_FIXES],
+    [10 * mm, 32 * mm, 40 * mm, CONTENT_W - 82 * mm]))
+story.append(Paragraph("Table 7. Applied changes. The evaluator swap needed no migration and no route change.",
+                       S["caption"]))
+
+story.append(make_table(
+    ["Check", "Result", "Note"],
+    [list(x) for x in D.VERIFICATION_RUN],
+    [46 * mm, 32 * mm, CONTENT_W - 78 * mm]))
+story.append(Paragraph("Table 8. What was actually run.", S["caption"]))
+
+story.append(callout(
+    "Deployment was not attempted",
+    "The preparing session had no Cloudflare credentials, no wrangler authentication, and an unauthorized "
+    "Cloudflare MCP connector; it was also non-interactive, so no authorization flow could run. Independently, "
+    "the handoff brief records that the owner halted the cutover pending account email and security "
+    "verification, with R2 still disabled and returning code 10042. Nothing was created, listed or modified. "
+    "The remaining sequence is written out in osce-app/DEPLOYMENT_RUNBOOK.md, including the two PDF tests that "
+    "must be run on Node 24 before deploying - they are the only checks this session could not perform.",
+    CONTENT_W, WARN, WARN_BG))
+
+story.append(PageBreak())
 # ===========================================================================
 # 4. ARCHITECTURE
 # ===========================================================================
@@ -634,7 +665,7 @@ story.append(make_table(
     [10 * mm, 62 * mm, 30 * mm, 96 * mm, 66 * mm],
     status_cols=(2,)))
 story.append(Paragraph(
-    "Table 7. Coverage against all fifteen framework sections. “Deferred, deliberately” appears once, "
+    "Table 9. Coverage against all fifteen framework sections. “Deferred, deliberately” appears once, "
     "for asynchronous ingestion: at 32 ms per file it is nowhere near a Worker limit, and adding a queue now "
     "would add failure modes for no measured gain.", S["caption"]))
 
@@ -656,7 +687,7 @@ story.append(make_table(
     [58 * mm] + [(LAND_W - 58 * mm) / len(names)] * len(names),
     status_cols=tuple(range(1, 1 + len(names))), font_size=6.6))
 story.append(Paragraph(
-    "Table 8. Full / Partial / None / N⁄A, where N⁄A means the capability is outside that product's "
+    "Table 10. Full / Partial / None / N⁄A, where N⁄A means the capability is outside that product's "
     "category rather than missing from it. Ratings are based on published product documentation; see the "
     "sources list.", S["caption"]))
 
@@ -739,7 +770,7 @@ story.append(make_table(
     ],
     [36 * mm, 58 * mm, CONTENT_W - 94 * mm]))
 story.append(Paragraph(
-    "Table 9. Nothing here is novel in isolation. The engineering contribution is the composition, and the "
+    "Table 11. Nothing here is novel in isolation. The engineering contribution is the composition, and the "
     "guards added at each seam.", S["caption"]))
 
 story.append(PageBreak())
@@ -758,7 +789,7 @@ story.append(make_table(
     [7 * mm, 30 * mm, 40 * mm, 13 * mm, CONTENT_W - 90 * mm],
     status_cols=(3,)))
 story.append(Paragraph(
-    "Table 10. The framework's Section 14 invariants as executable tests. Test 5b is an addition: the framework "
+    "Table 12. The framework's Section 14 invariants as executable tests. Test 5b is an addition: the framework "
     "names the Hassan/Hussein problem in prose but does not list a test for it.", S["caption"]))
 
 story.append(Paragraph("8.2 Measured performance", S["h3"]))
@@ -768,7 +799,7 @@ story.append(make_table(
      for b in D.BENCHMARKS],
     [52 * mm, 44 * mm, 17 * mm, 17 * mm, 17 * mm, 12 * mm]))
 story.append(Paragraph(
-    "Table 11. Engine CPU only, Node 22, corpus of 7,200 questions and 19,800 occurrences. Endpoint latency "
+    "Table 13. Engine CPU only, Node 22, corpus of 7,200 questions and 19,800 occurrences. Endpoint latency "
     "adds database and network time, which this cannot simulate - that is the point of measuring compute "
     "separately.", S["caption"]))
 
@@ -779,7 +810,7 @@ story.append(make_table(
     [58 * mm, 26 * mm, 42 * mm, 22 * mm],
     status_cols=(3,)))
 story.append(Paragraph(
-    "Table 12. Two KPIs are marked “by design” because they are I/O-bound and need a live database to "
+    "Table 14. Two KPIs are marked “by design” because they are I/O-bound and need a live database to "
     "measure. One is blocked on a labelled corpus. The rest pass.", S["caption"]))
 
 story.append(callout(
@@ -822,7 +853,7 @@ story.append(make_table(
     [16 * mm, 42 * mm, 26 * mm, 98 * mm, LAND_W - 182 * mm],
     status_cols=(2,)))
 story.append(Paragraph(
-    "Table 13. Phases E.3 and E.4 are <i>triggered</i> rather than scheduled: E.3 when the largest examiner "
+    "Table 15. Phases E.3 and E.4 are <i>triggered</i> rather than scheduled: E.3 when the largest examiner "
     "blocking bucket exceeds roughly 2,000 records, which the index reports directly; E.4 only if the "
     "labelled-corpus benchmark shows the vocabulary's residue justifies a semantic adapter.", S["caption"]))
 
@@ -889,7 +920,7 @@ story.append(make_table(
     [28 * mm, CONTENT_W - 28 * mm - 42 * mm, 42 * mm],
     mono_cols=(2,)))
 story.append(Paragraph(
-    "Table 14. Every quantitative claim in this report is reproducible from the accompanying source.",
+    "Table 16. Every quantitative claim in this report is reproducible from the accompanying source.",
     S["caption"]))
 
 story.append(PageBreak())

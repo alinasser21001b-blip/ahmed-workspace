@@ -613,14 +613,19 @@ SHIPPED_FINDINGS = [
      "records only the last attempt, so the record shows a clean first-time pass.",
      "Change to INSERT and return ALREADY_ANSWERED on conflict, or add an attempt column and score only the "
      "first. One statement."),
-    ("F3", "High", "Data integrity",
-     "question_occurrences has no fingerprint column and no UNIQUE constraint, and observation_count is a "
-     "stored column on examiner_cases / examiner_questions.",
-     "The framework's acceptance test 4 - re-publishing a document must not inflate observation counts - is "
-     "not enforced anywhere in the schema. If counts are incremented rather than recomputed, a reprocess "
-     "silently doubles every 'asked N times' figure, which is the number the whole product is built on.",
-     "Add a deterministic fingerprint column with a UNIQUE index, and recompute counts from occurrences "
-     "rather than incrementing. Migration 0005 plus the publisher change."),
+    ("F3", "Critical", "Data integrity",
+     "observation_count, first_observed_year and last_observed_year on examiner_cases and examiner_questions "
+     "are declared but never written by any code path. The publish route inserts the link rows with "
+     "INSERT OR IGNORE and no count. Separately, question_occurrences has no fingerprint and no UNIQUE "
+     "constraint, so a re-processed document creates duplicate evidence rows.",
+     "The historical-frequency signal the entire product rests on does not exist. Every row holds the "
+     "DEFAULT 0, so 'this examiner asked this question five times' is always zero, and the framework's "
+     "station selection score - which weights normalised historical frequency at 0.45 - is multiplying a "
+     "constant zero. This was verified by grepping every reference to the column across the codebase: two "
+     "DDL declarations, no reads, no writes.",
+     "Recompute counts from approved occurrences at publish time, and add a deterministic occurrence "
+     "fingerprint with a unique index so a replay is a no-op. Migration 0005 plus the publisher change; "
+     "both applied and verified."),
     ("F4", "High", "Security",
      "exam_sessions has no student_id column, and no route associates a session with a user.",
      "Session ownership cannot be verified. Any party holding a session id can submit answers to it and read "
@@ -707,6 +712,48 @@ EVALUATOR_COMPARISON = [
 EVALUATOR_SCORE = {"shipped": 1, "v2": 10, "total": 10}
 
 # Migration path from the shipped code to the V2 engine.
+APPLIED_FIXES = [
+    ("F1", "Evaluator replaced", "lib/evaluation.ts + lib/engine/",
+     "Whole-token matching through the controlled vocabulary. Public API, input shape and stored key-point "
+     "format unchanged, so no route and no migration was touched.",
+     "13 new regression tests; the original contract test still passes"),
+    ("F2", "Resubmission blocked", "app/api/evaluate + app/api/exam-sessions/answers",
+     "INSERT ... ON CONFLICT DO NOTHING; returns 409 ALREADY_ANSWERED when a question is already answered.",
+     "Verified by typecheck and build; needs acceptance row 12 against a live deployment"),
+    ("F3", "Counts derived, occurrences fingerprinted", "publish route + drizzle/0005",
+     "Deterministic fingerprint with a partial unique index; observation counts and year bounds recomputed "
+     "from approved occurrences after each publish, never incremented.",
+     "Additive migration; acceptance rows 8 and 9 verify it on a live database"),
+    ("F5", "Constant-time admin token compare", "lib/knowledge/db.ts",
+     "Length checked separately, then every byte examined regardless of where a mismatch occurs.",
+     "Typecheck and lint clean"),
+    ("F10", "Confidence stored as a number", "lib/knowledge/db.ts + evaluate route",
+     "Fresh databases declare the column REAL. The existing production database keeps TEXT affinity, so "
+     "aggregates there need CAST(confidence AS REAL).",
+     "Documented in the runbook"),
+    ("F12", "Self-score derived server-side", "app/api/exam-sessions/answers",
+     "Score computed from the declared correctness rather than trusting a client-supplied number.",
+     "Typecheck clean"),
+    ("ENV", "Node engines corrected", "package.json",
+     "pdfjs-dist@6 calls Promise.try, which needs Node >= 23. The declared range permitted Node 22, where "
+     "both PDF tests fail and PDF upload breaks. Now >=24.0.0.",
+     "Reproduced: Promise.try is undefined on Node 22.22.2; both PDF tests fail identically before any "
+     "other change"),
+]
+
+VERIFICATION_RUN = [
+    ("tsc --noEmit", "clean", "verified in session"),
+    ("eslint", "clean", "verified in session"),
+    ("Test suite", "20 of 22 passing", "the 2 failures are the PDF tests, which need Node >= 24; they fail "
+     "identically on the unmodified baseline"),
+    ("New evaluator tests", "13 of 13 passing", "verified in session"),
+    ("vinext build (build:cloudflare)", "succeeds, 9 routes", "verified in session"),
+    ("wrangler deploy --dry-run", "succeeds; 2486 KiB upload, 748 KiB gzipped; DB, DOCUMENTS and ASSETS "
+     "bindings resolve", "verified in session"),
+    ("Cloudflare deployment", "not attempted", "no credentials, no wrangler auth, MCP connector "
+     "unauthorized, account verification outstanding, owner had halted the cutover"),
+]
+
 MIGRATION_STEPS = [
     ("M1", "Swap the evaluator", "1 file, ~20 lines", "None",
      "DeterministicEvaluator implements the same shape as AnswerEvaluationProvider. Key points become "

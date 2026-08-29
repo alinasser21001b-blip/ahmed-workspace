@@ -5,7 +5,9 @@
   "type": "module",
   "license": "UNLICENSED",
   "private": true,
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "exports": {
     ".": "./dist/index.js",
     "./text": "./dist/text/index.js",
@@ -14,7 +16,11 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "schema", "README.md"],
+  "files": [
+    "dist",
+    "schema",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -24,7 +30,8 @@
     "verify": "npm run typecheck && npm run test && npm run bench"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "@types/node": "^22.7.5"
+    "@types/node": "^22.7.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.6.3"
   }
 }

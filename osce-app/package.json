@@ -1,0 +1,51 @@
+{
+  "name": "sites-project",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "vinext dev",
+    "build": "vinext build",
+    "build:cloudflare": "vinext build",
+    "start": "vinext start",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern types/cloudflare-env.generated.d.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
+    "validate": "npm run test && npm run typecheck && npm run lint",
+    "preview:cloudflare": "npm run build:cloudflare && wrangler dev",
+    "cf:typegen": "wrangler types types/cloudflare-env.generated.d.ts --env-interface CloudflareEnv",
+    "db:migrate:local": "wrangler d1 migrations apply osce-knowledge-production --local",
+    "db:migrate:status": "wrangler d1 migrations list osce-knowledge-production --remote",
+    "db:migrate:production": "wrangler d1 migrations apply osce-knowledge-production --remote",
+    "deploy": "npm run validate && npm run build:cloudflare && npm run db:migrate:production && wrangler deploy --strict"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "next": "^16.3.3",
+    "pdfjs-dist": "^6.2.108",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "zod": "^4.5.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.54.2",
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "^0.5.34",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.3.3",
+    "react-server-dom-webpack": "19.2.6",
+    "tailwindcss": "4.2.1",
+    "tsx": "^4.23.12",
+    "typescript": "5.9.3",
+    "vinext": "^1.0.0-beta.6",
+    "vite": "8.0.13",
+    "wrangler": "^4.127.1"
+  },
+  "type": "module"
+}

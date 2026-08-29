@@ -503,6 +503,37 @@ note(ws, r + 2,
      "and can ship before the deployment question is settled.",
      6)
 
+# ===========================================================================
+# Sheet - Applied and verified
+# ===========================================================================
+ws = wb.create_sheet("Applied and verified", 4)
+ws.sheet_view.showGridLines = False
+r = sheet_title(
+    ws, "Applied to the shipped app, and verified",
+    "Changes made to osce-app/ in this session, and what was actually run against them. "
+    "No Cloudflare resource was created, listed or modified.",
+    5)
+r = write_table(
+    ws, r, ["ID", "Change", "Where", "What it does", "Evidence"],
+    [list(x) for x in D.APPLIED_FIXES],
+    [8, 34, 40, 88, 62], name="Applied")
+
+r += 2
+ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
+c = ws.cell(row=r, column=1, value="Verification run")
+c.font = Font(name="Calibri", size=12, bold=True, color=ACCENT)
+r += 1
+r = write_table(
+    ws, r, ["Check", "Result", "Note"],
+    [list(x) for x in D.VERIFICATION_RUN],
+    [40, 34, 100], name="Verify")
+note(ws, r + 2,
+     "Cloudflare deployment was not attempted and could not be: the session had no Cloudflare credentials, "
+     "no wrangler authentication and an unauthorized MCP connector, and the handoff brief records that the "
+     "owner halted the cutover pending account verification. See osce-app/DEPLOYMENT_RUNBOOK.md for the "
+     "remaining sequence.",
+     5)
+
 out = Path(__file__).parent / "OSCE_Engine_Analysis.xlsx"
 wb.save(out)
 print(f"wrote {out} ({out.stat().st_size / 1024:.0f} KB, {len(wb.sheetnames)} sheets)")
