@@ -1,23 +1,87 @@
 # Deployment runbook — osce-production
 
-Everything that can be done without Cloudflare access has been done. This file
+Everything that can be done short of the deploy itself has been done. This file
 is the remaining sequence, written so it can be executed in one sitting once the
 account blocker clears.
 
-**Nothing in this repository has been deployed, and no Cloudflare resource has
-been created, listed or modified.**
+**What was and was not touched, precisely:**
+
+- **Not deployed.** No Worker was created, updated or deleted.
+- **Not created.** No R2 bucket, no D1 database, no secret, no domain.
+- **Read.** D1 databases, R2 buckets (denied), Workers, and the D1 schema and
+  row counts were listed under the owner's authorization to proceed.
+- **Modified.** One thing: migration `0005` was applied to the existing, empty
+  D1 database `osce-knowledge-production`, and recorded in `d1_migrations`.
+  Five temporary probe rows were inserted to verify the new constraints and
+  then deleted; the database was left with zero rows in every table, as it was
+  found. This is written up under "Migration 0005" below, because it caught a
+  defect that a clean typecheck, build and dry-run had all missed.
 
 ---
 
-## Why deployment did not happen in the preparing session
+## Verified Cloudflare state
 
-| Blocker | Detail |
+Read directly from the account on 2026-08-29 via the Cloudflare connector.
+Everything below is observed, not inferred from the brief.
+
+| Resource | State |
 |---|---|
-| No Cloudflare credentials | The session had no `CLOUDFLARE_API_TOKEN`, no `~/.wrangler` config, and the Cloudflare MCP connector was unauthorized. It was also non-interactive, so no OAuth flow could run. |
-| Account verification | Per `NEXT_ENGINEER_BRIEF.md`, Cloudflare account email/security verification is outstanding. R2 remained disabled and its API returned code `10042`. |
-| Owner had halted the cutover | The brief records an explicit stop. Resuming needs the owner's word, not an engineer's inference. |
+| D1 `osce-knowledge-production` | **Exists.** `d585d340-869f-4482-8871-91053f1eb8b0`, matching `wrangler.jsonc`. All 14 tables and 10 indexes present. |
+| D1 migrations | `0001`–`0004` applied 2026-08-29 11:13. **`0005` applied and recorded** during preparation — see below. |
+| D1 contents | **Empty.** Zero rows in every table: no documents, questions, examiners, occurrences, sessions or answers. |
+| R2 | **Disabled.** `r2_buckets_list` returns `403 / 10042 — "Please enable R2 through the Cloudflare Dashboard."` |
+| R2 bucket `osce-documents-production` | **Does not exist**, and cannot be created until R2 is enabled. |
+| Worker `osce-production` | **Not deployed.** The account holds two unrelated Workers (`adlytic-dashboard`, `rasad-ads-dashboard`). |
 
-The first two are hard blockers. No amount of preparation removes them.
+### The one remaining blocker
+
+**R2 is not enabled on the account.** Only the account owner can enable it, in
+the Cloudflare Dashboard, and it is a plan and billing decision rather than a
+technical one. `wrangler.jsonc` binds `DOCUMENTS` to an R2 bucket, so until R2
+is on:
+
+- the bucket cannot be created,
+- the Worker cannot bind it,
+- document upload has nowhere to store the original file.
+
+Nothing else stands in the way. Deployment itself additionally needs a wrangler
+session (`npx wrangler login`, or a `CLOUDFLARE_API_TOKEN`), which the
+preparing session did not have and the read-only connector does not provide.
+
+### Migration 0005 was applied and exercised against the real database
+
+Because the database was empty, `0005` was applied statement by statement
+against production D1 and then recorded in `d1_migrations`, so
+`wrangler d1 migrations apply` will correctly skip it.
+
+**Doing this caught a defect that would have broken every publish.** The
+migration originally created the fingerprint index as a *partial* unique index
+(`... WHERE fingerprint IS NOT NULL`). SQLite refuses a partial index as an
+`ON CONFLICT` target with a bare column list:
+
+```
+ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint
+```
+
+The publish route issues exactly that statement, so it would have thrown at
+runtime — after a clean typecheck, a clean build and a clean dry-run. The index
+is now non-partial, which is equivalent for this purpose because SQLite already
+treats NULLs as distinct in a unique index. `test/migrations.test.ts` applies
+every migration to an in-memory database and runs the application's own
+statements against it; reintroducing the partial index makes that suite fail
+with the error above.
+
+Both behaviours were then confirmed on production D1 and the probe rows removed:
+
+| Probe | Result |
+|---|---|
+| Insert an occurrence with a fingerprint | `changes: 1` |
+| Replay the same fingerprint | `changes: 0` — idempotent |
+| Two occurrences with `NULL` fingerprints | both accepted — legacy rows safe |
+| Record an answer | `changes: 1` |
+| Resubmit the same session question | `changes: 0`, first answer preserved |
+
+The database was left with zero rows in every table.
 
 ---
 
@@ -38,7 +102,7 @@ Last recorded results:
 |---|---|
 | `tsc --noEmit` | clean |
 | `eslint` | clean |
-| Tests | 20 of 22 passing on Node 22; the 2 failures are the PDF tests and are a Node-version artefact, not a regression — see the note below |
+| Tests | 25 of 27 passing on Node 22; the 2 failures are the PDF tests and are a Node-version artefact, not a regression — see the note below |
 | `vinext build` | succeeds; 9 routes emitted |
 | `wrangler deploy --dry-run` | succeeds; 2486 KiB upload, 748 KiB gzipped; bindings resolve to `DB`, `DOCUMENTS`, `ASSETS` |
 
@@ -67,7 +131,8 @@ If this still returns `10042`, R2 is not enabled and step 4 will fail. Stop here
 
 ### 3. List before you create
 
-Never create a resource that may already exist. Read first:
+Already done once and recorded above, but repeat it — the account may have moved
+since. Never create a resource that may already exist:
 
 ```bash
 npx wrangler d1 list
@@ -75,16 +140,16 @@ npx wrangler r2 bucket list
 npx wrangler deployments list --name osce-production   # expect: not found
 ```
 
-Expected state per the brief:
+Expected state, as verified above:
 
 - `osce-knowledge-production` **exists**, id `d585d340-869f-4482-8871-91053f1eb8b0`,
-  migrations `0001`–`0004` applied. Do not recreate it. Confirm the id matches
-  `wrangler.jsonc`.
+  migrations `0001`–`0005` applied, all tables present, zero rows. Do not
+  recreate it. Confirm the id matches `wrangler.jsonc`.
 - `osce-documents-production` does **not** exist.
 - Worker `osce-production` does **not** exist.
 
-If anything differs from this, stop and reconcile against read-only listings
-before making a change.
+If anything differs, stop and reconcile against read-only listings before making
+a change.
 
 ### 4. Create only what is missing
 
@@ -113,9 +178,14 @@ additive — it adds a nullable column, two indexes, and two recomputation
 statements that are safe to re-run.
 
 ```bash
-npm run db:migrate:status
-npm run db:migrate:production
+npm run db:migrate:status        # expect 0001-0005 already applied
+npm run db:migrate:production    # expect "no migrations to apply"
 ```
+
+`0005` was applied during preparation and recorded in `d1_migrations`, so this
+step should be a no-op. If it reports `0005` as pending, the tracking row is
+missing — stop and reconcile before applying, because `ALTER TABLE ADD COLUMN`
+is not idempotent and will fail on a second run.
 
 ### 7. Deploy
 
@@ -217,11 +287,14 @@ The Workers runtime is unaffected: `compatibility_date` is `2026-08-28` with
 |---|---|---|
 | F1 | `lib/evaluation.ts` now matches key points on whole tokens through a controlled medical vocabulary, with negation, hedging, abbreviation, Arabic/English and typo handling. Public API, input shape and stored format all unchanged. | none |
 | F2 | Answers insert with `ON CONFLICT DO NOTHING` and return `409 ALREADY_ANSWERED`. Previously `INSERT OR REPLACE` allowed unlimited resubmission after seeing the score. | none |
-| F3 | Occurrences carry a deterministic fingerprint with a unique index; observation counts are recomputed from approved occurrences at publish time. They were previously never written at all. | `0005` |
+| F3 | Occurrences carry a deterministic fingerprint with a unique (non-partial) index; observation counts are recomputed from approved occurrences at publish time. They were previously never written at all. | `0005`, applied |
 | F5 | Admin token compared in constant time. | none |
 | F10 | Evaluator confidence stored as a number. Fresh databases declare the column `REAL`; the existing production database keeps `TEXT` affinity, so aggregate with `CAST(confidence AS REAL)`. | none |
 | F12 | Self-score derives the score from the declared correctness server-side instead of trusting a client-supplied number. | none |
 | — | `engines.node` corrected to `>=24.0.0`. | none |
 
-13 new evaluator regression tests cover every behaviour above. The original
-evaluation contract test is unchanged and still passes.
+13 evaluator regression tests and 5 migration tests cover every behaviour
+above. The migration tests apply the real migration files to an in-memory
+database and run the application's own statements against them, which is what
+caught the partial-index defect. The original evaluation contract test is
+unchanged and still passes.

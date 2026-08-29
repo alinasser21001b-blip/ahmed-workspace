@@ -16,8 +16,19 @@
 --    selection score weights it at 0.45, against a value that was always zero.
 --
 -- The fingerprint column is nullable so this migration is purely additive and
--- existing rows remain valid. SQLite permits repeated NULLs in a UNIQUE index,
--- so the constraint binds only to rows written after the backfill below.
+-- existing rows remain valid. SQLite treats NULLs as distinct in a UNIQUE
+-- index, so any number of legacy rows may carry NULL while the constraint
+-- still binds every row written after this migration. Verified against the
+-- production database: two NULL rows insert cleanly, a repeated fingerprint
+-- does not.
+--
+-- The index is deliberately NOT partial. A partial unique index
+-- (... WHERE fingerprint IS NOT NULL) cannot be named as an ON CONFLICT target
+-- with a bare column list - SQLite rejects it with
+--   "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint"
+-- which would make every publish throw at runtime. Since NULLs are already
+-- distinct in a plain unique index, the partial predicate bought nothing and
+-- cost correctness.
 --
 -- Counts are RECOMPUTED from occurrences at publish time, never incremented.
 -- An increment is a cached aggregate that drifts the first time anything is
@@ -26,8 +37,7 @@
 ALTER TABLE question_occurrences ADD COLUMN fingerprint TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_question_occurrences_fingerprint
-  ON question_occurrences(fingerprint)
-  WHERE fingerprint IS NOT NULL;
+  ON question_occurrences(fingerprint);
 
 -- Supports the recount queries below.
 CREATE INDEX IF NOT EXISTS idx_occurrences_examiner_case_question
