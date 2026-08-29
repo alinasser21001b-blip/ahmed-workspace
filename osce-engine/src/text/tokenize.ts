@@ -90,16 +90,28 @@ export function stemEnglish(word: string): string {
     w = w.slice(0, -1);
   }
 
-  // Verb forms
+  // Verb forms. After stripping the suffix, a doubled final consonant is
+  // usually gemination introduced by the suffix ("stopped" -> "stopp" -> "stop")
+  // and should be reduced - EXCEPT for -ll, -ss and -zz, where the doubling
+  // belongs to the word itself. Porter's step 1b carries the same exemption,
+  // and without it "swelling" reduces to "swel" and "falling" to "fal".
   if (w.endsWith('ing') && w.length > 5) {
-    w = w.slice(0, -3);
-    if (w.length > 2 && w.at(-1) === w.at(-2)) w = w.slice(0, -1); // swelling -> swell
+    w = undoubleFinal(w.slice(0, -3));
   } else if (w.endsWith('ed') && w.length > 4) {
-    w = w.slice(0, -2);
-    if (w.length > 2 && w.at(-1) === w.at(-2)) w = w.slice(0, -1);
+    w = undoubleFinal(w.slice(0, -2));
   }
 
   return w;
+}
+
+
+/** Reduces a suffix-induced doubled final consonant, keeping -ll, -ss and -zz. */
+function undoubleFinal(stem: string): string {
+  if (stem.length <= 2) return stem;
+  const last = stem.at(-1) as string;
+  if (last !== stem.at(-2)) return stem;
+  if (last === 'l' || last === 's' || last === 'z') return stem;
+  return stem.slice(0, -1);
 }
 
 /**

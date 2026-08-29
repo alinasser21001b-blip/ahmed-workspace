@@ -46,6 +46,25 @@ export class MemoryStore implements KnowledgeSource {
   /** examinerId|caseId|questionId -> published */
   readonly examinerQuestionPublished = new Set<string>();
 
+  /**
+   * Count and last-year indexes over the occurrence table.
+   *
+   * These mirror the `observation_count` / `last_seen_year` columns the SQL
+   * schema caches on the link tables. Without them every count is a full scan
+   * of the occurrence table, which turns one station compilation over a
+   * realistic corpus into millions of comparisons - the in-memory adapter would
+   * then dominate any benchmark and hide the engine's real cost.
+   *
+   * They stay honest because occurrences are the only writer and are never
+   * deleted here, and because `recount` re-derives the same numbers by scan, so
+   * a test can assert the index has not drifted - the same relationship the
+   * schema's `v_examiner_case_counts` view has to its cached column.
+   */
+  private readonly countIndex = new Map<string, number>();
+  private readonly lastYearIndex = new Map<string, number>();
+  /** Mirrors the UNIQUE index on question_occurrence(fingerprint). */
+  private readonly fingerprints = new Set<string>();
+
   // --- Writes ---------------------------------------------------------------
 
   putExaminer(examiner: Examiner): void {
@@ -97,10 +116,25 @@ export class MemoryStore implements KnowledgeSource {
    * is a normal, expected operation, and the caller counts skips.
    */
   putOccurrence(occurrence: QuestionOccurrence): boolean {
-    for (const existing of this.occurrences.values()) {
-      if (existing.fingerprint === occurrence.fingerprint) return false;
-    }
+    if (this.fingerprints.has(occurrence.fingerprint)) return false;
+    this.fingerprints.add(occurrence.fingerprint);
     this.occurrences.set(occurrence.id as string, occurrence);
+
+    // Maintain the three aggregation levels the compiler reads.
+    const { examinerId, caseId, questionId, academicYear } = occurrence;
+    for (const key of [
+      `${examinerId}`,
+      `${examinerId}|${caseId}`,
+      `${examinerId}|${caseId}|${questionId}`,
+    ]) {
+      this.countIndex.set(key, (this.countIndex.get(key) ?? 0) + 1);
+      if (academicYear !== null) {
+        const current = this.lastYearIndex.get(key);
+        if (current === undefined || academicYear > current) {
+          this.lastYearIndex.set(key, academicYear);
+        }
+      }
+    }
     return true;
   }
 
@@ -114,6 +148,22 @@ export class MemoryStore implements KnowledgeSource {
   // --- Derived counts (never incremented) -----------------------------------
 
   countFor(examinerId: ExaminerId, caseId?: CaseId, questionId?: QuestionId): number {
+    return this.countIndex.get(aggregationKey(examinerId, caseId, questionId)) ?? 0;
+  }
+
+  lastYearFor(examinerId: ExaminerId, caseId: CaseId, questionId?: QuestionId): number | null {
+    return this.lastYearIndex.get(aggregationKey(examinerId, caseId, questionId)) ?? null;
+  }
+
+  /**
+   * Recomputes a count by scanning the occurrence table.
+   *
+   * The authority behind `countFor`, exactly as `v_examiner_case_counts` is the
+   * authority behind the cached column in SQL. A test asserts the two agree, so
+   * index drift becomes a test failure rather than a silently wrong
+   * "asked 5 times" on a student's screen.
+   */
+  recount(examinerId: ExaminerId, caseId?: CaseId, questionId?: QuestionId): number {
     let count = 0;
     for (const occurrence of this.occurrences.values()) {
       if (occurrence.examinerId !== examinerId) continue;
@@ -124,15 +174,24 @@ export class MemoryStore implements KnowledgeSource {
     return count;
   }
 
-  lastYearFor(examinerId: ExaminerId, caseId: CaseId, questionId?: QuestionId): number | null {
-    let last: number | null = null;
+  /** True when every cached count matches a fresh recount. */
+  verifyCounts(): boolean {
+    const expected = new Map<string, number>();
     for (const occurrence of this.occurrences.values()) {
-      if (occurrence.examinerId !== examinerId || occurrence.caseId !== caseId) continue;
-      if (questionId !== undefined && occurrence.questionId !== questionId) continue;
-      if (occurrence.academicYear === null) continue;
-      if (last === null || occurrence.academicYear > last) last = occurrence.academicYear;
+      const { examinerId, caseId, questionId } = occurrence;
+      for (const key of [
+        `${examinerId}`,
+        `${examinerId}|${caseId}`,
+        `${examinerId}|${caseId}|${questionId}`,
+      ]) {
+        expected.set(key, (expected.get(key) ?? 0) + 1);
+      }
     }
-    return last;
+    if (expected.size !== this.countIndex.size) return false;
+    for (const [key, count] of expected) {
+      if (this.countIndex.get(key) !== count) return false;
+    }
+    return true;
   }
 
   approvedAnswerFor(questionId: QuestionId): ExpectedAnswer | null {
@@ -146,14 +205,14 @@ export class MemoryStore implements KnowledgeSource {
 
   listPublishedExaminers(specialtyId: SpecialtyId): CompilerExaminer[] {
     const out: CompilerExaminer[] = [];
+    // Group the published links once rather than re-scanning the set per
+    // examiner: the naive form is O(examiners x links) on the exam-start path.
+    const casesByExaminer = this.publishedCasesByExaminer();
     for (const examiner of this.examiners.values()) {
       if (examiner.specialtyId !== specialtyId || !examiner.active) continue;
       // An examiner with no published case cannot produce a station, so it is
       // not "published" from the compiler's point of view.
-      const hasPublishedCase = [...this.examinerCasePublished].some((key) =>
-        key.startsWith(`${examiner.id}|`),
-      );
-      if (!hasPublishedCase) continue;
+      if ((casesByExaminer.get(examiner.id as string)?.length ?? 0) === 0) continue;
       out.push({
         id: examiner.id,
         specialtyId: examiner.specialtyId,
@@ -166,9 +225,7 @@ export class MemoryStore implements KnowledgeSource {
 
   listPublishedCasesForExaminer(examinerId: ExaminerId): CompilerCase[] {
     const out: CompilerCase[] = [];
-    for (const key of this.examinerCasePublished) {
-      const [linkExaminerId, caseId] = key.split('|') as [string, string];
-      if (linkExaminerId !== (examinerId as string)) continue;
+    for (const caseId of this.publishedCasesByExaminer().get(examinerId as string) ?? []) {
       const clinicalCase = this.cases.get(caseId);
       if (clinicalCase === undefined || !clinicalCase.active) continue;
       out.push({
@@ -186,9 +243,7 @@ export class MemoryStore implements KnowledgeSource {
 
   listPublishedQuestions(examinerId: ExaminerId, caseId: CaseId): CompilerQuestion[] {
     const out: CompilerQuestion[] = [];
-    for (const key of this.examinerQuestionPublished) {
-      const [linkExaminerId, linkCaseId, questionId] = key.split('|') as [string, string, string];
-      if (linkExaminerId !== (examinerId as string) || linkCaseId !== (caseId as string)) continue;
+    for (const questionId of this.publishedQuestionsByPair().get(`${examinerId}|${caseId}`) ?? []) {
       const question = this.questions.get(questionId);
       if (question === undefined) continue;
       out.push({
@@ -204,4 +259,56 @@ export class MemoryStore implements KnowledgeSource {
     }
     return out.sort((a, b) => (a.id as string).localeCompare(b.id as string));
   }
+
+  // --- Link grouping, rebuilt when the link sets change ---------------------
+
+  private casesByExaminerCache: Map<string, string[]> | null = null;
+  private casesByExaminerSize = -1;
+  private questionsByPairCache: Map<string, string[]> | null = null;
+  private questionsByPairSize = -1;
+
+  private publishedCasesByExaminer(): Map<string, string[]> {
+    if (
+      this.casesByExaminerCache !== null &&
+      this.casesByExaminerSize === this.examinerCasePublished.size
+    ) {
+      return this.casesByExaminerCache;
+    }
+    const grouped = new Map<string, string[]>();
+    for (const key of this.examinerCasePublished) {
+      const [examinerId, caseId] = key.split('|') as [string, string];
+      const bucket = grouped.get(examinerId);
+      if (bucket === undefined) grouped.set(examinerId, [caseId]);
+      else bucket.push(caseId);
+    }
+    this.casesByExaminerCache = grouped;
+    this.casesByExaminerSize = this.examinerCasePublished.size;
+    return grouped;
+  }
+
+  private publishedQuestionsByPair(): Map<string, string[]> {
+    if (
+      this.questionsByPairCache !== null &&
+      this.questionsByPairSize === this.examinerQuestionPublished.size
+    ) {
+      return this.questionsByPairCache;
+    }
+    const grouped = new Map<string, string[]>();
+    for (const key of this.examinerQuestionPublished) {
+      const [examinerId, caseId, questionId] = key.split('|') as [string, string, string];
+      const pair = `${examinerId}|${caseId}`;
+      const bucket = grouped.get(pair);
+      if (bucket === undefined) grouped.set(pair, [questionId]);
+      else bucket.push(questionId);
+    }
+    this.questionsByPairCache = grouped;
+    this.questionsByPairSize = this.examinerQuestionPublished.size;
+    return grouped;
+  }
+}
+
+function aggregationKey(examinerId: ExaminerId, caseId?: CaseId, questionId?: QuestionId): string {
+  if (caseId === undefined) return `${examinerId}`;
+  if (questionId === undefined) return `${examinerId}|${caseId}`;
+  return `${examinerId}|${caseId}|${questionId}`;
 }

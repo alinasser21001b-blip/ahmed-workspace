@@ -96,6 +96,11 @@ export function phoneticKey(name: string): string {
   // whole point of blocking. "Ali" must stay "AL", not become "L".
   if (collapsed.startsWith('A') && collapsed.length > 2) collapsed = collapsed.slice(1);
 
+  // All-vowel short names ("Ay", "Oi") collapse to a single symbol before the
+  // guards above can apply. Fall back to the uncollapsed mapping so the key
+  // still carries two symbols.
+  if (collapsed.length < 2 && out.length >= 2) return out.slice(0, 2);
+
   return collapsed;
 }
 
