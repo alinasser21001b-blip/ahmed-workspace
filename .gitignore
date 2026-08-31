@@ -16,3 +16,11 @@ furniture-os/**/.pytest_cache/
 medmind/.env
 medmind/.venv/
 **/.DS_Store
+
+# Travel treasury build artifacts (and any accidental root-level builds)
+travel-treasury/node_modules/
+travel-treasury/dist/
+travel-treasury/dist-server/
+travel-treasury/.pgdata/
+/dist/
+/node_modules/
