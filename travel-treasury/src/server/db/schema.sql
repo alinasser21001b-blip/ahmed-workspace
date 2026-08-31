@@ -367,10 +367,16 @@ DROP TRIGGER IF EXISTS withdrawal_ownership ON withdrawals;
 CREATE TRIGGER withdrawal_ownership BEFORE INSERT OR UPDATE ON withdrawals
   FOR EACH ROW EXECUTE FUNCTION trg_withdrawal_ownership();
 
--- Pending figures are write-once. A revised pending amount is a new revision
--- row, never an overwrite of the original observation.
+-- Pending figures are write-once for ordinary updates. The one legitimate way
+-- to change them is the audited revision path in the service layer, which
+-- writes a withdrawal_revisions row and an audit event in the same transaction
+-- and marks that transaction with a local setting the trigger checks. A bare
+-- UPDATE arriving any other way is refused.
 CREATE OR REPLACE FUNCTION trg_pending_write_once() RETURNS TRIGGER AS $$
 BEGIN
+  IF current_setting('app.allow_pending_revision', true) = 'on' THEN
+    RETURN NEW;
+  END IF;
   IF OLD.pending_debit_minor IS NOT NULL
      AND NEW.pending_debit_minor IS DISTINCT FROM OLD.pending_debit_minor THEN
     RAISE EXCEPTION 'Pending debit is write-once; record a withdrawal_revision instead';
