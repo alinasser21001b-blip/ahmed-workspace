@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { money, toMinor } from '../lib/format.ts';
-import { t, tConfidence, tCurrency } from '../i18n.ts';
+import { errText, t, tConfidence, tCurrency } from '../i18n.ts';
 import { AmountField, Callout, Choice, ErrorBox, Figure, Loading, Sheet, type EvidencedWire } from '../components/Common.tsx';
 
 interface CardRow {
@@ -35,6 +35,7 @@ export function Cards() {
   const [sheet, setSheet] = useState<null | 'add' | 'balance' | 'funding'>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const [f, setF] = useState({
     nickname: '', issuer: '', product: '', network: 'VISA', cardType: 'DEBIT', last4: '',
@@ -48,18 +49,37 @@ export function Cards() {
   const [fundFee, setFundFee] = useState('');
 
   const loadCards = () => {
-    api.get<{ cards: CardRow[] }>('/v1/cards').then((r) => setCards(r.cards)).catch((e) => setError((e as Error).message));
+    api.get<{ cards: CardRow[] }>('/v1/cards').then((r) => setCards(r.cards)).catch((e) => setError(errText(e)));
   };
   useEffect(loadCards, []);
   useEffect(() => {
     if (!open) { setDash(null); return; }
-    api.get<CardDash>(`/v1/cards/${open}/dashboard`).then(setDash).catch((e) => setError((e as Error).message));
+    api.get<CardDash>(`/v1/cards/${open}/dashboard`).then(setDash).catch((e) => setError(errText(e)));
   }, [open]);
 
   if (error) return <ErrorBox message={error} onRetry={() => { setError(null); loadCards(); }} />;
   if (!cards) return <Loading />;
 
   const current = cards.find((c) => c.id === open) ?? null;
+
+  /**
+   * Delete leaves the detail view first: the card is gone, so re-fetching its
+   * dashboard afterwards (as `act` does) would only 404. A refusal from the
+   * server — the card holds history — keeps the user here with the reason.
+   */
+  const removeCard = async () => {
+    setBusy(true);
+    try {
+      await api.del(`/v1/cards/${open}`);
+      setConfirmDelete(false);
+      setOpen(null);
+      loadCards();
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -69,7 +89,7 @@ export function Cards() {
       loadCards();
       if (open) api.get<CardDash>(`/v1/cards/${open}/dashboard`).then(setDash).catch(() => {});
     } catch (e) {
-      setError((e as Error).message);
+      setError(errText(e));
     } finally {
       setBusy(false);
     }
@@ -165,6 +185,41 @@ export function Cards() {
           </div>
         ) : null}
 
+        <div className="card">
+          <h2>{t('manageCard')}</h2>
+          <div className="tiny">{t('archiveCardWhat')}</div>
+          <div className="spacer" />
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={() => void act(() => api.patch(`/v1/cards/${open}`, { isActive: !current.is_active }))}
+          >
+            {current.is_active ? t('archiveCard') : t('unarchiveCard')}
+          </button>
+
+          <div className="spacer" />
+          <div className="tiny">{t('deleteCardOnlyEmpty')}</div>
+          <div className="spacer" />
+          {confirmDelete ? (
+            <>
+              <Callout tone="danger">{t('deleteCardConfirm')}</Callout>
+              <div className="spacer" />
+              <button type="button" className="danger-btn" disabled={busy} onClick={() => void removeCard()}>
+                {t('deleteCard')}
+              </button>
+              <div className="spacer" />
+              <button type="button" className="secondary" disabled={busy} onClick={() => setConfirmDelete(false)}>
+                {t('cancel')}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="secondary" disabled={busy} onClick={() => setConfirmDelete(true)}>
+              {t('deleteCard')}
+            </button>
+          )}
+        </div>
+
         {sheet === 'balance' ? (
           <Sheet title={t('addSnapshot')} onClose={() => setSheet(null)}>
             <AmountField label={t('amount')} value={balAmt} onChange={setBalAmt} currency={cur} autoFocus />
@@ -221,6 +276,9 @@ export function Cards() {
                 <span>{c.ownership === 'COMPANY' ? t('company') : t('personal')}</span>
                 <span>{tCurrency(c.native_currency)}</span>
               </div>
+              {!c.is_active ? (
+                <div className="meta"><span className="badge muted">{t('archived')}</span></div>
+              ) : null}
               {c.international_status !== 'CONFIRMED_WORKING' ? (
                 <div className="meta"><span className="badge warn"><span aria-hidden="true">!</span>{t('intlUnknown')}</span></div>
               ) : null}

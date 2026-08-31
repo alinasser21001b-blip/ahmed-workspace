@@ -221,6 +221,47 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     return { ok: true };
   });
 
+  /**
+   * Delete a card, but only one that never carried money. A card with any
+   * withdrawal, balance snapshot or funding event is financial history: it is
+   * archived (PATCH isActive:false) so its records stay readable, never
+   * deleted. Callers are told which of the three holds it back.
+   *
+   * Card-specific fee rules go with it — they are configuration attached to
+   * this card, meaningless once it is gone. The full row is written to the
+   * audit log first, so even a hard delete leaves a trail of what existed.
+   */
+  app.delete('/v1/cards/:id', { preHandler: authed(true) }, async (req) => {
+    const { id } = req.params as { id: string };
+    const before = await getCardRow(db, id);
+    const counts = await db.query<{ withdrawals: number; snapshots: number; funding: number }>(
+      `SELECT (SELECT count(*) FROM withdrawals      WHERE card_id = $1)::int AS withdrawals,
+              (SELECT count(*) FROM balance_snapshots WHERE card_id = $1)::int AS snapshots,
+              (SELECT count(*) FROM funding_events    WHERE card_id = $1)::int AS funding`,
+      [id],
+    );
+    const c = counts.rows[0] ?? { withdrawals: 0, snapshots: 0, funding: 0 };
+    const held = c.withdrawals + c.snapshots + c.funding;
+    if (held > 0) {
+      const partsEn: string[] = [];
+      const partsAr: string[] = [];
+      if (c.withdrawals > 0) { partsEn.push(`${c.withdrawals} withdrawal(s)`); partsAr.push(`${c.withdrawals} سحب`); }
+      if (c.snapshots > 0) { partsEn.push(`${c.snapshots} balance snapshot(s)`); partsAr.push(`${c.snapshots} رصيد مسجّل`); }
+      if (c.funding > 0) { partsEn.push(`${c.funding} funding record(s)`); partsAr.push(`${c.funding} عملية تمويل`); }
+      throw new HttpError(
+        409,
+        `This card holds ${partsEn.join(', ')}. Deleting it would destroy that history — archive it instead.`,
+        `هذه البطاقة تحمل ${partsAr.join('، ')}. حذفها يمحو هذا السجل — أرشفها بدلاً من ذلك.`,
+      );
+    }
+    await db.transaction(async (tx) => {
+      await audit(tx, req.user!.id, 'CARD_DELETED', 'cards', id, before as unknown, null);
+      await tx.query(`DELETE FROM fee_rules WHERE card_id = $1`, [id]);
+      await tx.query(`DELETE FROM cards WHERE id = $1`, [id]);
+    });
+    return { ok: true, deleted: id };
+  });
+
   app.get('/v1/cards/:id/dashboard', { preHandler: authed(false) }, async (req) => {
     const { id } = req.params as { id: string };
     const view = await cardDashboard(db, id);

@@ -117,6 +117,23 @@ const dict = {
   warnings: { ar: 'تنبيهات', en: 'Warnings' },
   revisions: { ar: 'سجل التعديلات', en: 'Revision history' },
   addCard: { ar: 'إضافة بطاقة', en: 'Add card' },
+  manageCard: { ar: 'إدارة البطاقة', en: 'Manage card' },
+  deleteCard: { ar: 'حذف البطاقة', en: 'Delete card' },
+  archiveCard: { ar: 'أرشفة البطاقة', en: 'Archive card' },
+  unarchiveCard: { ar: 'إعادة تفعيل البطاقة', en: 'Reactivate card' },
+  archived: { ar: 'مؤرشفة', en: 'Archived' },
+  deleteCardConfirm: { ar: 'حذف هذه البطاقة نهائيًا؟', en: 'Delete this card permanently?' },
+  deleteCardOnlyEmpty: {
+    ar: 'الحذف متاح فقط لبطاقة لم تُسجَّل عليها أي حركة. البطاقة التي تحمل سجلًا ماليًا تُؤرشَف حفاظًا على السجل.',
+    en: 'Deleting is only possible for a card with no recorded activity. A card that holds financial records is archived instead, so the trail survives.',
+  },
+  archiveCardWhat: {
+    ar: 'الأرشفة تُخفي البطاقة من المقارنة والمخطِّط وتمنع تسجيل سحوبات جديدة عليها — وكل سجلاتها تبقى محفوظة وقابلة للقراءة.',
+    en: 'Archiving hides the card from the comparison and planner and blocks new withdrawals on it. Every existing record stays intact and readable.',
+  },
+  cardDeleted: { ar: 'تم حذف البطاقة', en: 'Card deleted' },
+  cardArchived: { ar: 'تمت أرشفة البطاقة', en: 'Card archived' },
+  cardUnarchived: { ar: 'تمت إعادة تفعيل البطاقة', en: 'Card reactivated' },
   nickname: { ar: 'اسم البطاقة', en: 'Nickname' },
   issuer: { ar: 'البنك المُصدر', en: 'Issuer' },
   product: { ar: 'نوع المنتج', en: 'Product' },
@@ -432,4 +449,15 @@ export function tMsg(code: string | null | undefined, fallback?: string): string
 export function tCauseRationale(cause: string, fallback: string): string {
   const entry = causeRationales[cause];
   return entry ? entry[current] : fallback;
+}
+
+/**
+ * Server errors carry both languages: `error` in English and `errorAr` in
+ * Arabic. Show the one matching the current locale, falling back to whichever
+ * exists so a message is never swallowed.
+ */
+export function errText(e: unknown): string {
+  const err = e as { message?: string; errorAr?: string | null } | null;
+  if (current === 'ar' && err?.errorAr) return err.errorAr;
+  return err?.message ?? String(e);
 }
