@@ -45,6 +45,26 @@ export async function revokeSession(db: Db, sessionToken: string): Promise<void>
   await db.query(`UPDATE sessions SET revoked_at = now() WHERE token_hash = $1`, [sha256(sessionToken)]);
 }
 
+/**
+ * Re-issue the CSRF token for a live session. Only the hash is stored, so a
+ * client that lost its copy (the browser reclaimed the tab, a PWA relaunch)
+ * must rotate rather than read it back; the old token stops working. The
+ * session cookie is SameSite=Strict, so a cross-site page can never reach
+ * this with credentials, and same-origin policy keeps the response unreadable
+ * to any other origin.
+ */
+export async function rotateCsrf(db: Db, sessionToken: string): Promise<string> {
+  const csrfToken = randomToken();
+  const res = await db.query<{ id: string }>(
+    `UPDATE sessions SET csrf_token_hash = $1
+      WHERE token_hash = $2 AND revoked_at IS NULL AND expires_at > now()
+      RETURNING id`,
+    [sha256(csrfToken), sha256(sessionToken)],
+  );
+  if (res.rows.length === 0) throw unauthorized();
+  return csrfToken;
+}
+
 export async function userForSession(
   db: Db,
   sessionToken: string | undefined,

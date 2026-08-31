@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, isOnline, loadCsrf, readQueue, setCsrf, syncQueue, type ApiError } from './lib/api.ts';
+import { api, hasCsrf, isOnline, loadCsrf, readQueue, setCsrf, syncQueue, type ApiError } from './lib/api.ts';
 import { getLocale, setLocale, t } from './i18n.ts';
 import { Callout } from './components/Common.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
@@ -30,7 +30,16 @@ export function App() {
     loadCsrf();
     api
       .get<{ user: User }>('/v1/auth/me')
-      .then((r) => setUser(r.user))
+      .then(async (r) => {
+        // Signed-in cookie but no CSRF token (the browser dropped storage
+        // between visits): rotate a fresh one before showing the app, or
+        // every save would fail.
+        if (!hasCsrf()) {
+          const c = await api.post<{ csrfToken: string }>('/v1/auth/csrf');
+          setCsrf(c.csrfToken);
+        }
+        setUser(r.user);
+      })
       .catch(() => setUser(null));
   }, []);
 

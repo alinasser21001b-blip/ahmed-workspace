@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
-import { createSession, loginRateLimit, revokeSession, userForSession, verifyPassword } from "./auth.js";
+import { createSession, loginRateLimit, revokeSession, rotateCsrf, userForSession, verifyPassword } from "./auth.js";
 import { addCashExpense, applyReconciliation, classifyDiscrepancy, closeDay, createWithdrawal, ensureTripAndWallets, insertSnapshot, recordCorrection, recordPending, recordSettlement, reverseWithdrawal, audit, } from "./services.js";
 import { cardDashboard, comparisonView, dashboardView, dayCloseView, plannerView, withdrawalDetail } from "./views.js";
 import { auditCsv, reconciliationCsv, treasuryCsv, withdrawalsCsv } from "./csv.js";
@@ -77,7 +77,10 @@ export async function buildApp(opts) {
         const user = await userForSession(db, session.sessionToken, undefined, false);
         return { csrfToken: session.csrfToken, user };
     });
-    app.post('/v1/auth/logout', { preHandler: authed(true) }, async (req, reply) => {
+    // Logout deliberately skips the CSRF check: it only revokes the caller's own
+    // session, and gating it would strand a client that lost its token (the
+    // HttpOnly cookie keeps it signed in with no way out).
+    app.post('/v1/auth/logout', { preHandler: authed(false) }, async (req, reply) => {
         const token = req.cookies[SESSION_COOKIE];
         if (token)
             await revokeSession(db, token);
@@ -85,6 +88,13 @@ export async function buildApp(opts) {
         return { ok: true };
     });
     app.get('/v1/auth/me', { preHandler: authed(false) }, async (req) => ({ user: req.user }));
+    // A client that kept its session cookie but lost the CSRF token (storage
+    // cleared by the browser between visits) rotates it here on boot.
+    app.post('/v1/auth/csrf', { preHandler: authed(false) }, async (req) => {
+        const token = req.cookies[SESSION_COOKIE];
+        const csrfToken = await rotateCsrf(db, token ?? '');
+        return { csrfToken };
+    });
     // --------------------------------------------------------------- trip ----
     app.get('/v1/trip', { preHandler: authed(false) }, async () => {
         const { tripId } = await ensureTripAndWallets(db);

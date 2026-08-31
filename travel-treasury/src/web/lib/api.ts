@@ -14,11 +14,16 @@ export interface ApiError extends Error {
 
 let csrfToken: string | null = null;
 
+// localStorage, not sessionStorage: the session cookie lives for days, and
+// mobile browsers discard per-tab storage whenever they reclaim the tab —
+// which left the app signed in but unable to write. The token must survive
+// exactly as long as the cookie does.
 export function setCsrf(token: string | null): void {
   csrfToken = token;
   try {
-    if (token) sessionStorage.setItem('tt_csrf', token);
-    else sessionStorage.removeItem('tt_csrf');
+    if (token) localStorage.setItem('tt_csrf', token);
+    else localStorage.removeItem('tt_csrf');
+    sessionStorage.removeItem('tt_csrf'); // pre-migration copies
   } catch {
     /* private mode */
   }
@@ -26,10 +31,15 @@ export function setCsrf(token: string | null): void {
 
 export function loadCsrf(): void {
   try {
-    csrfToken = sessionStorage.getItem('tt_csrf');
+    // The sessionStorage fallback keeps sessions from before the move alive.
+    csrfToken = localStorage.getItem('tt_csrf') ?? sessionStorage.getItem('tt_csrf');
   } catch {
     csrfToken = null;
   }
+}
+
+export function hasCsrf(): boolean {
+  return csrfToken !== null;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
