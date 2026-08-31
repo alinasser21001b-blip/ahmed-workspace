@@ -23,7 +23,7 @@ async function call(method: 'GET' | 'POST', url: string, body?: unknown) {
     payload: (method === 'GET' ? undefined : (body ?? {})) as never,
     headers: { cookie, 'x-csrf-token': csrf, ...(method === 'GET' ? {} : { 'content-type': 'application/json' }) },
   });
-  return { status: res.statusCode, json: res.json() as Record<string, never> };
+  return { status: res.statusCode, json: res.json() as Record<string, unknown> };
 }
 
 beforeAll(async () => {
@@ -49,7 +49,7 @@ describe('NEO Platinum (USD) lifecycle', () => {
       cardType: 'PREPAID', last4: '9014', ownership: 'PERSONAL', nativeCurrency: 'USD',
       openingAvailableMinor: '300000', internationalStatus: 'CONFIRMED_WORKING',
     });
-    cardId = r.json.id;
+    cardId = r.json.id as string;
     expect(cardId).toBeTruthy();
   });
 
@@ -60,7 +60,7 @@ describe('NEO Platinum (USD) lifecycle', () => {
       before: { amountMinor: '300000', source: 'BANK_APP', balanceType: 'AVAILABLE' },
       after: { amountMinor: '273000', source: 'BANK_APP', balanceType: 'AVAILABLE' },
     });
-    wdId = w.json.id;
+    wdId = w.json.id as string;
     const d = await call('GET', `/v1/withdrawals/${wdId}`);
     const c = d.json.computation as Record<string, { known: boolean; display?: string; reason?: string; code?: string }>;
     expect(c.nativeAllInCost!.display).toBe('270.00');
