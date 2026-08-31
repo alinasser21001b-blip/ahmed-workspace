@@ -114,6 +114,12 @@ const dict = {
   reverse: { ar: 'تسجيل عكس العملية', en: 'Record reversal' },
   reverseReason: { ar: 'سبب العكس', en: 'Reversal reason' },
   reversalKeepsOriginal: { ar: 'عكس العملية لا يحذف السجل الأصلي', en: 'A reversal never deletes the original record' },
+  deleteWithdrawal: { ar: 'حذف السحب', en: 'Delete withdrawal' },
+  deleteWithdrawalConfirm: { ar: 'حذف هذا السحب نهائيًا؟', en: 'Delete this withdrawal permanently?' },
+  deleteWithdrawalWhen: {
+    ar: 'الحذف لسجل يوثّق عملية لم تحدث أصلًا (تجربة أو إدخال بالخطأ) — ويعيد النقد ورصيد البطاقة إلى ما كانا عليه. أمّا إن حدث السحب فعلًا ثم أعاده البنك، فسجّل عكس العملية.',
+    en: 'Delete a record of something that never happened — a test entry or a mistake — which returns the cash and the card balance to where they were. If the withdrawal did happen and the bank returned it, record a reversal instead.',
+  },
   warnings: { ar: 'تنبيهات', en: 'Warnings' },
   revisions: { ar: 'سجل التعديلات', en: 'Revision history' },
   addCard: { ar: 'إضافة بطاقة', en: 'Add card' },

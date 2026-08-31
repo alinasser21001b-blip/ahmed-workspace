@@ -372,6 +372,81 @@ export async function buildApp(opts: AppOptions): Promise<FastifyInstance> {
     return applyReconciliation(db, req.user!, id);
   });
 
+  /**
+   * Delete a withdrawal that records something which never happened — a test
+   * entry, or the wrong card picked. This is not the same as a reversal: a
+   * reversal says the bank gave the money back, and keeps both records. This
+   * says the event was never real.
+   *
+   * Only a CAPTURED withdrawal qualifies: nothing downstream depends on it
+   * yet. Once a pending debit, a settlement, a reconciliation, a revision or a
+   * discrepancy exists, or the day is closed, the record has been reasoned
+   * about and reversal is the only honest route.
+   *
+   * The cash movement and the before/after balance snapshots it created go
+   * with it, so the cash wallet and the card's expected balance return to
+   * exactly where they were. The full row is audited first.
+   */
+  app.delete('/v1/withdrawals/:id', { preHandler: authed(true) }, async (req) => {
+    const { id } = req.params as { id: string };
+    const res = await db.query<{
+      id: string; state: string; day_close_id: string | null;
+      before_snapshot_id: string | null; after_snapshot_id: string | null;
+      day_status: string | null;
+    }>(
+      `SELECT w.*, dc.status AS day_status
+         FROM withdrawals w
+         LEFT JOIN day_closes dc ON dc.id = w.day_close_id
+        WHERE w.id = $1`,
+      [id],
+    );
+    const row = res.rows[0];
+    if (!row) throw new HttpError(404, 'Withdrawal not found', 'السحب غير موجود');
+
+    if (row.state !== 'CAPTURED') {
+      throw new HttpError(
+        409,
+        `This withdrawal is in state ${row.state}. Only a freshly captured record can be deleted; reverse it instead.`,
+        `هذا السحب في حالة ${row.state}. لا يُحذف إلا سجل لم تُسجَّل عليه أي خطوة بعد — سجّل عكس العملية بدلاً من ذلك.`,
+      );
+    }
+    if (row.day_status === 'CLOSED') {
+      throw new HttpError(
+        409,
+        'This withdrawal falls in a closed day. Record a correction instead.',
+        'هذا السحب يقع في يوم مُقفل. سجّل تصحيحًا بدلاً من ذلك.',
+      );
+    }
+
+    const deps = await db.query<{ revisions: number; discrepancies: number; referenced: number }>(
+      `SELECT (SELECT count(*) FROM withdrawal_revisions WHERE withdrawal_id = $1)::int AS revisions,
+              (SELECT count(*) FROM discrepancies        WHERE withdrawal_id = $1)::int AS discrepancies,
+              (SELECT count(*) FROM withdrawals
+                WHERE voided_by_id = $1 OR reversal_of_id = $1)::int AS referenced`,
+      [id],
+    );
+    const d = deps.rows[0] ?? { revisions: 0, discrepancies: 0, referenced: 0 };
+    if (d.revisions + d.discrepancies + d.referenced > 0) {
+      throw new HttpError(
+        409,
+        'This withdrawal has been edited, flagged or referenced by another record. Reverse it instead.',
+        'هذا السحب عُدّل أو صُنّف أو ارتبط بسجل آخر. سجّل عكس العملية بدلاً من ذلك.',
+      );
+    }
+
+    await db.transaction(async (tx) => {
+      await audit(tx, req.user!.id, 'WITHDRAWAL_DELETED', 'withdrawals', id, row as unknown, null);
+      await tx.query(`DELETE FROM cash_movements WHERE withdrawal_id = $1`, [id]);
+      // The withdrawal references its snapshots, so it goes first.
+      await tx.query(`DELETE FROM withdrawals WHERE id = $1`, [id]);
+      const snaps = [row.before_snapshot_id, row.after_snapshot_id].filter((s): s is string => !!s);
+      if (snaps.length > 0) {
+        await tx.query(`DELETE FROM balance_snapshots WHERE id = ANY($1::text[])`, [snaps]);
+      }
+    });
+    return { ok: true, deleted: id };
+  });
+
   app.post('/v1/withdrawals/:id/reverse', { preHandler: authed(true) }, async (req) => {
     const { id } = req.params as { id: string };
     await reverseWithdrawal(db, req.user!, id, (req.body ?? {}) as never);

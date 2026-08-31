@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.ts';
 import { money, formatSaudiTime, toMinor } from '../lib/format.ts';
-import { t, tCause, tCauseRationale, tMsg, tState, tCurrency } from '../i18n.ts';
+import { errText, t, tCause, tCauseRationale, tMsg, tState, tCurrency } from '../i18n.ts';
 import { AmountField, Callout, ErrorBox, Figure, Loading, Sheet, StateBadge, type EvidencedWire } from '../components/Common.tsx';
 
 interface Detail {
@@ -34,6 +34,22 @@ export function WithdrawalDetail({ id, onBack }: { id: string; onBack: () => voi
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<null | 'pending' | 'settle' | 'reverse' | 'classify'>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  /** Deleting leaves the detail view: the record is gone, so there is nothing
+   *  left here to show. A refusal keeps the user here with the reason. */
+  const removeWithdrawal = async () => {
+    setBusy(true);
+    try {
+      await api.del(`/v1/withdrawals/${id}`);
+      onBack();
+    } catch (e) {
+      setError(errText(e));
+      setConfirmDelete(false);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const [pendAmt, setPendAmt] = useState('');
   const [pendFee, setPendFee] = useState('');
@@ -50,7 +66,7 @@ export function WithdrawalDetail({ id, onBack }: { id: string; onBack: () => voi
 
   const load = () => {
     setError(null);
-    api.get<Detail>(`/v1/withdrawals/${id}`).then(setD).catch((e) => setError((e as Error).message));
+    api.get<Detail>(`/v1/withdrawals/${id}`).then(setD).catch((e) => setError(errText(e)));
   };
   useEffect(load, [id]);
 
@@ -67,7 +83,7 @@ export function WithdrawalDetail({ id, onBack }: { id: string; onBack: () => voi
       setSheet(null);
       load();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errText(e));
     } finally {
       setBusy(false);
     }
@@ -213,6 +229,31 @@ export function WithdrawalDetail({ id, onBack }: { id: string; onBack: () => voi
             {t('reverse')}
           </button>
           <div className="tiny" style={{ marginTop: 8 }}>{t('reversalKeepsOriginal')}</div>
+
+          {d.state === 'CAPTURED' ? (
+            <>
+              <div className="spacer" />
+              <div className="tiny">{t('deleteWithdrawalWhen')}</div>
+              <div className="spacer" />
+              {confirmDelete ? (
+                <>
+                  <Callout tone="danger">{t('deleteWithdrawalConfirm')}</Callout>
+                  <div className="spacer" />
+                  <button type="button" className="danger-btn" disabled={busy} onClick={() => void removeWithdrawal()}>
+                    {t('deleteWithdrawal')}
+                  </button>
+                  <div className="spacer" />
+                  <button type="button" className="secondary" disabled={busy} onClick={() => setConfirmDelete(false)}>
+                    {t('cancel')}
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="secondary" disabled={busy} onClick={() => setConfirmDelete(true)}>
+                  {t('deleteWithdrawal')}
+                </button>
+              )}
+            </>
+          ) : null}
         </div>
       ) : null}
 
