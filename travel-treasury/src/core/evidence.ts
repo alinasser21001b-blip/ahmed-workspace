@@ -62,13 +62,22 @@ export type Evidenced<T> =
       readonly value: T;
       readonly provenance: Provenance;
       readonly confidence: PricingConfidence;
-      /** Human-readable explanation of how this number was arrived at. */
+      /**
+       * Explanation of how this number was arrived at, in English.
+       *
+       * `code` is the translatable form and is what the UI renders; `basis`
+       * remains the English text used by exports, logs and any reader who is
+       * not going through the app. The domain layer holds no display language.
+       */
       readonly basis: string;
+      readonly code?: string;
     }
   | {
       readonly known: false;
       readonly reason: string;
+      /** Evidence-item codes, translated by the UI. */
       readonly missing: readonly string[];
+      readonly code?: string;
     };
 
 export function known<T>(
@@ -76,12 +85,17 @@ export function known<T>(
   provenance: Provenance,
   confidence: PricingConfidence,
   basis: string,
+  code?: string,
 ): Evidenced<T> {
-  return { known: true, value, provenance, confidence, basis };
+  return { known: true, value, provenance, confidence, basis, code };
 }
 
-export function unknown<T>(reason: string, missing: readonly string[] = []): Evidenced<T> {
-  return { known: false, reason, missing };
+export function unknown<T>(
+  reason: string,
+  missing: readonly string[] = [],
+  code?: string,
+): Evidenced<T> {
+  return { known: false, reason, missing, code };
 }
 
 export function mapEvidenced<A, B>(
@@ -114,8 +128,8 @@ export function combine2<A, B, C>(
   if (!a.known && !b.known) {
     return unknown(`${a.reason}; ${b.reason}`, [...new Set([...a.missing, ...b.missing])]);
   }
-  if (!a.known) return unknown(a.reason, a.missing);
-  if (!b.known) return unknown(b.reason, b.missing);
+  if (!a.known) return unknown(a.reason, a.missing, a.code);
+  if (!b.known) return unknown(b.reason, b.missing, b.code);
   return {
     known: true,
     value: f(a.value, b.value),
@@ -161,3 +175,87 @@ export function expectKnown<T>(e: Evidenced<T>, context: string): T {
   }
   return e.value;
 }
+
+
+/**
+ * Message codes emitted by the engine. The UI maps each to Arabic (or English);
+ * exports keep the English `basis`/`reason` text alongside.
+ */
+export const MSG = {
+  // Bases
+  OBSERVED_DELTA: 'OBSERVED_DELTA',
+  PENDING_TOTAL: 'PENDING_TOTAL',
+  POSTED_DEBIT: 'POSTED_DEBIT',
+  ISSUER_FEES_SUM: 'ISSUER_FEES_SUM',
+  ISSUER_FEES_NONE: 'ISSUER_FEES_NONE',
+  SURCHARGE_INCLUDED: 'SURCHARGE_INCLUDED',
+  SURCHARGE_SEPARATE: 'SURCHARGE_SEPARATE',
+  SURCHARGE_UNKNOWN_HANDLING: 'SURCHARGE_UNKNOWN_HANDLING',
+  ALLIN_POSTED: 'ALLIN_POSTED',
+  ALLIN_OBSERVED: 'ALLIN_OBSERVED',
+  ALLIN_PENDING: 'ALLIN_PENDING',
+  RATE_FROM_ALLIN: 'RATE_FROM_ALLIN',
+  IQD_CARD_NATIVE_IS_IQD: 'IQD_CARD_NATIVE_IS_IQD',
+  IQD_CARD_REAL_DINARS: 'IQD_CARD_REAL_DINARS',
+  REFERENCE_CONVERSION: 'REFERENCE_CONVERSION',
+  ECONOMIC_FROM_FUNDING: 'ECONOMIC_FROM_FUNDING',
+  VERIFIED_RATE_FROM_ECONOMIC: 'VERIFIED_RATE_FROM_ECONOMIC',
+  EXPECTED_FROM_COST: 'EXPECTED_FROM_COST',
+  OBSERVED_BALANCE: 'OBSERVED_BALANCE',
+  DIFFERENCE_CONFIRMED_MINUS_EXPECTED: 'DIFFERENCE_CONFIRMED_MINUS_EXPECTED',
+  LEDGER_FROM_OPENING: 'LEDGER_FROM_OPENING',
+  LAST_CONFIRMED: 'LAST_CONFIRMED',
+
+  // Unknowns
+  NEED_BOTH_BALANCES: 'NEED_BOTH_BALANCES',
+  NO_PENDING_RECORDED: 'NO_PENDING_RECORDED',
+  NO_POSTED_RECORDED: 'NO_POSTED_RECORDED',
+  FEES_NEED_POSTING: 'FEES_NEED_POSTING',
+  NO_SURCHARGE_RECORDED: 'NO_SURCHARGE_RECORDED',
+  COST_NOT_DETERMINABLE: 'COST_NOT_DETERMINABLE',
+  RATE_NEEDS_COST: 'RATE_NEEDS_COST',
+  NO_CASH_DISPENSED: 'NO_CASH_DISPENSED',
+  NO_REFERENCE_RATE: 'NO_REFERENCE_RATE',
+  NEED_FUNDING_BASIS: 'NEED_FUNDING_BASIS',
+  RECON_NEEDS_BALANCES: 'RECON_NEEDS_BALANCES',
+  RECON_NEEDS_COST: 'RECON_NEEDS_COST',
+  LEDGER_HAS_UNKNOWN_COSTS: 'LEDGER_HAS_UNKNOWN_COSTS',
+  NO_CONFIRMED_BALANCE: 'NO_CONFIRMED_BALANCE',
+  DIFF_NEEDS_BOTH: 'DIFF_NEEDS_BOTH',
+
+  // Warnings
+  W_AVAILABLE_NOT_FINAL: 'W_AVAILABLE_NOT_FINAL',
+  W_BALANCE_INCREASED: 'W_BALANCE_INCREASED',
+  W_SURCHARGE_HANDLING_UNKNOWN: 'W_SURCHARGE_HANDLING_UNKNOWN',
+  W_SURCHARGE_CURRENCY_UNCONVERTED: 'W_SURCHARGE_CURRENCY_UNCONVERTED',
+  W_DCC_ACCEPTED: 'W_DCC_ACCEPTED',
+  W_DCC_UNKNOWN: 'W_DCC_UNKNOWN',
+  W_PARTIAL_DISPENSE: 'W_PARTIAL_DISPENSE',
+  W_NO_CASH: 'W_NO_CASH',
+  W_CARD_RESTRICTED: 'W_CARD_RESTRICTED',
+  W_POSTED_VS_OBSERVED: 'W_POSTED_VS_OBSERVED',
+
+  // Explanations
+  E_RECONCILED_POSTED: 'E_RECONCILED_POSTED',
+  E_RECONCILED_NOT_POSTED: 'E_RECONCILED_NOT_POSTED',
+  E_DIFFERENCE_NEEDS_PERSON: 'E_DIFFERENCE_NEEDS_PERSON',
+  E_NOT_ENOUGH_TO_RECONCILE: 'E_NOT_ENOUGH_TO_RECONCILE',
+  E_CANNOT_EXPECT_BALANCE: 'E_CANNOT_EXPECT_BALANCE',
+} as const;
+
+/** Evidence-item codes used in `missing`. */
+export const EV = {
+  BEFORE_BALANCE: 'EV_BEFORE_BALANCE',
+  AFTER_BALANCE: 'EV_AFTER_BALANCE',
+  PENDING_DEBIT: 'EV_PENDING_DEBIT',
+  POSTED_DEBIT: 'EV_POSTED_DEBIT',
+  POSTED_FEES: 'EV_POSTED_FEES',
+  ATM_SURCHARGE: 'EV_ATM_SURCHARGE',
+  CASH_DISPENSED: 'EV_CASH_DISPENSED',
+  REFERENCE_RATE: 'EV_REFERENCE_RATE',
+  FUNDING_RECORD: 'EV_FUNDING_RECORD',
+  SETTLEMENT_DETAILS: 'EV_SETTLEMENT_DETAILS',
+  OPENING_BALANCE: 'EV_OPENING_BALANCE',
+  BALANCE_READING: 'EV_BALANCE_READING',
+  ANY_COST_EVIDENCE: 'EV_ANY_COST_EVIDENCE',
+} as const;

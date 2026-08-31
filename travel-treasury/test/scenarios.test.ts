@@ -38,7 +38,7 @@ describe('Scenario: IQD card, observed balance delta', () => {
   });
 
   it('warns that an AVAILABLE balance may not be final', () => {
-    expect(c.warnings.join(' ')).toMatch(/AVAILABLE/);
+    expect(c.warnings.map((w) => w.text).join(" ")).toMatch(/AVAILABLE/);
   });
 
   it('treats an IQD card economic cost as the native cost', () => {
@@ -216,7 +216,7 @@ describe('Scenario: partial dispense', () => {
   });
 
   it('warns that requested and dispensed differ', () => {
-    expect(c.warnings.join(' ')).toMatch(/Requested and dispensed cash differ/);
+    expect(c.warnings.map((w) => w.text).join(" ")).toMatch(/Requested and dispensed cash differ/);
   });
 
   it('credits the treasury with the cash actually received', () => {

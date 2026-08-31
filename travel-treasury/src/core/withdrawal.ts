@@ -11,10 +11,10 @@ import {
 } from './money.ts';
 import { convert, effectiveRate, type Rate } from './rate.ts';
 import {
-  combine2,
   type Evidenced,
+  EV,
   known,
-  type PricingConfidence,
+  MSG,
   type Provenance,
   unknown,
   weakest,
@@ -118,6 +118,12 @@ export interface FundingBasis {
   readonly sampleCount: number;
 }
 
+/** A warning carries a translatable code alongside its English text. */
+export interface Warning {
+  readonly code: string;
+  readonly text: string;
+}
+
 export interface WithdrawalComputation {
   readonly observedBalanceDelta: Evidenced<Money>;
   readonly pendingDebitTotal: Evidenced<Money>;
@@ -130,7 +136,7 @@ export interface WithdrawalComputation {
   readonly economicIqdCost: Evidenced<Money>;
   readonly verifiedIqdPerSar: Evidenced<Rate>;
   readonly costBasis: 'POSTED' | 'OBSERVED' | 'PENDING' | 'NONE';
-  readonly warnings: readonly string[];
+  readonly warnings: readonly Warning[];
 }
 
 function provenanceOfBalanceSource(s: BalanceSource): Provenance {
@@ -173,7 +179,8 @@ export function computeWithdrawal(
 ): WithdrawalComputation {
   const { card, dispensedSar } = input;
   const native = card.nativeCurrency;
-  const warnings: string[] = [];
+  const warnings: Warning[] = [];
+  const warn = (code: string, text: string) => warnings.push({ code, text });
 
   if (dispensedSar.currency !== 'SAR') {
     throw new TypeError(`dispensedSar must be SAR, received ${dispensedSar.currency}`);
@@ -195,22 +202,24 @@ export function computeWithdrawal(
       'OBSERVED',
       `Before balance minus after balance (${input.before.source}/${input.before.balanceType} → ` +
         `${input.after.source}/${input.after.balanceType}). Observed, not necessarily final.`,
+      MSG.OBSERVED_DELTA,
     );
     if (input.after.balanceType === 'AVAILABLE') {
-      warnings.push(
+      warn(
+        MSG.W_AVAILABLE_NOT_FINAL,
         'After balance is an AVAILABLE reading: it may reflect an authorisation hold rather than the final posted amount.',
       );
     }
     if (delta.minor < 0n) {
-      warnings.push('Balance increased across this withdrawal — check the readings or look for an unrelated credit.');
+      warn(MSG.W_BALANCE_INCREASED, 'Balance increased across this withdrawal — check the readings or look for an unrelated credit.');
     }
   } else {
     observedBalanceDelta = unknown(
       'Both a before and an after balance are needed to observe the balance delta.',
-      [
-        input.before ? null : 'Before balance',
-        input.after ? null : 'After balance',
-      ].filter((x): x is string => x !== null),
+      ([input.before ? null : EV.BEFORE_BALANCE, input.after ? null : EV.AFTER_BALANCE] as (string | null)[]).filter(
+        (x): x is string => x !== null,
+      ),
+      MSG.NEED_BOTH_BALANCES,
     );
   }
 
@@ -226,11 +235,14 @@ export function computeWithdrawal(
       'BANK_APP',
       'PENDING',
       `Pending debit${input.pending.fee ? ' plus pending fee' : ''} as shown by the banking app. Not final.`,
+      MSG.PENDING_TOTAL,
     );
   } else {
-    pendingDebitTotal = unknown('No pending transaction has been recorded.', [
-      'Pending debit from the banking app',
-    ]);
+    pendingDebitTotal = unknown(
+      'No pending transaction has been recorded.',
+      [EV.PENDING_DEBIT],
+      MSG.NO_PENDING_RECORDED,
+    );
   }
 
   // ---- Posted -----------------------------------------------------------
@@ -243,6 +255,7 @@ export function computeWithdrawal(
       'BANK_STATEMENT',
       'POSTED',
       'Final posted debit from the bank.',
+      MSG.POSTED_DEBIT,
     );
     const feeParts = [
       input.posted.bankFee,
@@ -258,14 +271,19 @@ export function computeWithdrawal(
       feeParts.length === 0
         ? 'No separately posted issuer fee recorded; any fee may be embedded in the posted debit.'
         : `Sum of ${feeParts.length} separately posted issuer fee(s).`,
+      feeParts.length === 0 ? MSG.ISSUER_FEES_NONE : MSG.ISSUER_FEES_SUM,
     );
   } else {
-    postedDebitTotal = unknown('The final posted transaction has not been recorded yet.', [
-      'Final posted debit from the bank statement',
-    ]);
-    issuerFees = unknown('Issuer fees are only known once the transaction has posted.', [
-      'Posted fee lines from the bank statement',
-    ]);
+    postedDebitTotal = unknown(
+      'The final posted transaction has not been recorded yet.',
+      [EV.POSTED_DEBIT],
+      MSG.NO_POSTED_RECORDED,
+    );
+    issuerFees = unknown(
+      'Issuer fees are only known once the transaction has posted.',
+      [EV.POSTED_FEES],
+      MSG.FEES_NEED_POSTING,
+    );
   }
 
   // ---- ATM operator surcharge ------------------------------------------
@@ -281,16 +299,24 @@ export function computeWithdrawal(
         : handling === 'POSTED_SEPARATELY'
           ? 'ATM operator surcharge, posted separately from the withdrawal.'
           : 'ATM operator surcharge as displayed. Whether it is inside the debit or posted separately is not established.',
+      handling === 'INCLUDED_IN_DEBIT'
+        ? MSG.SURCHARGE_INCLUDED
+        : handling === 'POSTED_SEPARATELY'
+          ? MSG.SURCHARGE_SEPARATE
+          : MSG.SURCHARGE_UNKNOWN_HANDLING,
     );
     if (handling === 'UNKNOWN') {
-      warnings.push(
+      warn(
+        MSG.W_SURCHARGE_HANDLING_UNKNOWN,
         'ATM surcharge recorded, but it is not established whether it sits inside the card debit or posts separately. It has not been added to the all-in cost.',
       );
     }
   } else {
-    atmOperatorFee = unknown('No ATM operator surcharge was recorded.', [
-      'ATM surcharge shown on the machine or receipt',
-    ]);
+    atmOperatorFee = unknown(
+      'No ATM operator surcharge was recorded.',
+      [EV.ATM_SURCHARGE],
+      MSG.NO_SURCHARGE_RECORDED,
+    );
   }
 
   // ---- Native all-in cost ----------------------------------------------
@@ -304,7 +330,8 @@ export function computeWithdrawal(
       ? input.atmSurcharge
       : null;
   if (handling === 'POSTED_SEPARATELY' && input.atmSurcharge && input.atmSurcharge.currency !== native) {
-    warnings.push(
+    warn(
+      MSG.W_SURCHARGE_CURRENCY_UNCONVERTED,
       `ATM surcharge is recorded in ${input.atmSurcharge.currency} but posts separately in ${native}; ` +
         'it has not been converted or added, because converting it would require an unverified rate.',
     );
@@ -319,6 +346,7 @@ export function computeWithdrawal(
       'POSTED',
       'Posted debit plus separately posted issuer fees' +
         (separateSurcharge ? ' plus separately posted ATM surcharge.' : '.'),
+      MSG.ALLIN_POSTED,
     );
     costBasis = 'POSTED';
   } else if (observedBalanceDelta.known) {
@@ -327,6 +355,7 @@ export function computeWithdrawal(
       observedBalanceDelta.provenance,
       'OBSERVED',
       'Observed reduction in card balance. Not yet confirmed against a posted statement.',
+      MSG.ALLIN_OBSERVED,
     );
     costBasis = 'OBSERVED';
   } else if (pendingDebitTotal.known) {
@@ -335,12 +364,14 @@ export function computeWithdrawal(
       'BANK_APP',
       'PENDING',
       'Pending amount only. The final posted amount frequently differs.',
+      MSG.ALLIN_PENDING,
     );
     costBasis = 'PENDING';
   } else {
     nativeAllInCost = unknown(
       'The cost of this withdrawal in the card currency is not yet determinable.',
-      ['Before and after balances', 'or the pending debit', 'or the final posted debit'],
+      [EV.ANY_COST_EVIDENCE],
+      MSG.COST_NOT_DETERMINABLE,
     );
   }
 
@@ -350,11 +381,13 @@ export function computeWithdrawal(
     effectiveNativePerSar = unknown(
       'Cannot determine verified effective rate yet: the cost in the card currency is unknown.',
       nativeAllInCost.missing,
+      MSG.RATE_NEEDS_COST,
     );
   } else if (isZero(dispensedSar)) {
     effectiveNativePerSar = unknown(
       'No cash was dispensed, so this withdrawal has no exchange rate. A cost divided by zero cash is not a rate.',
-      ['Cash actually dispensed (currently 0 SAR)'],
+      [EV.CASH_DISPENSED],
+      MSG.NO_CASH_DISPENSED,
     );
   } else {
     const r = effectiveRate(nativeAllInCost.value, dispensedSar);
@@ -364,20 +397,26 @@ export function computeWithdrawal(
           'DERIVED_CALCULATION',
           nativeAllInCost.confidence,
           `All-in cost in ${native} divided by SAR actually dispensed (${costBasis} basis).`,
+          MSG.RATE_FROM_ALLIN,
         )
-      : unknown('No cash dispensed.', ['Cash actually dispensed']);
+      : unknown('No cash dispensed.', [EV.CASH_DISPENSED], MSG.NO_CASH_DISPENSED);
   }
 
   // ---- Reference IQD cost (clearly labelled as reference) --------------
   let referenceIqdCost: Evidenced<Money>;
   if (!nativeAllInCost.known) {
-    referenceIqdCost = unknown('The native cost is unknown, so no reference conversion is possible.', nativeAllInCost.missing);
+    referenceIqdCost = unknown(
+      'The native cost is unknown, so no reference conversion is possible.',
+      nativeAllInCost.missing,
+      MSG.COST_NOT_DETERMINABLE,
+    );
   } else if (native === 'IQD') {
     referenceIqdCost = known(
       nativeAllInCost.value,
       nativeAllInCost.provenance,
       nativeAllInCost.confidence,
       'Card is denominated in IQD; the native cost is the IQD cost.',
+      MSG.IQD_CARD_NATIVE_IS_IQD,
     );
   } else if (opts.referenceRate) {
     if (opts.referenceRate.from !== native || opts.referenceRate.to !== 'IQD') {
@@ -391,24 +430,27 @@ export function computeWithdrawal(
       'ESTIMATED',
       `Reference conversion only, using ${opts.referenceRateLabel ?? 'a stored reference rate'}. ` +
         'This is NOT what these funds actually cost in dinars.',
+      MSG.REFERENCE_CONVERSION,
     );
   } else {
     referenceIqdCost = unknown(
       `No reference rate on file for ${native} → IQD.`,
-      [`A reference ${native}/IQD rate with a source and date`],
+      [EV.REFERENCE_RATE],
+      MSG.NO_REFERENCE_RATE,
     );
   }
 
   // ---- Economic IQD cost (the real one) --------------------------------
   let economicIqdCost: Evidenced<Money>;
   if (!nativeAllInCost.known) {
-    economicIqdCost = unknown('The native cost is unknown.', nativeAllInCost.missing);
+    economicIqdCost = unknown('The native cost is unknown.', nativeAllInCost.missing, MSG.COST_NOT_DETERMINABLE);
   } else if (native === 'IQD') {
     economicIqdCost = known(
       nativeAllInCost.value,
       nativeAllInCost.provenance,
       nativeAllInCost.confidence,
       'Card is denominated in IQD; dinars leaving the card are real dinars.',
+      MSG.IQD_CARD_REAL_DINARS,
     );
   } else if (opts.funding) {
     const f = opts.funding;
@@ -424,12 +466,14 @@ export function computeWithdrawal(
       weakest(nativeAllInCost.confidence, 'POSTED'),
       `Native cost converted at the rate these ${native} funds were actually acquired at ` +
         `(${f.basis}, ${f.sampleCount} funding record(s)).`,
+      MSG.ECONOMIC_FROM_FUNDING,
     );
   } else {
     economicIqdCost = unknown(
       `Not enough evidence: this is a ${native} card, and the real dinar cost depends on the rate ` +
         `at which those ${native} were funded.`,
-      [`A funding/reload record for this card showing IQD actually paid for ${native} credited`],
+      [EV.FUNDING_RECORD],
+      MSG.NEED_FUNDING_BASIS,
     );
   }
 
@@ -439,11 +483,13 @@ export function computeWithdrawal(
     verifiedIqdPerSar = unknown(
       'Cannot determine verified effective rate yet.',
       economicIqdCost.missing,
+      economicIqdCost.code ?? MSG.RATE_NEEDS_COST,
     );
   } else if (isZero(dispensedSar)) {
     verifiedIqdPerSar = unknown(
       'No cash was dispensed, so there is no IQD/SAR rate for this withdrawal.',
-      ['Cash actually dispensed (currently 0 SAR)'],
+      [EV.CASH_DISPENSED],
+      MSG.NO_CASH_DISPENSED,
     );
   } else {
     const r = effectiveRate(economicIqdCost.value, dispensedSar);
@@ -453,34 +499,38 @@ export function computeWithdrawal(
           'DERIVED_CALCULATION',
           economicIqdCost.confidence,
           'Economic IQD cost divided by SAR actually dispensed.',
+          MSG.VERIFIED_RATE_FROM_ECONOMIC,
         )
-      : unknown('No cash dispensed.', ['Cash actually dispensed']);
+      : unknown('No cash dispensed.', [EV.CASH_DISPENSED], MSG.NO_CASH_DISPENSED);
   }
 
   // ---- Warnings ---------------------------------------------------------
   if (input.dcc.offered === 'YES' && input.dcc.selection === 'BILLING_CURRENCY') {
-    warnings.push(
+    warn(
+      MSG.W_DCC_ACCEPTED,
       'Dynamic Currency Conversion was accepted: the ATM operator set the exchange rate, which is typically well above the network rate.',
     );
   }
   if (input.dcc.offered === 'UNKNOWN') {
-    warnings.push('It is not recorded whether the ATM offered currency conversion (DCC).');
+    warn(MSG.W_DCC_UNKNOWN, 'It is not recorded whether the ATM offered currency conversion (DCC).');
   }
   if (input.requestedSar && !equals(input.requestedSar, dispensedSar)) {
-    warnings.push(
-      `Requested and dispensed cash differ. All cost figures use the cash actually dispensed.`,
+    warn(
+      MSG.W_PARTIAL_DISPENSE,
+      'Requested and dispensed cash differ. All cost figures use the cash actually dispensed.',
     );
   }
   if (isZero(dispensedSar)) {
-    warnings.push('No cash was dispensed. This withdrawal must not credit any cash treasury.');
+    warn(MSG.W_NO_CASH, 'No cash was dispensed. This withdrawal must not credit any cash treasury.');
   }
   if (card.internationalStatus === 'RESTRICTED_BY_REGULATION') {
-    warnings.push('This card is recorded as restricted for international use by regulation.');
+    warn(MSG.W_CARD_RESTRICTED, 'This card is recorded as restricted for international use by regulation.');
   }
   if (postedDebitTotal.known && observedBalanceDelta.known) {
     const posted = nativeAllInCost.known && costBasis === 'POSTED' ? nativeAllInCost.value : null;
     if (posted && compare(posted, observedBalanceDelta.value) !== 0) {
-      warnings.push(
+      warn(
+        MSG.W_POSTED_VS_OBSERVED,
         'The posted all-in cost differs from the observed balance change. Both are preserved; see reconciliation.',
       );
     }

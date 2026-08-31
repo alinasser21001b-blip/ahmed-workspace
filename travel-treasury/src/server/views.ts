@@ -17,9 +17,20 @@ import { moneyFrom } from './repo.ts';
 import { parseMinor, riyadhDate } from './util.ts';
 import type { CurrencyCode } from '../core/currency.ts';
 
+/**
+ * Money always crosses the wire as a decimal string. Drivers hand BIGINT back
+ * as a string, a number or a bigint depending on the column and the driver, and
+ * a number reaching the client is both a precision hazard and — as this caught —
+ * a crash. Everything monetary goes through here.
+ */
+function str(v: string | number | bigint | null | undefined): string | null {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'string' ? v : v.toString();
+}
+
 /** Wire form of an Evidenced value: bigint-free, ready for JSON. */
 export function evidencedToWire(e: Evidenced<Money>): unknown {
-  if (!e.known) return { known: false, reason: e.reason, missing: e.missing };
+  if (!e.known) return { known: false, reason: e.reason, missing: e.missing, code: e.code ?? null };
   return {
     known: true,
     money: toWire(e.value),
@@ -28,11 +39,12 @@ export function evidencedToWire(e: Evidenced<Money>): unknown {
     provenance: e.provenance,
     confidence: e.confidence,
     basis: e.basis,
+    code: e.code ?? null,
   };
 }
 
 export function evidencedRateToWire(e: Evidenced<Rate>): unknown {
-  if (!e.known) return { known: false, reason: e.reason, missing: e.missing };
+  if (!e.known) return { known: false, reason: e.reason, missing: e.missing, code: e.code ?? null };
   return {
     known: true,
     rate: rateToWire(e.value),
@@ -41,6 +53,7 @@ export function evidencedRateToWire(e: Evidenced<Rate>): unknown {
     provenance: e.provenance,
     confidence: e.confidence,
     basis: e.basis,
+    code: e.code ?? null,
   };
 }
 
@@ -438,15 +451,17 @@ export async function withdrawalDetail(db: Db, id: string) {
     ownership: row.ownership,
     transactionAt: input.transactionAt,
     transactionLocalTime: row.transaction_local_time,
-    postingDate: row.posting_date ? String(row.posting_date).slice(0, 10) : null,
+    postingDate: row.posting_date ? new Date(row.posting_date).toISOString().slice(0, 10) : null,
     atm: {
       operator: row.atm_operator, location: row.atm_location, terminalId: row.atm_terminal_id,
       reference: row.transaction_reference,
     },
-    requestedSarMinor: row.requested_sar_minor,
-    dispensedSarMinor: row.dispensed_sar_minor,
+    requestedSarMinor: str(row.requested_sar_minor),
+    dispensedSarMinor: str(row.dispensed_sar_minor),
     dcc: { offered: row.dcc_offered, selection: row.dcc_selection },
-    surcharge: row.atm_surcharge_minor ? { minor: row.atm_surcharge_minor, currency: row.atm_surcharge_currency, handling: row.surcharge_handling } : null,
+    surcharge: row.atm_surcharge_minor
+      ? { minor: str(row.atm_surcharge_minor), currency: row.atm_surcharge_currency, handling: row.surcharge_handling }
+      : null,
     before: input.before ? { amountMinor: input.before.amount.minor.toString(), currency: input.before.amount.currency, source: input.before.source, balanceType: input.before.balanceType, capturedAt: input.before.capturedAt } : null,
     after: input.after ? { amountMinor: input.after.amount.minor.toString(), currency: input.after.amount.currency, source: input.after.source, balanceType: input.after.balanceType, capturedAt: input.after.capturedAt } : null,
     pending: input.pending ? { debitMinor: input.pending.debit.minor.toString(), feeMinor: input.pending.fee?.minor.toString() ?? null, description: input.pending.description, at: input.pending.at } : null,
@@ -481,6 +496,7 @@ export async function withdrawalDetail(db: Db, id: string) {
       potentialCauses: reconciliation.potentialCauses,
       suggestedState: reconciliation.suggestedState,
       explanation: reconciliation.explanation,
+      explanationCode: reconciliation.explanationCode,
     },
     discrepancies: discRes.rows,
     revisions: revRes.rows,
