@@ -34,6 +34,29 @@ Two markers are used throughout and both mean "not settled":
 | [`docs/09-CLINICAL-CONTENT-REQUESTS.md`](docs/09-CLINICAL-CONTENT-REQUESTS.md) | Every clinical input the Medical Reviewer must supply |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records |
 
+Two of these are worth naming separately:
+[`docs/00-EXECUTIVE-SUMMARY-AR.md`](docs/00-EXECUTIVE-SUMMARY-AR.md) is the Arabic
+executive summary, written for the Product Owner rather than for a future engineer, and
+[`docs/06-OPEN-DECISIONS.md`](docs/06-OPEN-DECISIONS.md) is the one document that needs an
+answer rather than a read.
+
+## The Word deliverable
+
+`Bariatric-Digital-Care-Platform-Readiness-Report.docx` is every document above in one
+file — Arabic summary first, then the ten parts and the appendix, with a cover page and a
+table of contents.
+
+**It is generated, not maintained.** The markdown is the source of truth; the Word file is
+rendered from it by [`tools/build-docx.js`](tools/build-docx.js). Edit the markdown and
+re-run the script, never the other way around — a hand-edited .docx and the repository
+would disagree within a week, and the repository is what the project runs on.
+
+```sh
+npm install docx && node tools/build-docx.js
+```
+
+Open the table of contents and press F9 in Word to populate page numbers.
+
 Documents named in the handoff but **deliberately absent** — `architecture.md`,
 `product-requirements.md`, `clinical-rules.md`, `security.md`, `deployment.md`,
 `api.md`, `database.md` — are written during Milestone 0 and Milestone 1, once the
