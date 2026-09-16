@@ -386,10 +386,12 @@ const PARTS = [
   { file: 'docs/07-COST-DRIVERS.md', label: 'PART VIII', title: 'Technical Cost Drivers', dropH1: true },
   { file: 'docs/08-WAYS-OF-WORKING.md', label: 'PART IX', title: 'Ways of Working', dropH1: true },
   { file: 'docs/09-CLINICAL-CONTENT-REQUESTS.md', label: 'PART X', title: 'Clinical Content Requests', dropH1: true },
+  { file: 'docs/11-ARCHITECTURE-DECISION-ADDENDUM.md', label: 'PART XI', title: 'Final Architecture Decision Addendum', dropH1: true },
   { file: 'docs/adr/README.md', label: 'APPENDIX A', title: 'Architecture Decision Records', dropH1: true },
   { file: 'docs/adr/0001-modular-monolith-typescript.md', sub: true },
   { file: 'docs/adr/0002-long-lived-container.md', sub: true },
   { file: 'docs/adr/0003-single-authorization-layer.md', sub: true },
+  { file: 'docs/adr/0004-one-public-clinical-data-gateway.md', sub: true },
 ];
 
 function partHeading(p, first) {

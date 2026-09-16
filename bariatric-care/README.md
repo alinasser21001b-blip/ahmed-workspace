@@ -32,6 +32,7 @@ Two markers are used throughout and both mean "not settled":
 | [`docs/07-COST-DRIVERS.md`](docs/07-COST-DRIVERS.md) | Technical cost drivers |
 | [`docs/08-WAYS-OF-WORKING.md`](docs/08-WAYS-OF-WORKING.md) | Agent workflow, human intervention points, Definition of Done |
 | [`docs/09-CLINICAL-CONTENT-REQUESTS.md`](docs/09-CLINICAL-CONTENT-REQUESTS.md) | Every clinical input the Medical Reviewer must supply |
+| [`docs/11-ARCHITECTURE-DECISION-ADDENDUM.md`](docs/11-ARCHITECTURE-DECISION-ADDENDUM.md) | Hosting decision, production topology, the gateway principle attacked then adopted, hostile security review |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records |
 
 Two of these are worth naming separately:

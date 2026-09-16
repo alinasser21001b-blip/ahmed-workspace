@@ -44,3 +44,4 @@ project; an ADR every day means the format is being misused.
 | [0001](./0001-modular-monolith-typescript.md) | Modular monolith in TypeScript | Proposed |
 | [0002](./0002-long-lived-container.md) | The API runs as a long-lived container | Proposed |
 | [0003](./0003-single-authorization-layer.md) | Exactly one authorization implementation | Proposed |
+| [0004](./0004-one-public-clinical-data-gateway.md) | One public clinical-data gateway | Proposed |
