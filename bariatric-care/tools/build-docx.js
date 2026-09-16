@@ -112,10 +112,18 @@ function parse(md) {
   while (i < lines.length) {
     const line = lines[i];
 
-    if (/^```/.test(line)) {                                    // fenced code
+    // Fences may be indented — inside a list item, for instance. Matching only
+    // at column zero turned an indented block into a paragraph and printed its
+    // own backticks.
+    const fence = line.match(/^(\s*)```/);
+    if (fence) {
+      const indent = fence[1].length;
       const body = [];
       i++;
-      while (i < lines.length && !/^```/.test(lines[i])) body.push(lines[i++]);
+      while (i < lines.length && !/^\s*```/.test(lines[i])) {
+        const l = lines[i++];
+        body.push(l.slice(0, indent).trim() === '' ? l.slice(indent) : l);
+      }
       i++;
       blocks.push({ t: 'code', lines: body });
       continue;

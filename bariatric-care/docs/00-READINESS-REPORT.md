@@ -150,6 +150,14 @@ that are wrong before approval.
 
 ## PART 3 — Missing Decisions
 
+> **Register note.** This section groups thirteen items; twelve of them are the questions
+> **Q1–Q12** in [`06-OPEN-DECISIONS.md`](./06-OPEN-DECISIONS.md), which is the **single
+> decision register** and the only place answers are recorded. The thirteenth (clinical
+> content) is not a question but a body of work, tracked in
+> [`09-CLINICAL-CONTENT-REQUESTS.md`](./09-CLINICAL-CONTENT-REQUESTS.md). What each question
+> actually blocks is classified in doc 06's answer log and in doc 12 — **they do not all block
+> Milestone 1**, and an earlier version of this report implied they did.
+
 Decisions I cannot make from engineering reasoning. Grouped by what they block. The
 blocking ones are restated as direct questions in
 [`06-OPEN-DECISIONS.md`](./06-OPEN-DECISIONS.md).

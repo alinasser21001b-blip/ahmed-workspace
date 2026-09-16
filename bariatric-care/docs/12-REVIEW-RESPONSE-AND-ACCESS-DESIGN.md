@@ -92,7 +92,7 @@ is.
 | Component | Classification | Public IP / inbound? |
 | --- | --- | --- |
 | Cloudflare edge | **PUBLIC** | Yes, by design |
-| Fastify API (incl. dashboard bundle) | **EDGE-EXPOSED** | Platform hostname exists but rejects any request lacking the Cloudflare secret header (bare 404) |
+| Fastify API (incl. dashboard bundle) | **EDGE-EXPOSED** | **Publicly reachable Railway origin.** The application rejects any request that did not traverse the configured edge guard (bare 404). An application-layer control, not a network one — see below |
 | Worker | **INTERNAL-ONLY** | No HTTP domain assigned. No inbound listener. Outbound only |
 | PostgreSQL | **PRIVATE** | **No.** Railway's public TCP proxy is **disabled** and stays disabled |
 | Object storage | **PRIVATE** | **No.** No public endpoint, no public listing, no anonymous read, no presigned URL path in v1 |
@@ -638,12 +638,32 @@ correctness, and "30 days" was a number with no reasoning behind it.
 - The losing record is marked `merged_into` and **retained**. It becomes an alias.
 - **No child row is ever re-pointed.** Every row keeps the `patient_record_id` it was written
   against, so provenance survives permanently.
-- Reads resolve the alias chain to a canonical id, in **one place** in the repository layer.
+- **Reads expand, they do not translate.** An earlier draft said reads "resolve the alias
+  chain to a canonical id", which loses data: if B merged into A and B's old measurements
+  still carry `patient_record_id = B`, a query scoped to A alone returns nothing of B's. The
+  operation is a **set expansion**:
+
+  ```
+  patient_record.canonical_id        self-referencing; equals own id unless merged
+  resolvePatientRecordIds(canonical) → { A, B, … }   every member of the group
+  ```
+
+  Repository queries read `WHERE patient_record_id = ANY(resolvePatientRecordIds(...))`, in
+  **one place**. Authorization runs the other direction: **any member id resolves to the
+  canonical before a policy decision**, so a request naming B is decided as A. Both directions
+  are needed, and having only one is how merged data silently disappears or silently escapes
+  its scope.
 - A `merge_event` records surviving id, merged id, actor, timestamp, reason, and per-table
   counts at the time of merge.
-- **Un-merge is clearing one column**, and is therefore safe at any time — no expiry window is
-  needed, so none is invented. Data written after the merge was genuinely entered against the
-  surviving record and correctly stays there.
+- **Every clinical write made while a merge is active records `written_under_merge_id`.**
+  Cheap now, and the only thing that makes an incorrect merge recoverable later.
+- **Un-merge is not "safe at any time", and an earlier draft claiming so was wrong.** Clearing
+  the alias is safe; the data written in between is not automatically attributable. If A and B
+  turn out to be different people, a weight entered while the records were merged belongs to
+  one of them and the system cannot know which. So un-merge **clears the alias and emits a
+  review queue** of every row carrying that `written_under_merge_id`, for a clinician to
+  reassign or confirm. Un-merge is a clinical action requiring a typed reason, and it is
+  audited.
 
 Duplicate *detection* (phone, name, date of birth) may ship later; the `merged_into` column,
 the alias resolution and the `merge_event` shape must exist from the first migration.
@@ -708,6 +728,20 @@ above — not by caregiver access. The two problems look alike and are not: a sh
 **two patients each using their own account**; a caregiver is **one person acting for
 another**, which needs recorded consent and a representative relation (§8.11) before it is
 safe to ship.
+
+**One architectural consequence that must be stated, because it constrains Q1.** If two
+accounts can share a phone number, then:
+
+> **The phone number is a contact and recovery channel. It is not the unique account key, and
+> it is never the clinical record key.**
+
+The account key is an internal id; the login identifier is the phone **plus a profile
+discriminator**. This breaks naive OTP recovery, which assumes one phone means one account —
+an OTP alone cannot tell the system which profile the caller wants. **Recovery must therefore
+disambiguate explicitly:** deliver the OTP to the phone, then present the profiles registered
+to it and require the PIN or a clinic-issued code to select one. It must **never auto-select
+the only-or-first profile**, because on a shared handset that silently hands one patient the
+other's record. Doc 06 Q1 carries this as a constraint on whichever method is chosen.
 
 **DECIDED 2026-09-16 — multi-profile plus PIN accepted for v1.**
 `[MEDICAL REVIEW REQUIRED]` remains open on the wrong-patient mitigation itself: whether the
@@ -980,16 +1014,22 @@ payment. This does not block approval; it blocks *commitment*.
 
 ## What now blocks approval
 
-Five items, **every one of them a decision rather than more design**. Nothing on this list
-needs another document from me.
+**Two answers. That is the whole list.**
 
 | # | Blocker | What is needed |
 | --- | --- | --- |
-| 17 | Doc 06 **Q1, Q5** (and **Q3, Q4, Q11** for provisioning) | See the reclassification below — **not** all twelve |
-| 16 | Second break-glass operator | A name |
-| 16e | Shared-phone / caregiver policy (§8.8) | Accept the PIN-per-profile friction, or propose different |
-| 16f | Bariatric-only in v1 (§8.9) | A scope decision only Ali can make |
-| 16g | Dietitian and `clinic_admin` clinical scope (§8.14) | How the clinic actually works |
+| 17 | Doc 06 **Q1** patient auth method · **Q5** tenancy posture | Two answers. Both change the first migration |
+
+**Corrected here.** An earlier version of this table still listed 16e, 16f and 16g as
+blockers while §8.8, §8.9 and §8.14 already recorded them as DECIDED 2026-09-16. A register
+cannot hold a decision as simultaneously made and pending; the decided rows are removed.
+
+**Blocks provisioning (M0), not approval:** Q3 residency · Q4 data controller · Q11 budget
+ceiling. These gate Gate 0 and the provider contract, not the architecture.
+
+**Blocks production data, not approval:** the second break-glass operator's name. This was
+classified correctly in §6 and then contradicted by appearing in this table. §6 is right —
+M1 can begin without it; real patient data cannot.
 
 ### Q1–Q12 reclassified by what each actually blocks
 

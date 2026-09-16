@@ -135,7 +135,7 @@ not a note.
 | DNS | Cloudflare | Public |
 | TLS termination (edge) | Cloudflare | Public |
 | CDN, DDoS, WAF, bot, Turnstile, edge rate limits | Cloudflare | Public |
-| **Fastify API** (serves `/api/*` **and** the dashboard's static bundle) | Railway container, EU region | **Public via Cloudflare only** |
+| **Fastify API** (serves `/api/*` **and** the dashboard's static bundle) | Railway container, EU region | **Publicly reachable origin; the application rejects requests that did not traverse the edge guard.** Application-layer, not network-layer — §2.3 |
 | **Worker** (scheduler + outbox relay) | Railway container, same image, `ROLE=worker` | **No inbound. Internal only** |
 | Dashboard (Vite + React static bundle) | Built in CI, baked into the API image, served by Fastify at `/` | Public assets; no data path of its own |
 | Patient mobile app | Expo, App Store / Play | Client |
@@ -155,7 +155,7 @@ not a note.
 ```
 PUBLIC (reachable from the internet)
   Cloudflare edge          — DNS, TLS, WAF, CDN, rate limits, Turnstile
-  Fastify API              — one origin, ONLY via Cloudflare
+  Fastify API              — one origin; reachable, rejects non-edge requests
   Dashboard static assets  — served by the same origin, carry no data
 
 PRIVATE (reachable only from inside the provider's project network)
@@ -186,6 +186,15 @@ decoration. Railway assigns a world-reachable `*.up.railway.app` hostname, so:
 
 This is a **bypass-prevention control, not authentication**, and the document says so
 because the failure mode is a developer later treating the header's presence as trust.
+
+**It is also an application-layer control, not a network one.** An earlier version of §2.1
+said the API is "public via Cloudflare only", which implies a packet-level restriction that
+does not exist: anyone can open a TCP connection and complete a TLS handshake against the
+Railway origin directly. What the guard prevents is the *request entering the application*.
+Small in wording, large in consequence — **the edge WAF and edge rate limits do not apply to
+traffic aimed straight at the origin**, so origin-directed connection floods are mitigated by
+the platform, not by Cloudflare. Cloudflare Tunnel is the genuinely network-level version of
+this control, and remains the upgrade when the origin becomes a VM.
 Cloudflare Tunnel is the stronger version — the origin then has no inbound listener at all —
 and becomes the right answer the day the origin is a VM rather than a managed container.
 On a PaaS with no OS access it costs a sidecar daemon whose failure is a total outage with
