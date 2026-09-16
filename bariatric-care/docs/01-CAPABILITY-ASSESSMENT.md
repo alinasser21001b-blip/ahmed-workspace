@@ -103,7 +103,10 @@ server-side pagination, patient profile with longitudinal timeline, data entry o
 of patients, alert queue with acknowledgement, appointment management, protocol
 configuration screens, admin/user management.
 
-**Technology:** Next.js (App Router) with TypeScript, server-side data fetching, a
+**Technology:** *(Superseded — this described Next.js with server-side data fetching. The
+dashboard is now a **Vite + React static SPA served by the Fastify process at the same
+origin**; see doc 11 §2.4. The capability claim is unchanged; the technology is not.)*
+TypeScript, a
 mature accessible component library rather than hand-rolled widgets, charting for weight
 and lab trends.
 
@@ -195,7 +198,9 @@ a notification failure.
 ### A10 — File and document handling
 
 **What:** Object storage with authorization checked before any URL is minted, short-lived
-signed URLs with constant-time signature comparison, content-type and magic-byte
+*(Superseded — v1 mints no signed URLs. The API proxies every document byte so the policy
+call runs and an audit row is written; see ADR-0004 and doc 11 §3.6. Signed URLs remain
+architecturally permitted for a later phase.)* content-type and magic-byte
 validation, size limits, image metadata stripping, non-sequential storage keys, and an
 audit record on every document access.
 

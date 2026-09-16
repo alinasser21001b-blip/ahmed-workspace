@@ -217,7 +217,7 @@ acknowledgement and closure with full audit, response-window and emergency copy.
 action. Legal review of this feature's copy has happened.*
 
 ### Milestone 8 — Documents and education content
-Minimal document attachment with signed URLs and access audit; educational content
+Minimal document attachment with **API-proxied byte delivery** and access audit; educational content
 targeted by procedure and stage.
 *Exit: staff attach a lab report; the patient sees stage-appropriate content.*
 

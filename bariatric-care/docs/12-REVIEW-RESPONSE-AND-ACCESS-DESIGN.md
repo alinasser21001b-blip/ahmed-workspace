@@ -5,9 +5,15 @@
 new scope, no rewrite of the baseline.
 **Status:** proposed. Not in force until `ARCHITECTURE APPROVED`.
 
-> **The review notes were truncated** mid-sentence in item 6, at *"Do not leave 'second
-> person"*. If items 7+ existed, they are not addressed here. Send them and I will extend
-> this document.
+> **Items 7–23 are now addressed in §8.** The original notes were truncated mid-item-6 on
+> three consecutive sends; the remaining items arrived as a summary on the fourth and are
+> closed below.
+>
+> **A correction to an earlier version of this document.** It stated that items 7+ were not
+> addressed and, a few pages later, that "approval is blocked by items 16 and 17 only". Those
+> two statements cannot both be true, and the reviewer was right to refuse approval on that
+> basis alone. A checklist that declares itself nearly complete while half the review is
+> unread is worse than no checklist. §8 closes the gap; the checklist below is recounted.
 
 ---
 
@@ -441,6 +447,344 @@ ships a second privileged path.
 
 ---
 
+## 8. Items 7–23 — the rest of the review
+
+The first six items arrived three times; items 7+ never did, because the message was being
+truncated a little earlier on each send. They arrived on the fourth attempt as a summary.
+This section closes the seventeen named there, in the same format.
+
+**One challenge to the framing, stated first because it decides whether this project ever
+starts.** These seventeen are not equally blocking. Six change the data model or the security
+boundary and are genuinely expensive to retrofit — those are P0. The other eleven are
+*milestone design work*: they must be designed before the milestone that needs them, and
+documenting the decision now is sufficient. Treating all seventeen as approval blockers would
+mean designing the entire system before writing any of it, which is the failure mode risk R3
+(scope creep) and R2 (the project stalls) describe. **Architecture approval should mean "the
+foundations are right", not "every design is finished".**
+
+| # | Item | Verdict | Priority |
+| --- | --- | --- | --- |
+| 7 | Staff session lifecycle | **NOT RESOLVED** → decided in §8.1 | P1 (M1), settled now |
+| 8 | Mobile local-data / offline security | **NOT RESOLVED** | P1 (M5) |
+| 9 | RPO / RTO / disaster recovery | **NOT RESOLVED** | P1, settled now |
+| 10 | Timeline projection / replay / reconciliation | **PARTIALLY** (doc 04 §9) | P1 (M2) |
+| 11 | Approved data migrations / backfills | **PARTIALLY** (ADR-0004 exception 1) | P1, rule now |
+| 12 | **Patient Account vs Clinical Record, duplicate/merge** | **NOT RESOLVED** | **P0** |
+| 13 | **Care Episode instead of one assumed operation** | **NOT RESOLVED** | **P0** |
+| 14 | **Shared phone / caregiver policy** | **NOT RESOLVED** | **P0** |
+| 15 | **Bariatric-only vs general surgery in v1** | **NOT RESOLVED** | **P0 — Ali** |
+| 16 | Real pre-op scope | **PARTIALLY** (doc 05 §8.4) | P1 |
+| 17 | **Consent versioning / retention lifecycle** | **NOT RESOLVED** | **P0** (shape) / P1 (content) |
+| 18 | Incident response | **NOT RESOLVED** | P1, before production |
+| 19 | Pilot KPIs | **NOT RESOLVED** | P2 (before M10) |
+| 20 | **Role / assignment semantics** | **NOT RESOLVED** | **P0** |
+| 21 | Clinical configuration publishing lifecycle | **PARTIALLY** (doc 04 §6) | P1 (M6) |
+| 22 | CI/CD and environment isolation | **PARTIALLY** (doc 04 §12) | P1 (M0) |
+| 23 | API backward compatibility | **NOT RESOLVED** | P1 (M5) |
+
+---
+
+### 8.1 Staff session lifecycle — P1, decided now
+
+**NOT RESOLVED.** `03-STACK-EVALUATION.md:196` said "JWT access + rotating refresh" with the
+method still `[DECISION REQUIRED]`. Nothing defined idle timeout, absolute timeout, concurrent
+sessions, or revocation.
+
+**Decision: opaque, database-backed session tokens — not JWT.** A JWT cannot be revoked
+before it expires without building a revocation list, which is a session table with extra
+steps. At a few thousand requests a day a primary-key lookup per request is free, and what it
+buys is the thing that matters here: **a stolen clinician laptop is revoked on the next
+request, not in fifteen minutes.** It also deletes an entire vulnerability class (`alg`
+confusion, key leakage, clock skew).
+
+| Property | Staff | Patient |
+| --- | --- | --- |
+| Token | Opaque 256-bit, SHA-256 hashed at rest | Same |
+| Idle timeout | 30 minutes | 30 days |
+| Absolute timeout | 12 hours | 90 days, rolling |
+| Concurrent sessions | Allowed, listed, individually revocable | One device unless re-bound |
+| Step-up re-auth | Export, permission change, break-glass | Not applicable |
+| On password change | All sessions revoked | All sessions revoked |
+
+Refresh-token reuse detection revokes the whole family and alerts. Doc 06 Q1 still decides the
+*credential method* per audience; this decides the *session mechanism*, which is independent.
+
+### 8.2 Mobile local-data and offline security — P1 (M5)
+
+**NOT RESOLVED.** Doc 00 §A6 promises tolerance of weak connectivity; nothing says what is
+stored on the device.
+
+**Recommendation — cache the minimum that makes the app usable on a bad connection:** today's
+tasks, the last ~10 weight entries, the next appointment, and stage content. **Never cached:**
+documents, clinical notes, labs, symptom history, other patients (there are none). Encrypted
+at rest via the OS keystore; refresh token in `expo-secure-store` only; `FLAG_SECURE` on
+clinical screens; full wipe on logout and on failed device re-binding; no third-party
+analytics or crash SDK in the patient app. Unsynced writes queue locally with a visible
+pending state and are dropped on logout rather than silently retained.
+
+`[HUMAN SECURITY REVIEW REQUIRED]` at M9, together with real-device testing.
+
+### 8.3 RPO / RTO and disaster recovery — P1, decided now
+
+**NOT RESOLVED** — the words RPO and RTO appear nowhere in the report. That is a genuine gap
+and the review is right to name it.
+
+| Target | Value | Basis |
+| --- | --- | --- |
+| **RPO, database** | ≤ 5 minutes | Continuous WAL archiving via pgBackRest |
+| **RPO, documents** | ≈ 0 | The worker mirrors each object off-provider on write, not nightly — a lab PDF is often not re-obtainable from its source |
+| **RTO** | ≤ 4 hours | One operator, documented runbook, provisioning a new service from PITR |
+| Backup retention | ~4 weeks PITR + 90 days off-provider | Forensic window, not only DR |
+
+These are deliberately unambitious. A clinic of this size does not need four nines, and
+promising an RTO the single operator cannot meet at 3 a.m. is worse than promising none.
+**Verification, not assertion:** the monthly CI restore drill must restore database *and*
+objects together, decrypt one document, and fail the build on mismatch.
+
+### 8.4 Timeline projection, replay and reconciliation — P1 (M2)
+
+**PARTIALLY RESOLVED.** Doc 04 §9 establishes the timeline as a read model derived from
+domain events — which is what makes replay possible — but never states the rules.
+
+**Rules:** `domain_events` is append-only and **never deleted or edited**; it is the substrate
+the audit trail and the timeline both rest on. Projections are **idempotent by event id**, so
+a replay is safe to run twice. The timeline can be **rebuilt from zero** at any time, and that
+is a tested operation, not a theoretical property. A **reconciliation check** runs weekly:
+projected counts per patient must equal source-table counts, and a mismatch pages nobody but
+appears in the daily digest. If an event was wrong, it is corrected by a **compensating
+event**, never by editing history.
+
+### 8.5 Approved data migrations and backfills — P1, rule now
+
+**PARTIALLY RESOLVED.** ADR-0004 exception 1 covers schema migrations under the `migrator`
+role. It says nothing about migrations that *rewrite clinical data*, which are the dangerous
+ones.
+
+**Rule:** any migration that modifies existing clinical rows requires, in order — a written
+plan naming the rows affected; a restore drill executed *first*; a dry run against a restored
+copy with before/after row counts; execution inside one transaction; an audit event recording
+the plan id and affected count; and either a documented reversal or an explicit written
+statement that it is irreversible. **A backfill is a clinical data change, not a deployment
+detail.**
+
+### 8.6 Patient Account vs Clinical Patient Record — **P0**
+
+**NOT RESOLVED**, and the review is right that this is foundational. The documents use
+"patient" for two different things: the clinical record the clinic creates, and the login the
+patient may or may not ever have.
+
+**They must be separate entities from the first migration.** The clinic enrols patients who
+never install the app (that is the whole basis of the "value at zero adoption" argument in doc
+00 §1.1), and a record whose existence depends on an account cannot represent them.
+
+```
+patient_record   clinical entity · created by the clinic · exists without any account
+user_account     login identity · phone/credential · may not exist
+record_access    links an account to a record, with a relation and a consent reference
+                 (self | caregiver), granted_at, revoked_at
+```
+
+**Duplicate and merge** is the part that is brutal to retrofit, so it is designed now even
+though the feature ships later: the same person *will* be registered twice at a busy desk.
+Merge is **non-destructive** — the losing record is marked `merged_into` and retained, never
+deleted; every child row is re-pointed with an audit event naming both ids; linked accounts
+follow the surviving record; and the merge is **reversible for 30 days**. Duplicate
+*detection* (phone, name, date of birth) may ship later; the `merged_into` column and the
+audit shape must exist from the first migration.
+
+`[MEDICAL REVIEW REQUIRED]` — which fields decide that two records are the same person.
+
+### 8.7 Care Episode instead of one assumed operation — **P0**
+
+**NOT RESOLVED**, and this is the most important finding in the review. `04-ARCHITECTURE-DRAFT.md`
+§6 keys the pathway engine on `patient + procedure + surgery_date + protocol_version`. **That
+model cannot represent a patient who has a second operation** — a sleeve converted to a
+bypass, a band removed and revised, or a bariatric patient who later has an unrelated
+cholecystectomy. Bariatric surgery has revisions; this is not an edge case.
+
+```
+care_episode        patient_record_id · clinic_id · type · opened_at · closed_at?
+procedure_instance  episode_id · procedure_type · performed_at · surgeon · facility
+                    · revision_of (nullable → another procedure_instance)
+pathway_assignment  episode_id · procedure_instance_id · protocol_version_id · pinned_at
+```
+
+Consequences, stated because they are what make this a P0 rather than a rename:
+
+- **"Days since surgery" becomes "days since *this* procedure instance."** Two open episodes
+  produce two independent pathway positions, and the engine must resolve both.
+- **Weight belongs to the patient; weight-loss *metrics* belong to the episode.** A weight
+  series is continuous across a person's life, but %TWL has a baseline that resets at each
+  procedure. Computing %TWL across a revision without resetting the baseline produces a
+  clinically wrong number that looks right. `[MEDICAL REVIEW REQUIRED]` — how %TWL and %EWL
+  are computed across a revision is a clinical decision, not an arithmetic one.
+- The dashboard shows the **active episode**, and the timeline shows all of them.
+- General surgery (§8.9) becomes an episode `type`, so it is additive rather than a redesign.
+
+Doc 04 §6 is marked superseded and points here.
+
+![Identity separated from the clinical record, and episodes instead of one assumed operation.](assets/d15-patient-episode-model.png)
+
+### 8.8 Shared phone and caregiver policy — **P0**
+
+**NOT RESOLVED.** Doc 00 assumption A4 records that patients share phones and that family
+members operate the app for them — then nothing in the design handles it, while the
+recommended enrolment (doc 11 Q1) keys the account on the phone number.
+
+**The risk is clinical, not merely technical: data entered against the wrong patient.** A
+husband and wife both recently operated, sharing one handset, is an ordinary case here.
+
+**Recommendation for MVP:** one `user_account` per person, not per handset. Two accounts may
+carry the same phone number, distinguished at login by a PIN. The app shows an explicit
+**profile chooser on every cold start** — never a silently remembered profile — and the
+chosen profile is displayed persistently on every data-entry screen. **Every write records
+the account and the record it was entered against**, so a mis-entry is traceable and
+correctable rather than invisible.
+
+A caregiver is `record_access` with relation `caregiver` (§8.6), granted by clinic staff with
+recorded consent, revocable, and audited. Caregiver *write* access is Phase 2;
+v1 caregivers read only.
+
+**Ali decides** whether the clinic will accept the PIN-per-profile friction.
+`[MEDICAL REVIEW REQUIRED]` on the wrong-patient mitigation.
+
+### 8.9 Bariatric-only or general surgery in v1 — **P0, Ali decides**
+
+**NOT RESOLVED.** The report is titled bariatric throughout, but the clinic is described in
+doc 00 as general **and** bariatric surgery, and nothing states whether a cholecystectomy
+patient exists in the system.
+
+**Recommendation: bariatric only in v1.** Not for technical reasons — §8.7's episode model
+makes general surgery additive — but because the critical path is clinical content (risk R2),
+and a second specialty doubles the content burden on the one person who is also the surgeon.
+General surgery arrives as an episode `type` with its own pathway, once the bariatric pathway
+has survived a pilot.
+
+This is a scope decision and it is **Ali's alone**.
+
+### 8.10 Real pre-op scope — P1
+
+**PARTIALLY RESOLVED.** Doc 05 §8.2 defers the pre-op checklist engine to Phase 2, which I
+still think is right. But deferring the *engine* left the product unable to represent a pre-op
+patient at all, and a bariatric clinic's pipeline is mostly pre-op.
+
+**Recommendation:** v1 carries a minimal pre-op **state on the episode** —
+`consult → evaluation → cleared → scheduled → operated` — so the dashboard can show the pre-op
+cohort and who is stalled, without a configurable checklist engine. The state names are
+`[MEDICAL REVIEW REQUIRED]`. The full checklist stays Phase 2.
+
+### 8.11 Consent versioning and data-retention lifecycle — **P0 shape, P1 content**
+
+**NOT RESOLVED.** Doc 05 §8.3 adds consent screens to MVP; nothing versions them, and a
+consent you cannot prove the wording of is not a consent.
+
+```
+consent_document   type · version · locale · body · approved_by · published_at
+patient_consent    patient_record_id · consent_document_id · granted_at · withdrawn_at · method
+```
+
+Immutable once published; a change creates a new version. Re-consent is required when a new
+version of a *material* consent publishes — and whether that blocks app use or soft-prompts is
+`[LEGAL REVIEW REQUIRED]`, not an engineering call.
+
+**Retention**: account deletion and clinical-record deletion are different operations with
+different rules. Deleting an account must not destroy the medical record — and saying so is
+the easy part; the retention period, the lawful basis and whether a patient may demand erasure
+of clinical data are all `[IRAQI LEGAL REVIEW REQUIRED]`. The **schema** must support it from
+day one: soft delete, `retention_class` per table, and a documented lifecycle.
+
+### 8.12 Incident response — P1, before production
+
+**NOT RESOLVED.** Doc 02 R8 names a breach as a critical risk; no plan exists.
+
+**Minimum viable plan:** severity levels (S1 data exposure / S2 outage with clinical impact /
+S3 degraded); a named first responder and the break-glass second operator; **evidence
+preservation first** — do not rotate, redeploy or delete logs before capturing state, which is
+the instinct that destroys the investigation; a patient-notification decision tree;
+`[IRAQI LEGAL REVIEW REQUIRED]` on regulator and patient notification duties; and a written
+post-incident review within a week. One page, rehearsed once, is worth more than a policy
+nobody has read.
+
+### 8.13 Pilot KPIs — P2, before M10
+
+**NOT RESOLVED.** Doc 05 M10 sets the pilot's goal as finding workflow problems but defines no
+measures.
+
+**Recommendation:** patient engagement (share with ≥1 entry in week 4 — the number that
+decides whether risk R1 is real); follow-up queue resolution rate; staff daily active use;
+median time to acknowledge an alert; data completeness per enrolled patient; and enrolment
+conversion at the desk. All **descriptive, not causal** — with 10–20 patients nothing here
+supports a clinical claim, and the report must not let these numbers become one.
+
+### 8.14 Role and assignment semantics — **P0**
+
+**NOT RESOLVED.** The policy design in doc 04 §4 resolves an Actor including "assignments",
+and ADR-0003 depends on `patientScopesFor(actor)` — but nothing defines what an assignment
+*is*. The policy layer cannot be built on an undefined term.
+
+```
+patient_assignment   patient_record_id · user_id · relation (primary_surgeon |
+                     dietitian | coordinator) · from · to (nullable)
+```
+
+**Recommended v1 semantics**, which are an organisational decision as much as a technical one:
+
+| Role | Default scope |
+| --- | --- |
+| `surgeon` | **All patients in the clinic.** One surgeon; assignment narrowing is pointless overhead |
+| `nurse_coordinator` | **All patients.** They run the follow-up queue; scoping them breaks the product |
+| `dietitian` | **Assigned patients only**, plus nutrition data on others if the clinic wants a shared pool |
+| `clinic_admin` | Administrative data on all; **no clinical read by default** |
+| `patient` | Own record, via `record_access` |
+
+**Ali decides** the dietitian and `clinic_admin` rows — they are about how his clinic works,
+not about software.
+
+### 8.15 Clinical configuration publishing lifecycle — P1 (M6)
+
+**PARTIALLY RESOLVED.** Doc 04 §6 establishes immutable, versioned protocols and §8.7 pins
+them per episode. The missing piece is how a version *becomes* publishable.
+
+**State machine:** `draft → in_review → approved → published → superseded`. Only `published`
+versions may be assigned to an episode. The approver and timestamp are recorded on the
+transition to `approved`, and that record is what the ADR-0004 audit model treats as the
+provenance of every clinical string. A published version can never be edited — only superseded.
+Draft protocols are visible in staging and **cannot be assigned in production**.
+
+### 8.16 CI/CD and environment isolation — P1 (M0)
+
+**PARTIALLY RESOLVED.** Doc 04 §12 names three environments and forbids production testing.
+It does not say how they are isolated.
+
+**Separate provider projects, not separate databases in one project** — so a mistaken
+connection string cannot cross the boundary. Separate credentials with no shared secret;
+production secrets never present in CI except a deploy token scoped to deploy; **no production
+data in staging, ever** (seeds are synthetic, never a restored production dump — a restored
+dump is a second copy of the clinical database with weaker access control); and, per doc 11
+§5.1, **no AI agent tooling connected to the production project**. The CI pipeline must also
+re-verify itself: a deliberately failing commit must be rejected, because this repository has
+already merged six phases with no checks running.
+
+### 8.17 API backward compatibility — P1 (M5)
+
+**NOT RESOLVED.** Mobile clients cannot be force-updated; a patient on an old build in Basra
+is a supported configuration whether or not anyone planned for it.
+
+**Rules:** `/v1` prefix from the first endpoint. Within a version, changes are **additive
+only** — no field removals, no type changes, no narrowing of enums the client may already
+send. The server enforces a **minimum supported client version** and returns a structured
+"update required" response the app renders as a forced-upgrade screen, so a client that is too
+old fails clearly rather than mysteriously. Deprecation window of at least two store releases.
+Breaking changes require `/v2` running alongside `/v1`, not a flag day.
+
+---
+
+**Still possibly outstanding.** The review's summary says "and others we sent after item 6".
+The seventeen above are those named explicitly. If more exist, send them and this section
+extends.
+
+---
+
 ## Who must decide what
 
 | Decision | Owner | Type |
@@ -480,6 +824,13 @@ Everything that must be true before `ARCHITECTURE APPROVED` is a reasonable thin
 | 14 | `super_admin` removed from v1 | ✅ §5, doc 04 amended |
 | 15 | Break-glass tiers, sealed set and procedure designed | ✅ §6 |
 | 16 | **Second break-glass operator named** | ⬜ **Ali — blocks production, not approval** |
+| 16a | Patient Account separated from Clinical Record; merge shape defined | ✅ §8.6 |
+| 16b | Care Episode / procedure instance replaces the single-operation assumption | ✅ §8.7 |
+| 16c | Consent versioning and retention schema shape defined | ✅ §8.11 |
+| 16d | Role and assignment semantics defined | ✅ §8.14 — **two rows need Ali** |
+| 16e | **Shared-phone / caregiver policy accepted** | ⬜ **Ali — §8.8** |
+| 16f | **Bariatric-only vs general surgery in v1** | ⬜ **Ali — §8.9** |
+| 16g | **Dietitian and clinic_admin scope confirmed** | ⬜ **Ali — §8.14** |
 | 17 | **Q1–Q12 answered** (doc 06) | ⬜ **Ali — these still block Milestone 1** |
 | 17a | `backup-export` separated from `app_worker` onto its own role | ✅ §4.1, §7.2 |
 | 17b | Bootstrap path for the first `clinic_admin` defined | ✅ §5, §7.3 |
@@ -497,6 +848,18 @@ Everything that must be true before `ARCHITECTURE APPROVED` is a reasonable thin
 | 21 | `app_api` / `app_worker` / `app_readonly` / `migrator` roles created with least-privilege grants | M1 |
 | 22 | Credential inventory established | M1 |
 | 23 | Latency measured from Zain, Asiacell, Korek and a fixed line | Before M5 |
+| 23a | Staff/patient session lifecycle implemented as §8.1 | M1 |
+| 23b | Mobile local-data policy implemented and device-tested | M5 |
+| 23c | RPO/RTO verified by the monthly restore drill, not asserted | M9 |
+| 23d | Timeline replay and weekly reconciliation implemented | M2 |
+| 23e | Clinical-data migration rule adopted in the runbook | M1 |
+| 23f | Pre-op episode states approved and implemented | M2 |
+| 23g | Incident response plan written and rehearsed once | Before production |
+| 23h | Protocol publishing state machine implemented | M6 |
+| 23i | Environment isolation as separate provider projects | M0 |
+| 23j | API versioning and minimum-client-version enforcement | M5 |
+| 23k | Consent wording and retention periods | Legal, before M5 |
+| 23l | Pilot KPIs instrumented | Before M10 |
 | 24 | Iraqi legal review commissioned | M0, answer before M7 |
 | 25 | Break-glass sealed and first drill executed | Before production data |
 | 26 | Human security review of tiers and authorization | M9 |
@@ -516,5 +879,19 @@ Everything that must be true before `ARCHITECTURE APPROVED` is a reasonable thin
 final but the region is unverified and the provider is unconfirmed until Gate 0 settles a
 payment. This does not block approval; it blocks *commitment*.
 
-**Approval is blocked by items 16 and 17 only.** Item 16 is a name. Item 17 is twelve
-answers, most of which can be "agreed".
+## What now blocks approval
+
+Five items, **every one of them a decision rather than more design**. Nothing on this list
+needs another document from me.
+
+| # | Blocker | What is needed |
+| --- | --- | --- |
+| 17 | Doc 06 Q1–Q12 | Twelve answers, most of which can be "agreed" |
+| 16 | Second break-glass operator | A name |
+| 16e | Shared-phone / caregiver policy (§8.8) | Accept the PIN-per-profile friction, or propose different |
+| 16f | Bariatric-only in v1 (§8.9) | A scope decision only Ali can make |
+| 16g | Dietitian and `clinic_admin` clinical scope (§8.14) | How the clinic actually works |
+
+Everything else P0 is designed and recorded. The eleven P1 items in §8 are milestone work with
+a decision written down, which is what P1 means — they do not block approval, and treating
+them as blockers would mean finishing the whole system before starting it.

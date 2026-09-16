@@ -170,6 +170,14 @@ easier to reason about, and easier to move.
 
 ### 2. Dashboard in Next.js, not React Native Web
 
+> **Superseded by doc 11 §2.4.** The reasoning below — that the dashboard's dense tables and
+> keyboard navigation are native to the web and fought for in React Native Web — still holds
+> and is why the dashboard is not an Expo surface. The *framework* choice did not survive
+> review: there is no SSR or SEO requirement for an authenticated internal tool, so the
+> Next.js server was a second deployable and a second credential holder bought for nothing.
+> **The dashboard is a Vite + React static SPA served by the Fastify process at the same
+> origin.**
+
 Sharing one Expo codebase across mobile and dashboard is tempting and wrong here. The
 dashboard's core is dense tables, filters, multi-column layouts, keyboard navigation and
 charts — all of which are native to the web platform and all of which are fought for in
@@ -193,10 +201,10 @@ defence in depth; it is never the primary mechanism.
 | Validation | Zod, shared contracts package | One source of truth for API shapes |
 | Database | PostgreSQL 16+, managed | Plain SQL, file-based migrations |
 | Migrations | Numbered forward-only SQL | Proven in `student-os` |
-| Auth | Own implementation, Argon2id, JWT access + rotating refresh | Method `[DECISION REQUIRED]` |
-| Object storage | S3-compatible | Signed URLs, auth checked before minting |
+| Auth | Own implementation, Argon2id, **opaque DB-backed sessions** (not JWT) + rotating refresh | Decided — doc 12 §8.1. Credential *method* per audience remains doc 06 Q1 |
+| Object storage | S3-compatible, private | **v1: API proxies every byte**, no presigned code path — ADR-0004, doc 11 §3.6 |
 | Background work | Worker process in the same codebase | Scheduler + outbox relay |
-| Dashboard | Next.js + TypeScript + accessible component library | RTL from day one |
+| Dashboard | **Vite + React static SPA**, served by the Fastify process at the same origin | RTL from day one — superseded Next.js, doc 11 §2.4 |
 | Mobile | Expo / React Native | One codebase, both platforms |
 | Testing | Vitest + Playwright | Unit, integration, authorization, E2E, RTL, a11y |
 | CI | GitHub Actions | Including a deployed-artifact gate |

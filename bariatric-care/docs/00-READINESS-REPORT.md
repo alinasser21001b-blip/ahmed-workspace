@@ -272,7 +272,7 @@ first-opinion output. Concretely:
   cold and trying to find a path where `patient_id` is not constrained.
 - **Test generation from contracts** — given the API contract and the policy functions,
   write the negative tests, not the happy path.
-- **Security review of specific surfaces**: authentication, file access and signed URLs,
+- **Security review of specific surfaces**: authentication, file access and byte delivery,
   file upload handling, rate limiting, input validation.
 - **Medical rule test cases** — given an approved rule with a version and a threshold,
   enumerate boundary and off-by-one cases (at the threshold, one below, missing data,

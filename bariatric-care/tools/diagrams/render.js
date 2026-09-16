@@ -15,7 +15,7 @@ const { chromium } = require('/opt/node22/lib/node_modules/playwright');
 const OUT = path.join(__dirname, '..', '..', 'docs', 'assets');
 const SCALE = 2;
 
-const MODULES = ['./diagrams-core.js', './diagrams-product.js', './diagrams-arch.js', './diagrams-access.js'];
+const MODULES = ['./diagrams-core.js', './diagrams-product.js', './diagrams-arch.js', './diagrams-access.js', './diagrams-domain.js'];
 
 function collect() {
   const out = [];

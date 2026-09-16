@@ -12,7 +12,7 @@ the shape I would defend in review.
    ┌──────────────┐   ┌──────────────────┐   ┌──────────────────┐
    │ Patient app  │   │ Clinical         │   │ Admin / config   │
    │ Expo (iOS +  │   │ dashboard        │   │ (same dashboard, │
-   │ Android)     │   │ Next.js          │   │  gated by role)  │
+   │ Android)     │   │ Vite React SPA   │   │  gated by role)  │
    └──────┬───────┘   └────────┬─────────┘   └────────┬─────────┘
           │                    │                      │
           └──────────── HTTPS / REST + Zod ───────────┘
@@ -82,7 +82,7 @@ Rules that make this hold rather than decay:
 | `alerts` | Rule engine, alert lifecycle, queues, acknowledgement, audit |
 | `appointments` | Scheduling, status, reminders, overdue detection |
 | `followup` | Loss-to-follow-up detection, the work queues |
-| `documents` | Uploads, signed URLs, access audit |
+| `documents` | Uploads, **API-proxied byte delivery** (no presigned URLs in v1), access audit |
 | `content` | Educational content, versioning, targeting by procedure/stage |
 | `notifications` | Preferences, templates, dispatch, delivery records |
 | `audit` | Append-only audit event stream |
@@ -138,6 +138,13 @@ This is the balance §39 asks for: the expensive-to-retrofit part now, the opera
 complex part later.
 
 ## 6. The pathway engine
+
+> **Partially superseded by doc 12 §8.7.** The resolution mechanism and version pinning below
+> are unchanged and correct. The *key* is not: keying on `patient + procedure` cannot represent
+> a patient with a second operation — a sleeve converted to a bypass, a revision, or a later
+> unrelated procedure. The unit is a **care episode** with one or more procedure instances, and
+> "days since surgery" means days since *this* procedure instance. Read §8.7 with this section.
+
 
 ![Pathway resolution, and why every patient is pinned to a protocol version.](assets/d3-pathway-engine.png)
 
