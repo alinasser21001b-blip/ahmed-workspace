@@ -11,6 +11,8 @@
 
 ### 1.1 What is actually being built
 
+![The bariatric care pathway the platform has to follow, and what the clinic sees at each stage.](assets/d5-patient-journey.png)
+
 A **Digital Bariatric Care Pathway**: a system that follows one patient from first
 consultation through years of post-operative follow-up, for a clinic seeing 200–500
 patients a month.

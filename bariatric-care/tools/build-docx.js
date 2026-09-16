@@ -21,7 +21,7 @@ const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, Tab,
   HeadingLevel, AlignmentType, WidthType, ShadingType, BorderStyle,
   PageBreak, Footer, PageNumber, TableOfContents, LevelFormat,
-  TabStopType, VerticalAlign,
+  TabStopType, VerticalAlign, ImageRun,
 } = require('docx');
 
 const DOCS = path.join(__dirname, '..', 'docs');
@@ -30,6 +30,13 @@ const OUT = path.join(__dirname, '..', 'Bariatric-Digital-Care-Platform-Readines
 /* ── page geometry (A4, DXA: 1440 = 1 inch) ───────────────────────────────── */
 const PAGE_W = 11906, MARGIN = 1134;
 const CONTENT_W = PAGE_W - MARGIN * 2;          // 9638
+const CONTENT_PX = Math.floor(CONTENT_W / 1440 * 96);  // 642px at 96dpi
+
+/** Intrinsic pixel size from a PNG's IHDR chunk. */
+function pngSize(buf) {
+  if (buf.length < 24 || buf.readUInt32BE(12) !== 0x49484452) return null;
+  return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+}
 
 /* ── palette ──────────────────────────────────────────────────────────────── */
 const NAVY = '1A3A5C', MID = '2C5F7C', LIGHT = '3D7A99';
@@ -110,6 +117,9 @@ function parse(md) {
     }
 
     if (!line.trim()) { i++; continue; }                        // blank
+
+    const img = line.match(/^!\[(.*)\]\(([^)]+)\)\s*$/);          // standalone image
+    if (img) { blocks.push({ t: 'image', alt: img[1], src: img[2] }); i++; continue; }
 
     const h = line.match(/^(#{1,6})\s+(.*)$/);                  // heading
     if (h) { blocks.push({ t: 'h', level: h[1].length, text: h[2].trim() }); i++; continue; }
@@ -290,6 +300,32 @@ function render(blocks) {
           }));
         });
         break;
+
+      // Diagrams are rendered at 2x by tools/diagrams/render.js, so scaling to
+      // the text column here preserves the detail rather than throwing it away.
+      case 'image': {
+        const file = path.join(DOCS, b.src);
+        if (!fs.existsSync(file)) { console.warn('  ! missing image: ' + b.src); break; }
+        const data = fs.readFileSync(file);
+        const dim = pngSize(data);
+        if (!dim) { console.warn('  ! not a readable PNG: ' + b.src); break; }
+        const w = CONTENT_PX;
+        const h = Math.round(dim.h * (w / dim.w));
+        out.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 200, after: b.alt ? 60 : 220 },
+          keepNext: !!b.alt,
+          children: [new ImageRun({ type: 'png', data, transformation: { width: w, height: h } })],
+        }));
+        if (b.alt) {
+          out.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 0, after: 220 },
+            children: [new TextRun({ text: b.alt, size: 17, italics: true, color: MUTED })],
+          }));
+        }
+        break;
+      }
 
       case 'hr':
         out.push(new Paragraph({

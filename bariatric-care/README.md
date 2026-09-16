@@ -40,6 +40,27 @@ executive summary, written for the Product Owner rather than for a future engine
 [`docs/06-OPEN-DECISIONS.md`](docs/06-OPEN-DECISIONS.md) is the one document that needs an
 answer rather than a read.
 
+## Diagrams
+
+`docs/assets/*.png` are ten diagrams drawn for this project specifically — the care
+pathway, request layering, the outbox, the pathway engine's version pinning, the alert
+lifecycle, data classification, MVP scope, the milestone track against its
+non-engineering gates, the capability split and the risk tiers.
+
+They are **generated, like the Word file**. The source is
+[`tools/diagrams/`](tools/diagrams/): `svg.js` is a small drawing vocabulary, the
+`diagrams-*.js` files define each diagram, and `render.js` rasterises them at 2x with
+Chromium. Edit the definition and re-render; never edit a PNG.
+
+```sh
+node tools/diagrams/render.js          # all
+node tools/diagrams/render.js d6       # one, by name prefix
+```
+
+Hand-built SVG rather than Mermaid or Graphviz for two reasons: these diagrams carry
+annotations that generic layout engines place badly, and every colour also differs in
+stroke weight or fill so the meaning survives being printed in greyscale.
+
 ## The Word deliverable
 
 `Bariatric-Digital-Care-Platform-Readiness-Report.docx` is every document above in one
@@ -52,7 +73,7 @@ re-run the script, never the other way around — a hand-edited .docx and the re
 would disagree within a week, and the repository is what the project runs on.
 
 ```sh
-npm install docx && node tools/build-docx.js
+npm install docx && node tools/diagrams/render.js && node tools/build-docx.js
 ```
 
 Open the table of contents and press F9 in Word to populate page numbers.

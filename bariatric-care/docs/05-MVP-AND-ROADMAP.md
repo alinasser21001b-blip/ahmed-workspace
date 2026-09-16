@@ -8,6 +8,8 @@ The handoff (§67) asks me to criticise the proposed MVP before it is accepted. 
 
 ## 8.1 The proposed scope
 
+![MVP scope after the critique: kept, narrowed, added, and deferred.](assets/d10-mvp-scope.png)
+
 > Patient authentication · Patient profile · Surgery info · Weight tracking ·
 > Appointments · Reminders · Nutrition pathway · Supplements reminder · Basic patient
 > tasks · Doctor dashboard · Patient timeline · Basic alerts · Basic reporting ·
@@ -158,6 +160,8 @@ plan for it. But I would argue this one.
 ---
 
 # PART 9 — Roadmap
+
+![Milestones against the non-engineering gates that actually decide the launch date.](assets/d6-roadmap-critical-path.png)
 
 Milestones, not dates. Each is a coherent, demonstrable increment, and each ends with your
 approval before the next begins (per the handoff's operating rules). Sizes are relative

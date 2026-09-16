@@ -11,6 +11,8 @@ Where it does not, the claim is marked as untested.
 
 ## A. What I can build independently
 
+![Who owns what — and the gap between 75–85% of the artifacts and 40–50% of the project.](assets/d7-capability-split.png)
+
 "Independently" means: I can produce it, test it, and hand it over without needing a
 decision or a credential from anyone. It does **not** mean nobody should review it.
 

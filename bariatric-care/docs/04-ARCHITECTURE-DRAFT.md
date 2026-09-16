@@ -43,6 +43,8 @@ privileged credential.
 
 ## 2. Layering inside the API
 
+![Request layering, and why no caller gets a privileged path to the data.](assets/d1-layering.png)
+
 ```
 HTTP route        validation (Zod), auth, request context — no business logic
     ↓
@@ -129,6 +131,8 @@ complex part later.
 
 ## 6. The pathway engine
 
+![Pathway resolution, and why every patient is pinned to a protocol version.](assets/d3-pathway-engine.png)
+
 ```
 patient + procedure + surgery_date + protocol_version
                     ↓
@@ -152,6 +156,8 @@ Design constraints:
 
 ## 7. Alert rule engine
 
+![The alert engine routes to a human queue; it never assigns meaning.](assets/d4-alert-engine.png)
+
 ```
 domain event  ──┐
                 ├──▶ rule evaluation (pure) ──▶ alert ──▶ queue ──▶ human
@@ -169,6 +175,8 @@ Non-negotiable properties:
 - There is **no "no alert" message.** Absence of an alert is never surfaced as reassurance.
 
 ## 8. Domain events and the outbox
+
+![The event is written inside the same transaction as the change it describes.](assets/d2-outbox.png)
 
 State changes append an event **inside the same transaction** as the change. A relay in
 the worker process drains it afterwards.
@@ -189,6 +197,8 @@ alerts, nutrition milestones, clinical notes — one chronological, filterable v
 Because it is derived, it cannot drift from the record it describes.
 
 ## 10. Data classification
+
+![Four data classes, and the destinations each one may and may not reach.](assets/d9-data-classification.png)
 
 Applied to logging, analytics, error reporting, notification payloads and exports (§47,
 §48, §94).

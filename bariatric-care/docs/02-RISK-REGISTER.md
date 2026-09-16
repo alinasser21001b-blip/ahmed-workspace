@@ -11,6 +11,8 @@ Risks are ordered by expected damage, not by category.
 
 ## Tier 1 — Most likely to actually kill the project
 
+![The register's shape: the risks most likely to end this project are not engineering risks.](assets/d8-risk-tiers.png)
+
 ### R1 — Patient engagement collapses
 **Probability: High · Impact: High**
 
