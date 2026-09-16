@@ -80,9 +80,11 @@ not accept my own authorization work as sufficient.
 ### A4 — Authentication and session handling
 
 **What:** Credential handling with a standard memory-hard hash (Argon2id or scrypt — not
-invented, not rolled by hand), short-lived access tokens with rotating refresh tokens,
-token revocation, rate limiting and lockout on credential and OTP paths, secure storage on
-the device, password/OTP reset flows with single-use, expiring, hashed tokens.
+invented, not rolled by hand), *(superseded — this said "short-lived access tokens with
+rotating refresh tokens"; the model is now **one opaque database-backed session token**, doc
+12 §8.1)* **opaque session tokens with immediate revocation**, rate limiting and lockout on
+credential and OTP paths, secure storage on the device, password/OTP reset flows with
+single-use, expiring, hashed tokens.
 
 **To what level:** Production for the mechanism. The *method* (OTP vs password vs magic
 link) is a decision I cannot make alone — see section B.

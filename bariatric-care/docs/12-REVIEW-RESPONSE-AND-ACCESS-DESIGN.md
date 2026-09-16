@@ -490,12 +490,28 @@ foundations are right", not "every design is finished".**
 method still `[DECISION REQUIRED]`. Nothing defined idle timeout, absolute timeout, concurrent
 sessions, or revocation.
 
-**Decision: opaque, database-backed session tokens — not JWT.** A JWT cannot be revoked
-before it expires without building a revocation list, which is a session table with extra
-steps. At a few thousand requests a day a primary-key lookup per request is free, and what it
-buys is the thing that matters here: **a stolen clinician laptop is revoked on the next
-request, not in fifteen minutes.** It also deletes an entire vulnerability class (`alg`
-confusion, key leakage, clock skew).
+**Decision: one opaque, database-backed session token. No JWT, and no separate refresh
+token.** A JWT cannot be revoked before it expires without building a revocation list, which
+is a session table with extra steps. At a few thousand requests a day a primary-key lookup per
+request is free, and what it buys is the thing that matters here: **a stolen clinician laptop
+is revoked on the next request, not in fifteen minutes.** It also deletes an entire
+vulnerability class (`alg` confusion, key leakage, clock skew).
+
+**An earlier draft of this section then referred to refresh-token reuse detection, which
+belongs to a model this section had just rejected. Corrected here — there is exactly one
+token.**
+
+| | |
+| --- | --- |
+| Token | One opaque 256-bit `session_token`, SHA-256 hashed at rest |
+| Transport | `Authorization: Bearer` on mobile; httpOnly `Secure` `SameSite` cookie in the browser |
+| Validation | Database lookup on **every** request — which is what makes revocation immediate |
+| Rotation | On a cadence and on any privilege change, **not** on every request (concurrent requests would race) |
+| Grace window | The previous value stays valid for 60 seconds after rotation so in-flight requests survive |
+| **Theft signal** | A rotated-out token presented **after** the grace window is treated as theft: the whole session chain is revoked and an alert fires |
+
+The theft signal is what reuse detection was reaching for, kept without reintroducing a second
+token to hold it.
 
 | Property | Staff | Patient |
 | --- | --- | --- |
@@ -506,8 +522,8 @@ confusion, key leakage, clock skew).
 | Step-up re-auth | Export, permission change, break-glass | Not applicable |
 | On password change | All sessions revoked | All sessions revoked |
 
-Refresh-token reuse detection revokes the whole family and alerts. Doc 06 Q1 still decides the
-*credential method* per audience; this decides the *session mechanism*, which is independent.
+Doc 06 Q1 still decides the *credential method* per audience; this decides the *session
+mechanism*, which is independent.
 
 ### 8.2 Mobile local-data and offline security — P1 (M5)
 
@@ -516,10 +532,17 @@ stored on the device.
 
 **Recommendation — cache the minimum that makes the app usable on a bad connection:** today's
 tasks, the last ~10 weight entries, the next appointment, and stage content. **Never cached:**
-documents, clinical notes, labs, symptom history, other patients (there are none). Encrypted
-at rest via the OS keystore; refresh token in `expo-secure-store` only; `FLAG_SECURE` on
-clinical screens; full wipe on logout and on failed device re-binding; no third-party
-analytics or crash SDK in the patient app. Unsynced writes queue locally with a visible
+documents, clinical notes, labs, symptom history, other patients (there are none). Storage, stated so it is implementable rather than merely reassuring — the Keychain and
+Keystore hold *keys*, not a clinical cache:
+
+| What | Where |
+| --- | --- |
+| Clinical cache | An **encrypted local database**, whose key is generated per install and held in **Keychain / Keystore** |
+| Session token | `expo-secure-store` **only** — it is a secrets store, not a bulk store |
+| Screen capture | `FLAG_SECURE` on clinical screens **on Android**. iOS has no equivalent: the app obscures its view on backgrounding so the switcher snapshot carries no clinical data, and **screenshots cannot be prevented on iOS** — stated plainly rather than implied away |
+
+Full wipe on logout and on failed device re-binding; no third-party analytics or crash SDK in
+the patient app. Unsynced writes queue locally with a visible
 pending state and are dropped on logout rather than silently retained.
 
 `[HUMAN SECURITY REVIEW REQUIRED]` at M9, together with real-device testing.
@@ -532,9 +555,18 @@ and the review is right to name it.
 | Target | Value | Basis |
 | --- | --- | --- |
 | **RPO, database** | ≤ 5 minutes | Continuous WAL archiving via pgBackRest |
-| **RPO, documents** | ≈ 0 | The worker mirrors each object off-provider on write, not nightly — a lab PDF is often not re-obtainable from its source |
+| **RPO, documents** | **≤ 15 minutes** | See below. An earlier draft claimed ≈ 0, which was stronger than the mechanism supported |
 | **RTO** | ≤ 4 hours | One operator, documented runbook, provisioning a new service from PITR |
 | Backup retention | ~4 weeks PITR + 90 days off-provider | Forensic window, not only DR |
+
+**On the document figure specifically.** "≈ 0" assumed an asynchronous mirror job, and an
+asynchronous job has replication lag — the primary can die with objects written but not yet
+copied. The mechanism is therefore **synchronous dual-write**: an upload is written to primary
+storage and the off-provider bucket before the API acknowledges it. Failure behaviour is
+stated rather than assumed: **if the mirror write fails, the upload still succeeds**, the
+object is queued and flagged, and RPO for that object degrades to the queue drain time. The
+committed figure is the degraded one — ≤ 15 minutes, with queue depth alarmed — because a
+target you only meet on a good day is not a target. Normal operation achieves zero.
 
 These are deliberately unambitious. A clinic of this size does not need four nines, and
 promising an RTO the single operator cannot meet at 3 a.m. is worse than promising none.
@@ -546,9 +578,21 @@ objects together, decrypt one document, and fail the build on mismatch.
 **PARTIALLY RESOLVED.** Doc 04 §9 establishes the timeline as a read model derived from
 domain events — which is what makes replay possible — but never states the rules.
 
-**Rules:** `domain_events` is append-only and **never deleted or edited**; it is the substrate
-the audit trail and the timeline both rest on. Projections are **idempotent by event id**, so
-a replay is safe to run twice. The timeline can be **rebuilt from zero** at any time, and that
+**First, a correction carried in from an earlier draft: `domain_events` is *not* the audit
+substrate.** The two streams are separate and neither derives from the other:
+
+| Stream | Records | Example |
+| --- | --- | --- |
+| `domain_events` | **State changes.** Drives projections, notifications, alert evaluation | weight recorded · appointment missed · protocol assigned |
+| `audit_log` | **Who did what**, including actions that change nothing | patient record viewed · export run · document opened · login |
+
+Conflating them fails in one direction quietly and one loudly: a *read* changes no state, so it
+produces no domain event — and an audit trail derived from domain events would silently omit
+every view, export and download, which are exactly the events an investigator needs. Some
+actions write to both. Both are append-only and neither is ever edited or deleted.
+
+**Rules:** `domain_events` is append-only and **never deleted or edited**. Projections are
+**idempotent by event id**, so a replay is safe to run twice. The timeline can be **rebuilt from zero** at any time, and that
 is a tested operation, not a theoretical property. A **reconciliation check** runs weekly:
 projected counts per patient must equal source-table counts, and a mismatch pages nobody but
 appears in the daily digest. If an event was wrong, it is corrected by a **compensating
@@ -586,11 +630,23 @@ record_access    links an account to a record, with a relation and a consent ref
 
 **Duplicate and merge** is the part that is brutal to retrofit, so it is designed now even
 though the feature ships later: the same person *will* be registered twice at a busy desk.
-Merge is **non-destructive** — the losing record is marked `merged_into` and retained, never
-deleted; every child row is re-pointed with an audit event naming both ids; linked accounts
-follow the surviving record; and the merge is **reversible for 30 days**. Duplicate
-*detection* (phone, name, date of birth) may ship later; the `merged_into` column and the
-audit shape must exist from the first migration.
+Merge is an **alias, not a rewrite.** An earlier draft said every child row is re-pointed and
+the merge is reversible for 30 days — which is not coherent: once rows have been rewritten and
+new data has arrived against the survivor, a reversal is a second migration of unclear
+correctness, and "30 days" was a number with no reasoning behind it.
+
+- The losing record is marked `merged_into` and **retained**. It becomes an alias.
+- **No child row is ever re-pointed.** Every row keeps the `patient_record_id` it was written
+  against, so provenance survives permanently.
+- Reads resolve the alias chain to a canonical id, in **one place** in the repository layer.
+- A `merge_event` records surviving id, merged id, actor, timestamp, reason, and per-table
+  counts at the time of merge.
+- **Un-merge is clearing one column**, and is therefore safe at any time — no expiry window is
+  needed, so none is invented. Data written after the merge was genuinely entered against the
+  surviving record and correctly stays there.
+
+Duplicate *detection* (phone, name, date of birth) may ship later; the `merged_into` column,
+the alias resolution and the `merge_event` shape must exist from the first migration.
 
 `[MEDICAL REVIEW REQUIRED]` — which fields decide that two records are the same person.
 
@@ -641,12 +697,22 @@ chosen profile is displayed persistently on every data-entry screen. **Every wri
 the account and the record it was entered against**, so a mis-entry is traceable and
 correctable rather than invisible.
 
-A caregiver is `record_access` with relation `caregiver` (§8.6), granted by clinic staff with
-recorded consent, revocable, and audited. Caregiver *write* access is Phase 2;
-v1 caregivers read only.
+**Caregiver access in full — read and write — is Phase 2.** An earlier draft of this section
+put caregiver *read* in v1, which contradicted the roadmap's "caregiver accounts · Phase 2".
+The roadmap is right and this section was wrong: v1 ships the **schema** (`record_access` with
+a `relation` column, of which only `self` is used) so the model need not change later, and
+ships **no caregiver UI or access path**.
 
-**Ali decides** whether the clinic will accept the PIN-per-profile friction.
-`[MEDICAL REVIEW REQUIRED]` on the wrong-patient mitigation.
+That leaves the shared-handset case, which is real in v1, solved by multi-profile plus PIN
+above — not by caregiver access. The two problems look alike and are not: a shared handset is
+**two patients each using their own account**; a caregiver is **one person acting for
+another**, which needs recorded consent and a representative relation (§8.11) before it is
+safe to ship.
+
+**DECIDED 2026-09-16 — multi-profile plus PIN accepted for v1.**
+`[MEDICAL REVIEW REQUIRED]` remains open on the wrong-patient mitigation itself: whether the
+persistent profile banner and cold-start chooser are sufficient is a clinical safety judgement,
+not a UX one.
 
 ### 8.9 Bariatric-only or general surgery in v1 — **P0, Ali decides**
 
@@ -660,7 +726,8 @@ and a second specialty doubles the content burden on the one person who is also 
 General surgery arrives as an episode `type` with its own pathway, once the bariatric pathway
 has survived a pilot.
 
-This is a scope decision and it is **Ali's alone**.
+**DECIDED 2026-09-16 — bariatric only in v1.** General surgery becomes an episode `type`
+after the bariatric pathway has survived a pilot.
 
 ### 8.10 Real pre-op scope — P1
 
@@ -681,7 +748,15 @@ consent you cannot prove the wording of is not a consent.
 ```
 consent_document   type · version · locale · body · approved_by · published_at
 patient_consent    patient_record_id · consent_document_id · granted_at · withdrawn_at · method
+                   · accepted_by_account_id      who actually tapped accept
+                   · recorded_by_staff_id        set when staff record a paper consent
+                   · representative_relation     self | caregiver | guardian
 ```
+
+The three provenance columns are not optional detail. With shared handsets and caregivers,
+"this record has consent" does not establish **who gave it** — and a consent whose grantor is
+unknown is not usable evidence. Staff-recorded paper consent must also be distinguishable from
+consent the patient tapped themselves.
 
 Immutable once published; a change creates a new version. Re-consent is required when a new
 version of a *material* consent publishes — and whether that blocks app use or soft-prompts is
@@ -698,17 +773,34 @@ day one: soft delete, `retention_class` per table, and a documented lifecycle.
 **NOT RESOLVED.** Doc 02 R8 names a breach as a critical risk; no plan exists.
 
 **Minimum viable plan:** severity levels (S1 data exposure / S2 outage with clinical impact /
-S3 degraded); a named first responder and the break-glass second operator; **evidence
-preservation first** — do not rotate, redeploy or delete logs before capturing state, which is
-the instinct that destroys the investigation; a patient-notification decision tree;
+S3 degraded); a named first responder and the break-glass second operator; **contain an
+active breach first, and preserve evidence as early as is safely possible**; a
+patient-notification decision tree;
 `[IRAQI LEGAL REVIEW REQUIRED]` on regulator and patient notification duties; and a written
 post-incident review within a week. One page, rehearsed once, is worth more than a policy
 nobody has read.
+
+**On ordering, because an earlier draft had it wrong.** That draft said evidence preservation
+comes first and not to rotate or redeploy before capturing state. That is wrong for a
+credential being used *right now*: delaying revocation to collect evidence extends the breach.
+The correct rule is **containment first, evidence as early as is safely possible** — revoke
+the live access, then capture state. What the original wording was protecting against remains
+true once containment is done: **never delete logs or redeploy over the evidence.** Capture
+what can be captured while containing; never trade an ongoing exposure for a cleaner
+investigation.
 
 ### 8.13 Pilot KPIs — P2, before M10
 
 **NOT RESOLVED.** Doc 05 M10 sets the pilot's goal as finding workflow problems but defines no
 measures.
+
+**First, a bias this fixes.** Doc 06 Q9 proposed selecting pilot patients "for engagement
+likelihood", and this section proposes measuring engagement. Doing both makes the measurement
+meaningless — a cohort chosen for being likely to engage will engage, and the number says
+nothing about the panel. **Split it in two:** a *friendly alpha* of 5–10 hand-picked patients
+whose only purpose is finding UX and workflow problems, measuring nothing; then a
+*representative mini-pilot* of 15–25 **consecutively enrolled, unselected** patients, which is
+where every number below is measured. Doc 06 Q9 is updated to match.
 
 **Recommendation:** patient engagement (share with ≥1 entry in week 4 — the number that
 decides whether risk R1 is real); follow-up queue resolution rate; staff daily active use;
@@ -733,12 +825,19 @@ patient_assignment   patient_record_id · user_id · relation (primary_surgeon |
 | --- | --- |
 | `surgeon` | **All patients in the clinic.** One surgeon; assignment narrowing is pointless overhead |
 | `nurse_coordinator` | **All patients.** They run the follow-up queue; scoping them breaks the product |
-| `dietitian` | **Assigned patients only**, plus nutrition data on others if the clinic wants a shared pool |
-| `clinic_admin` | Administrative data on all; **no clinical read by default** |
+| `dietitian` | **Assigned patients only** — decided |
+| `clinic_admin` | Administrative data on all; **no clinical read** — decided |
 | `patient` | Own record, via `record_access` |
 
-**Ali decides** the dietitian and `clinic_admin` rows — they are about how his clinic works,
-not about software.
+**DECIDED 2026-09-16**, with a principle attached that is worth more than the two rows:
+
+> When one person holds two jobs — the clinic administrator who is also the coordinator —
+> **give them a second role, not a wider one.** Roles are additive and an Actor may hold
+> several; widening `clinic_admin` to cover coordination would grant clinical read to every
+> future administrator, including the one hired in two years who does no coordination.
+
+This is the cheapest least-privilege decision in the system and it costs nothing to honour,
+because roles were already data rather than code (ADR-0003).
 
 ### 8.15 Clinical configuration publishing lifecycle — P1 (M6)
 
@@ -828,10 +927,10 @@ Everything that must be true before `ARCHITECTURE APPROVED` is a reasonable thin
 | 16b | Care Episode / procedure instance replaces the single-operation assumption | ✅ §8.7 |
 | 16c | Consent versioning and retention schema shape defined | ✅ §8.11 |
 | 16d | Role and assignment semantics defined | ✅ §8.14 — **two rows need Ali** |
-| 16e | **Shared-phone / caregiver policy accepted** | ⬜ **Ali — §8.8** |
-| 16f | **Bariatric-only vs general surgery in v1** | ⬜ **Ali — §8.9** |
-| 16g | **Dietitian and clinic_admin scope confirmed** | ⬜ **Ali — §8.14** |
-| 17 | **Q1–Q12 answered** (doc 06) | ⬜ **Ali — these still block Milestone 1** |
+| 16e | Shared-phone policy accepted — multi-profile + PIN | ✅ Decided 2026-09-16, §8.8 |
+| 16f | Bariatric-only in v1 | ✅ Decided 2026-09-16, §8.9 |
+| 16g | Dietitian assigned-only; `clinic_admin` no clinical read | ✅ Decided 2026-09-16, §8.14 |
+| 17 | **Q1 and Q5 answered** (doc 06) | ⬜ **Ali — only these two block M1; see reclassification** |
 | 17a | `backup-export` separated from `app_worker` onto its own role | ✅ §4.1, §7.2 |
 | 17b | Bootstrap path for the first `clinic_admin` defined | ✅ §5, §7.3 |
 | 17c | Monitoring/error-tracking data region specified | ✅ Doc 11 §2.1 — Sentry EU |
@@ -886,11 +985,32 @@ needs another document from me.
 
 | # | Blocker | What is needed |
 | --- | --- | --- |
-| 17 | Doc 06 Q1–Q12 | Twelve answers, most of which can be "agreed" |
+| 17 | Doc 06 **Q1, Q5** (and **Q3, Q4, Q11** for provisioning) | See the reclassification below — **not** all twelve |
 | 16 | Second break-glass operator | A name |
 | 16e | Shared-phone / caregiver policy (§8.8) | Accept the PIN-per-profile friction, or propose different |
 | 16f | Bariatric-only in v1 (§8.9) | A scope decision only Ali can make |
 | 16g | Dietitian and `clinic_admin` clinical scope (§8.14) | How the clinic actually works |
+
+### Q1–Q12 reclassified by what each actually blocks
+
+An earlier version of this checklist said all twelve block Milestone 1. That was wrong, and
+the review is right to call it out — Q9 is about the pilot, Q10 about the App Store, Q12 about
+branding. None of those can stop the first migration being written.
+
+| Blocks | Questions | Why |
+| --- | --- | --- |
+| **Architecture / M1** | **Q1** patient auth · **Q5** tenancy posture | Both change the first migration and the identity module. Genuinely blocking |
+| **M0 provisioning** | **Q3** residency · **Q4** data controller · **Q11** budget ceiling | Q4 decides who signs the provider contract; Q11 decides the tier; Q3 decides whether the provider is legal at all |
+| **M2** | Q6 dashboard-first · Q8 existing-data migration | Sequencing and scope of the patient-record milestone |
+| **M5** | Q12 branding | App name, icon, store listing |
+| **M6** | Q2 WhatsApp channel | The notification layer is channel-agnostic by design, so this waits |
+| **Pilot (M10)** | Q9 pilot plan | Now a two-stage plan; see §8.13 |
+| **Launch (M11)** | Q10 Apple account | Long lead time — **start now**, answer later |
+| **Phase 2 only** | Q7 messaging | Recommended out of MVP; blocks nothing before Phase 2 |
+
+**Q3 deserves a note.** A positive in-country residency finding invalidates the hosting
+recommendation entirely (doc 11 §1.4). Architecture can be approved *conditionally* on it,
+because the reopening clause is already written; it cannot be *committed* until answered.
 
 Everything else P0 is designed and recorded. The eleven P1 items in §8 are milestone work with
 a decision written down, which is what P1 means — they do not block approval, and treating

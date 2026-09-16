@@ -147,9 +147,12 @@ migration at the start doubles the risk of the riskiest phase.
 
 **AR:** كم مريض، متى، ومن يختارهم؟
 
-**My recommendation:** 10–20 patients, chosen by you for engagement likelihood rather than
-clinical complexity, after Milestone 9, for 2–4 weeks. The goal is finding workflow
-problems, not bugs.
+**My recommendation (revised — doc 12 §8.13):** two stages, because selecting patients for
+engagement likelihood and then measuring engagement produces a number that means nothing.
+**Stage 1, friendly alpha:** 5–10 patients you hand-pick, after Milestone 9, 2–3 weeks, to
+find UX and workflow problems. Measures nothing. **Stage 2, representative mini-pilot:** 15–25
+**consecutively enrolled, unselected** patients, 4 weeks, where engagement and every other KPI
+is actually measured.
 
 **Blocks:** M10 planning.
 
@@ -219,17 +222,20 @@ Start these in parallel — they have long lead times and do not block Milestone
 Record answers here as they are decided, with the date. This becomes the source of truth
 (§65) and each architectural answer becomes an ADR.
 
-| # | Decision | Answer | Date | ADR |
-| --- | --- | --- | --- | --- |
-| Q1 | Patient auth method | _pending_ | | |
-| Q2 | WhatsApp channel | _pending_ | | |
-| Q3 | Hosting / residency | _pending_ | | |
-| Q4 | Legal data controller | _pending_ | | |
-| Q5 | Tenancy posture | _pending_ | | |
-| Q6 | Dashboard-first | _pending_ | | |
-| Q7 | Messaging in MVP | _pending_ | | |
-| Q8 | Existing data migration | _pending_ | | |
-| Q9 | Pilot plan | _pending_ | | |
-| Q10 | Apple account | _pending_ | | |
-| Q11 | Budget ceiling | _pending_ | | |
-| Q12 | Branding | _pending_ | | |
+**What each question actually blocks** — revised per doc 12 §"Q1–Q12 reclassified". An earlier
+version of the checklist claimed all twelve block Milestone 1; they do not.
+
+| # | Decision | Blocks | Answer | Date | ADR |
+| --- | --- | --- | --- | --- | --- |
+| Q1 | Patient auth method | **Architecture / M1** | _pending_ | | |
+| Q2 | WhatsApp channel | M6 | _pending_ | | |
+| Q3 | Hosting / residency | **M0** provisioning | _pending_ | | |
+| Q4 | Legal data controller | **M0** contracts | _pending_ | | |
+| Q5 | Tenancy posture | **Architecture / M1** | _pending_ | | |
+| Q6 | Dashboard-first | M2 | _pending_ | | |
+| Q7 | Messaging in MVP | Phase 2 | _pending_ | | |
+| Q8 | Existing data migration | M2 | _pending_ | | |
+| Q9 | Pilot plan | Pilot (M10) | _pending_ | | |
+| Q10 | Apple account | Launch (M11) | _pending_ | | |
+| Q11 | Budget ceiling | **M0** tier | _pending_ | | |
+| Q12 | Branding | M5 | _pending_ | | |

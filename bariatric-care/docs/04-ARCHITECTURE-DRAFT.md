@@ -209,7 +209,11 @@ A **read model** projected from domain events, not a table anyone writes to dire
 Consultations, pre-op evaluation, surgery, post-op events, weights, appointments, labs,
 alerts, nutrition milestones, clinical notes — one chronological, filterable view (§24).
 
-Because it is derived, it cannot drift from the record it describes.
+> **Superseded by doc 12 §8.4.** This said "because it is derived, it cannot drift from the
+> record it describes." That is wrong: a projection drifts whenever a consumer fails midway,
+> an event is replayed non-idempotently, or a bug is fixed without a rebuild. Being derived is
+> what makes drift *recoverable*, not what makes it impossible. Replay, idempotency and a
+> weekly reconciliation check are specified in §8.4.
 
 ## 10. Data classification
 
