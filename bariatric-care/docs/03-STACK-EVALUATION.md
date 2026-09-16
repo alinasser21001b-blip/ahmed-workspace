@@ -200,7 +200,7 @@ defence in depth; it is never the primary mechanism.
 | Mobile | Expo / React Native | One codebase, both platforms |
 | Testing | Vitest + Playwright | Unit, integration, authorization, E2E, RTL, a11y |
 | CI | GitHub Actions | Including a deployed-artifact gate |
-| Hosting | Container host + managed PostgreSQL | `[DECISION REQUIRED]` — follows residency |
+| Hosting | **Decided:** Cloudflare edge → Railway (EU) for API, worker, PostgreSQL and object storage; off-provider encrypted backup to a third vendor | See [`11-ARCHITECTURE-DECISION-ADDENDUM.md`](./11-ARCHITECTURE-DECISION-ADDENDUM.md) §1.3–§2.3. Conditional on Gate 0 and `[IRAQI LEGAL REVIEW REQUIRED]` on residency |
 | Errors | Self-hosted or PHI-scrubbed error tracking | Never raw request bodies |
 
 ### What would change my recommendation

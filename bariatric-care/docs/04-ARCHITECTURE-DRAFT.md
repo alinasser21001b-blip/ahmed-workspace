@@ -112,10 +112,18 @@ patientScopesFor(actor): Scope   // pushed into SQL WHERE, never post-filtered
 - Roles and permissions are **data**, not `if (role === 'doctor')` scattered through the
   codebase (§43).
 
-Proposed roles: `patient`, `surgeon`, `dietitian`, `nurse_coordinator`, `clinic_admin`,
-`super_admin`. Permissions are granular and assigned to roles, so a new role is
-configuration rather than a code change. `[DECISION REQUIRED]` — the exact permission set
-per role is an organisational decision (B17).
+v1 roles: `patient`, `surgeon`, `dietitian`, `nurse_coordinator`, `clinic_admin`.
+Permissions are granular and assigned to roles, so a new role is configuration rather than a
+code change. `[DECISION REQUIRED]` — the exact permission set per role is an organisational
+decision (B17).
+
+**`super_admin` was proposed here and has been removed.** For a one-clinic v1 it is the most
+dangerous account in the system and protects against nothing: routine administration is
+`clinic_admin`, and everything else — restore a backup, rotate a secret, emergency database
+access — is not a role but break-glass. See
+[`../12-REVIEW-RESPONSE-AND-ACCESS-DESIGN.md`](./12-REVIEW-RESPONSE-AND-ACCESS-DESIGN.md) §5
+and §6. When multi-clinic arrives, `platform_admin` manages tenants and has **no clinical
+read in any clinic, ever**.
 
 ## 5. Tenancy
 

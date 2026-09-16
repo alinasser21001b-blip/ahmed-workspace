@@ -275,9 +275,11 @@ serialisation boundary, and a service credential that becomes a bearer token for
 That credential is precisely the "second privileged path" the rule exists to prevent.
 
 So the worker imports `packages/core/policy` and the repositories, exactly as the API does,
-and runs under an explicit **system Actor** that is a real value with a real scope, not a
-bypass. The rule's wording is therefore *one policy implementation*, not *one process* — and
-the auditability requirement is met by the system Actor writing audit events that name the
+and runs under a **per-job `JobActor`** — not one shared system identity, which would be an
+unscoped god worker by another name. Each JobActor carries a concrete `clinic_id` and a
+narrow declared table scope; the model is specified in
+[`12-REVIEW-RESPONSE-AND-ACCESS-DESIGN.md`](./12-REVIEW-RESPONSE-AND-ACCESS-DESIGN.md) §4. The rule's wording is therefore *one policy implementation*, not *one process* — and
+the auditability requirement is met by the JobActor writing audit events that name the
 job and rule that caused the action, so an automated write is never indistinguishable from a
 human one.
 

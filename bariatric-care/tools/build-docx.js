@@ -77,13 +77,18 @@ function runs(text, opts = {}) {
 
   const out = [];
   let last = 0, m;
-  INLINE.lastIndex = 0;
+  // A fresh regex per call: bold and italic recurse, and a shared instance's
+  // lastIndex would be reset by the inner call mid-iteration.
+  const re = new RegExp(INLINE.source, 'g');
   const s = delink(text);
-  while ((m = INLINE.exec(s)) !== null) {
+  while ((m = re.exec(s)) !== null) {
     if (m.index > last) out.push(mk(s.slice(last, m.index)));
-    if (m[1] !== undefined) out.push(mk(m[1], { bold: true }));
+    // Bold and italic recurse so inline code inside them renders as code rather
+    // than as literal backticks — `**`super_admin` was removed**` is common in
+    // these documents and used to print its own markup.
+    if (m[1] !== undefined) out.push(...runs(m[1], { ...opts, rtl, bold: true }));
     else if (m[2] !== undefined) out.push(mk(m[2], { font: MONO, size: (opts.size || 21) - 2, color: NAVY }));
-    else if (m[3] !== undefined) out.push(mk(m[3], { italics: true }));
+    else if (m[3] !== undefined) out.push(...runs(m[3], { ...opts, rtl, italics: true }));
     else out.push(mk(m[4] || m[5], { color: MID, underline: {} }));
     last = m.index + m[0].length;
   }
@@ -387,6 +392,7 @@ const PARTS = [
   { file: 'docs/08-WAYS-OF-WORKING.md', label: 'PART IX', title: 'Ways of Working', dropH1: true },
   { file: 'docs/09-CLINICAL-CONTENT-REQUESTS.md', label: 'PART X', title: 'Clinical Content Requests', dropH1: true },
   { file: 'docs/11-ARCHITECTURE-DECISION-ADDENDUM.md', label: 'PART XI', title: 'Final Architecture Decision Addendum', dropH1: true },
+  { file: 'docs/12-REVIEW-RESPONSE-AND-ACCESS-DESIGN.md', label: 'PART XII', title: 'Review Response and Access Design', dropH1: true },
   { file: 'docs/adr/README.md', label: 'APPENDIX A', title: 'Architecture Decision Records', dropH1: true },
   { file: 'docs/adr/0001-modular-monolith-typescript.md', sub: true },
   { file: 'docs/adr/0002-long-lived-container.md', sub: true },

@@ -38,7 +38,7 @@ correction the original phrasing needed:
 - **One public origin.** *Not* required. Multiple hostnames with different edge exposure are
   permitted, provided they terminate in the same policy implementation.
 - **One process.** *Not* required. The worker reuses the policy and repository layer
-  in-process under an explicit system Actor. It does **not** call the API over HTTP: an
+  in-process under a per-job scoped `JobActor` (§Allowed paths). It does **not** call the API over HTTP: an
   internal HTTP hop inside one trust boundary buys nothing and costs a service credential
   that becomes exactly the second privileged path this ADR exists to prevent.
 
@@ -69,12 +69,22 @@ produce an Actor, a permission or a `clinic_id`.
 
 1. Patient app → edge → API → policy → services → repositories → PostgreSQL / storage.
 2. Dashboard → same, from the same origin that serves its bundle.
-3. Worker → **the same policy and repository layer, in-process**, under a system Actor whose
-   scope is explicit and whose audit events name the job and rule that caused the action.
+3. Worker → **the same policy and repository layer, in-process**, under a **per-job
+   `JobActor`** — never one shared "system" identity, which would be exactly the unscoped god
+   worker this rule exists to prevent. Each JobActor carries a concrete `clinic_id` (never a
+   wildcard) and a narrow declared table scope, and the worker connects under its own database
+   role rather than the API's. Audit events name the job, the run and the triggering event.
+   Specified in [`../12-REVIEW-RESPONSE-AND-ACCESS-DESIGN.md`](../12-REVIEW-RESPONSE-AND-ACCESS-DESIGN.md) §4.
 4. Exports → the same `patientScopesFor(actor)` pushed into the same `WHERE`, plus an audit
    event recording actor, filter and row count.
 5. Documents → **bytes streamed through the API** after the policy call. No presigned URL
    code path exists in v1.
+   **Read this precisely.** A short-lived, object-scoped signed URL minted *after* an
+   authorization decision **conforms to this ADR** — authorization happened at the boundary
+   and only the byte transfer is delegated. "One gateway" has never meant "every byte through
+   Fastify". v1 proxies bytes for *audit and leakage* reasons (document 11 §3.6), not because
+   this rule forbids the alternative. Adopting signed URLs later is therefore a **product
+   decision against the triggers named there, not an amendment to this ADR.**
 6. Future AI → an approved context builder that is an ordinary caller: it resolves an Actor,
    calls the same policy functions, and receives only what that Actor could have read.
 
@@ -90,7 +100,7 @@ convenience and good intentions are irrelevant.
 | Dashboard → PostgreSQL directly | **Violation** | Requires database credentials in a browser. Catastrophic and unrecoverable — the credential is public the moment it ships. |
 | AI service → database with service-role credentials | **Violation** | The canonical second path. An AI component must never hold a credential that reads more than the user it is acting for. |
 | Analytics job → unrestricted production database | **Violation as stated.** Allowed shape: a read-only role against a **restored backup or replica**, with direct identifiers removed. If a question genuinely needs identifiers it is a report and goes through the API. | Unrestricted production SQL is indistinguishable from a breach in the audit trail. |
-| Worker → database bypassing authorization | **Depends — and this is the distinction that matters.** Reusing the policy and repository layer under a system Actor is **allowed** and is the design. Ad-hoc SQL from the worker that skips policy is a **violation**. | "Bypassing the API" is fine. "Bypassing authorization" is not. They are different things and conflating them is how this rule gets misread. |
+| Worker → database bypassing authorization | **Depends — and this is the distinction that matters.** Reusing the policy and repository layer under a scoped per-job `JobActor` is **allowed** and is the design. Ad-hoc SQL from the worker that skips policy is a **violation**. | "Bypassing the API" is fine. "Bypassing authorization" is not. They are different things and conflating them is how this rule gets misread. |
 | Client → private storage bucket directly | **Violation in v1.** No presigned URL path exists. | A presigned URL is a bearer token inside a URL; in this population it lands in screenshots and WhatsApp forwards. And you cannot audit a read that never reaches your API. |
 | Admin script → production database | **Violation as routine practice. Allowed as break-glass** under §Exceptions. | Routine console SQL is how every control erodes. |
 | CSV export → custom unrestricted SQL | **Violation** | An export is a privileged *read*, not a different kind of access. Same scopes, same `WHERE`, plus an audit event. |

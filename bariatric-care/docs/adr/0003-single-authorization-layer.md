@@ -38,6 +38,12 @@ the policy module.
 Database-level row security may be added later as defence in depth. It is never the
 primary mechanism — see [`../03-STACK-EVALUATION.md`](../03-STACK-EVALUATION.md) for why.
 
+**This ADR is not sufficient on its own.** It constrains code that already reaches the policy
+layer. It says nothing about paths that never enter the application — a client database SDK,
+a service-role key, an analytics job, a provider integration — and those are what actually
+cause breaches. [`ADR-0004`](./0004-one-public-clinical-data-gateway.md) closes that gap and
+must be read with this one.
+
 ## Consequences
 
 **Good.** The security surface is covered by fast unit tests over pure functions, so the
