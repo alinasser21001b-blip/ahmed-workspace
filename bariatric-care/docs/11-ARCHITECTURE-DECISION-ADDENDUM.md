@@ -144,7 +144,7 @@ not a note.
 | Backups (primary) | Railway pgBackRest, ~4-week PITR | Provider-internal |
 | Backups (off-provider) | Nightly `age`-encrypted `pg_dump` + object mirror to **Backblaze B2 or AWS S3 with Object Lock** | Write-only credential from the worker |
 | Secrets | Railway sealed variables (runtime); GitHub Actions secrets (CI) | Never in the repo, never in a client bundle |
-| Error tracking | Sentry, PII disabled, no request bodies | Egress only |
+| Error tracking | Sentry **on its EU data region**, PII disabled, no request bodies | Egress only. Region matters: telemetry to a US-region vendor is a cross-border transfer that `[IRAQI LEGAL REVIEW REQUIRED]` must be told about |
 | Logs | Structured `pino` to stdout → platform sink, central redaction list | Egress only |
 | Audit events | **A PostgreSQL table**, not logs — see §2.4 | Internal |
 | Uptime check | External monitor on `/health/ready` | Public probe of a PHI-free endpoint |

@@ -206,10 +206,15 @@ Four rules make this enforceable rather than aspirational:
    clinic scope?" with **no, by construction**, and it is what makes multi-clinic safe later
    rather than requiring a redesign.
 2. **Per-job permissions, not per-worker.** See the table below.
-3. **A separate database role.** The worker connects as `app_worker`, **not** the API's
-   `app_api` credential, with table-level grants matching the union of its jobs' scopes. A
-   compromised worker cannot read a table no job needs. This answers "does it share the API
-   database credential?" with **no**.
+3. **Separate database roles — and `backup-export` must not be one of them.** The worker
+   connects as `app_worker`, **not** the API's `app_api` credential, with table-level grants
+   matching the union of its jobs' scopes. A compromised worker cannot read a table no job
+   needs.
+   **This argument only holds if no job needs everything.** `backup-export` does, by
+   definition, so granting it to `app_worker` would silently give every other job read on
+   every clinical table and collapse the whole mechanism. It therefore runs as a **separate
+   process under its own `app_backup` role**, outside the worker's grant set. Least privilege
+   that has one job exempt is not least privilege — it is a comment.
 4. **Boot assertion.** The worker process **exits at startup** if any registered job lacks a
    JobActor definition — mirroring the API's route/policy boot assertion, so a new job cannot
    be added without declaring its scope.
@@ -223,7 +228,7 @@ Four rules make this enforceable rather than aspirational:
 | `followup-sweep` | `appointments`, `patients` (status + assignment fields), `pathway_assignments` | `alerts`, `domain_events` | Clinical notes, documents, labs, symptoms |
 | `protocol-task-generation` | `pathway_assignments`, `protocol_versions`, `surgery` | `tasks` | Notes, documents, labs |
 | `alert-rule-evaluation` | Only the tables its approved rules declare | `alerts`, `domain_events` | Everything a rule does not declare |
-| `backup-export` | Whole dataset **by definition** | Off-provider bucket | — (ADR-0004 exception 2: distinct credential, encrypted, audited) |
+| `backup-export` *(separate process, `app_backup` role — **not** `app_worker`)* | Whole dataset **by definition** | Off-provider bucket | — (ADR-0004 exception 2: distinct credential, encrypted, audited) |
 
 **"Can it fetch arbitrary patients?"** Within its clinic and its declared tables, yes — that
 is the job; a follow-up sweep that cannot see every patient cannot find the overdue ones.
@@ -264,6 +269,14 @@ nothing that the alternatives do not cover:
   account that is one phishing email away from every patient record.
 
 **v1 roles: `patient`, `surgeon`, `dietitian`, `nurse_coordinator`, `clinic_admin`.**
+
+**Removing `super_admin` creates a bootstrap problem, and leaving it unanswered is how the
+role comes back.** If only a `clinic_admin` can create staff accounts, who creates the first
+`clinic_admin`? Not a standing role: a **one-off bootstrap command**, run inside the project
+network under the `migrator` credential, which creates exactly one `clinic_admin` and
+records an audit event. It is the same mechanism as a migration and carries the same
+constraints — CI or break-glass only, never a logged-in session, and it refuses to run if a
+`clinic_admin` already exists.
 
 **Going further than the note asks, because it is cheaper to decide now than to walk back
 later:** when multi-clinic arrives in Phase 3 and a platform operator role becomes genuinely
@@ -359,6 +372,75 @@ procedure should be reviewed by the security specialist engaged at M9, before re
 
 ---
 
+## 7. Self-review: where my own verdicts were too generous
+
+Added on a second pass over §1–§6, looking for verdicts I marked closed that were not.
+Three were wrong, and one of them was a contradiction inside a design I had just written.
+
+### 7.1 Item 1 — corrected from RESOLVED to PARTIALLY RESOLVED
+
+"RESOLVED" conflated two different things: **the recommendation is final; the provider is
+not confirmed usable.** Two sub-points the review explicitly asked for are still open:
+
+- **Exact region.** Amsterdam / `europe-west4` is stated with a `[VERIFY]` marker. An
+  unverified region identifier is not an exact region recommendation.
+- **Monitoring location.** The review listed it; §2.1 of doc 11 named Sentry but not *where*
+  its data lands. That is not a detail: telemetry to a US-region vendor is a cross-border
+  transfer, and a legal reviewer being asked about residency needs to know it exists.
+  **Fixed** — Sentry's EU data region is now specified, with the legal marker attached.
+
+The hosting decision is also **contingent on Gate 0, which has not run.** Calling it RESOLVED
+risks it being read as committed. It is not committed until a payment settles.
+
+### 7.2 Item 4 — a contradiction in my own design
+
+§4.1 argued that `app_worker`'s grants are "the union of its jobs' scopes", so a compromised
+worker cannot read tables no job needs. §4.2 then listed `backup-export`, which reads the
+whole dataset by definition.
+
+**Those two statements cannot both be true.** The union including `backup-export` is *every
+clinical table*, which would hand every other job full read access and reduce the entire
+least-privilege mechanism to a comment. **Fixed** — `backup-export` runs as a separate
+process under its own `app_backup` role, outside the worker's grant set.
+
+This is worth recording rather than quietly patching: it is the characteristic failure of a
+least-privilege design, which is that one job legitimately needs everything and the exception
+silently becomes the rule.
+
+### 7.3 Item 5 — removing `super_admin` created a gap
+
+If only a `clinic_admin` can create staff accounts, nothing in the documents said who creates
+the first one. An unanswered bootstrap question is precisely how a god role comes back —
+someone needs an account on day one and re-adds `super_admin` to get it. **Fixed** — a
+one-off bootstrap command under the `migrator` credential, §5.
+
+### 7.4 Item 2 — one control is a checklist item, not an enforced constraint
+
+§2.2 states Railway's public TCP proxy is "disabled and stays disabled". Said plainly:
+**there is no mechanism preventing anyone with console access from re-enabling it.** On a
+managed platform there is no policy-as-code to forbid it. The control is a pre-production
+checklist item and a periodic review, and that is weaker than the sentence implied. It is
+accepted knowingly, and it is one more entry on the list a security reviewer should see.
+
+### 7.5 Item 6 — the second operator is also a single point of failure
+
+The design names one second operator. If both they and Ali are unavailable, the sealed set is
+unreachable and the platform is unrecoverable. A third individual multiplies the custody risk
+without solving it. The better answer is **institutional rather than personal**: the clinic's
+legal entity is the registered owner of the provider, registrar and developer accounts, so
+account recovery can be pursued through the vendor by the entity even when no individual is
+available. `[LEGAL REVIEW REQUIRED]` — entity ownership of these accounts should be confirmed
+when the data-controller question (doc 06 Q4) is answered, because it is the same question.
+
+### 7.6 What this pass did not change
+
+Items 3 and the remainder of 2, 4, 5 and 6 stand as written. In particular I still recommend
+ADR-0004 as a separate record rather than folding it into ADR-0003, for the reason in §3.1:
+the failure mode of not having it is that someone satisfies ADR-0003 perfectly and still
+ships a second privileged path.
+
+---
+
 ## Who must decide what
 
 | Decision | Owner | Type |
@@ -399,6 +481,9 @@ Everything that must be true before `ARCHITECTURE APPROVED` is a reasonable thin
 | 15 | Break-glass tiers, sealed set and procedure designed | ✅ §6 |
 | 16 | **Second break-glass operator named** | ⬜ **Ali — blocks production, not approval** |
 | 17 | **Q1–Q12 answered** (doc 06) | ⬜ **Ali — these still block Milestone 1** |
+| 17a | `backup-export` separated from `app_worker` onto its own role | ✅ §4.1, §7.2 |
+| 17b | Bootstrap path for the first `clinic_admin` defined | ✅ §5, §7.3 |
+| 17c | Monitoring/error-tracking data region specified | ✅ Doc 11 §2.1 — Sentry EU |
 
 ### P1 — before the relevant milestone
 
@@ -406,6 +491,8 @@ Everything that must be true before `ARCHITECTURE APPROVED` is a reasonable thin
 | --- | --- | --- |
 | 18 | Gate 0 executed: Iraqi signup and payment verified per provider | Before M0 ends |
 | 19 | Exact Railway region confirmed in console | Gate 0 |
+| 19a | Entity ownership of provider, registrar and developer accounts confirmed | With doc 06 Q4 |
+| 19b | TCP-proxy-disabled added to the periodic review, not just the launch checklist | M1 |
 | 20 | Boot assertions implemented: every route has a policy, every job has a JobActor | M1 |
 | 21 | `app_api` / `app_worker` / `app_readonly` / `migrator` roles created with least-privilege grants | M1 |
 | 22 | Credential inventory established | M1 |
@@ -424,6 +511,10 @@ Everything that must be true before `ARCHITECTURE APPROVED` is a reasonable thin
 | 30 | Two-hostname exposure split | On SSO adoption or >10 staff |
 | 31 | Signed URLs reconsidered | At the doc 11 §3.6 triggers |
 | 32 | Cloudflare Tunnel | If the origin becomes a VM |
+
+**Corrected verdict on item 1:** PARTIALLY RESOLVED, not RESOLVED — the recommendation is
+final but the region is unverified and the provider is unconfirmed until Gate 0 settles a
+payment. This does not block approval; it blocks *commitment*.
 
 **Approval is blocked by items 16 and 17 only.** Item 16 is a name. Item 17 is twelve
 answers, most of which can be "agreed".
