@@ -1,9 +1,12 @@
 # Product definition: Obesity & Healthy Lifestyle Platform (Beta)
 
-> **Canonical.** Frozen at P0 on 2026-09-23 from the
-> [physician handoff](source/2026-09-product-truth-handoff.md). Code, design and
-> review follow this file. Changes are made only by closing or adding an entry
-> in [DECISIONS.md](../DECISIONS.md), in the same commit.
+> **Candidate product definition.** Drafted at P0 on 2026-09-23 from the
+> [physician handoff](source/2026-09-product-truth-handoff.md). It is a patch
+> for the existing obesity-platform codebase, not the foundation of a new one.
+> It becomes canonical when it is merged into that codebase after the gap
+> audit ([DECISIONS A-11](../DECISIONS.md#a-11-codebase-continuity)). Changes
+> are made only by closing or adding an entry in
+> [DECISIONS.md](../DECISIONS.md), in the same commit.
 
 Every statement below carries a tag showing where it comes from. The handoff
 exists to keep these apart, so the tags matter.
@@ -13,6 +16,7 @@ exists to keep these apart, so the tags matter.
 | **`PHY`** | The physician asked for it (handoff §2) | Only the physician can |
 | **`INT`** | Our interpretation of the physician's intent. Not confirmed by the physician | Yes, but check it with the physician first |
 | **`DEC`** | Decided without waiting (handoff §10, DECISIONS A-xx) | Yes, with a new entry in DECISIONS.md |
+| **`PROV`** | A provisional guardrail, in force now and awaiting the physician's approval | Only the physician can confirm, narrow or widen it |
 | **`OPEN`** | Unresolved. A safe default ships behind a flag | Only its owner can close it (D-xx) |
 
 ## 1. The product in one sentence
@@ -64,7 +68,7 @@ is `INT` and still needs the physician's confirmation (`OPEN` D-15).
 Constraints that apply to every patient surface:
 
 - `DEC` A-03: never assume surgery. A bariatric episode is optional.
-- `DEC` A-12: the free core shows measurements and trends. It never recommends
+- `PROV` A-12: the free core shows measurements and trends. It never recommends
   a target weight, rate of loss, calories or medication.
 - `OPEN` D-11: BMI is shown as a number and a trend, with no category label
   until the physician approves thresholds and wording.
@@ -108,7 +112,7 @@ database, UI and permissions. A screen existing does not make it done.
 
 | Phase | Journey | Done when |
 | --- | --- | --- |
-| **P0** Product truth freeze | This file and DECISIONS.md | Every P1 row in the [blocking decisions](../DECISIONS.md#blocking-decisions-in-build-order) table has an answer or an accepted safe default |
+| **P0** Product truth freeze | Locate the existing codebase (A-11) → gap audit (Keep / Modify / Delete / Missing) → merge this file and DECISIONS.md into it | The codebase is located, the audit is done, and every CONFIGURABLE or CONTENT entry in the [classification](../DECISIONS.md#decision-classification) has its conservative default in place. The physician's answers are not a precondition for P1 |
 | **P1** Free patient core | Onboarding → height and weight → Home → weight history and progress → Health Profile → Health Now | A new patient reaches a useful Home without joining Follow-up. Weight is saved and shown as meaningful progress. Health Profile and Health Now are clearly different |
 | **P2** Follow-up core | Request → assignment → specialist action → appointment → care plan and tasks → patient sees the next step | The patient can see assignment, appointment, plan, tasks and next step |
 | **P3** Provider Action Center | Today queue, patient overview, ownership, next action, closure, overdue handling | An authorized provider can run Follow-up without seeing other patients. Ownership and next action are obvious |

@@ -2,7 +2,7 @@
 
 > **Source record. Do not edit.** This is a verbatim transcription of
 > `Product_Truth_Priority_Handoff_Obesity_Platform.docx`, received 2026-09-23.
-> The living product definition is [`../PRODUCT.md`](../PRODUCT.md), and every
+> The candidate product definition is [`../PRODUCT.md`](../PRODUCT.md), and every
 > change to it goes through [`../../DECISIONS.md`](../../DECISIONS.md). If the
 > two disagree, PRODUCT.md is current and this file shows where it started.
 
