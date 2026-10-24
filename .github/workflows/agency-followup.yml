@@ -113,7 +113,7 @@ jobs:
           {
             echo "### Staging: ${{ steps.deploy.outputs.url }}"
             echo '```'
-            cat "$RUNNER_TEMP/e2e.txt" "$RUNNER_TEMP/push.txt" 2>/dev/null
+            cat "$RUNNER_TEMP/e2e.txt" "$RUNNER_TEMP/push.txt" 2>/dev/null || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
@@ -172,6 +172,6 @@ jobs:
             echo "- commit: \`${GITHUB_SHA}\`"
             echo "- version: \`${{ steps.deploy.outputs.version }}\`"
             echo '```'
-            cat "$RUNNER_TEMP/smoke.txt" "$RUNNER_TEMP/cron.txt" 2>/dev/null
+            cat "$RUNNER_TEMP/smoke.txt" "$RUNNER_TEMP/cron.txt" 2>/dev/null || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
