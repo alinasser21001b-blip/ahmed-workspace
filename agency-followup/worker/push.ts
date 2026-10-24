@@ -31,12 +31,12 @@ export type PushResult = { devices: number; sent: number; failed: number; gone: 
 /** Send one message to every active device of a member. */
 export async function sendToUser(ctx: Ctx, userId: string, data: PushData, origin: string, urgency: "normal" | "high" = "normal"): Promise<PushResult> {
   const out: PushResult = { devices: 0, sent: 0, failed: 0, gone: 0, errors: [], retryable: false };
+  const { results } = await ctx.db.prepare("select id, endpoint, p256dh, auth from push_subscriptions where user_id = ? and revoked_at is null").bind(userId).all<SubRow>();
+  out.devices = results.length;
   if (!pushConfigured(ctx.env)) {
     out.errors.push("push_not_configured");
     return out;
   }
-  const { results } = await ctx.db.prepare("select id, endpoint, p256dh, auth from push_subscriptions where user_id = ? and revoked_at is null").bind(userId).all<SubRow>();
-  out.devices = results.length;
   const vapid = { subject: origin, publicKey: ctx.env.VAPID_PUBLIC_KEY, privateKey: ctx.env.VAPID_PRIVATE_KEY };
   const nowIso = ctx.now.toISOString();
   for (const s of results) {

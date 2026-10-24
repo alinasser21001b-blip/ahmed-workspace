@@ -221,7 +221,7 @@ export async function drainOutbox(ctx: Ctx, limit = 40): Promise<{ sent: number;
     if (r.sent > 0) {
       await setStatus(o.id, "sent", r.failed ? r.errors.join("; ").slice(0, 300) : null);
       stats.sent++;
-    } else if (r.devices === 0 || (r.devices === r.gone && r.failed === 0)) {
+    } else if (r.devices === 0 || r.errors.includes("push_not_configured") || (r.devices === r.gone && r.failed === 0)) {
       await setStatus(o.id, "skipped", r.errors.includes("push_not_configured") ? "push_not_configured" : "no_device");
       stats.skipped++;
     } else if (r.retryable && o.attempts + 1 < MAX_ATTEMPTS) {
