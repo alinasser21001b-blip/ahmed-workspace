@@ -74,10 +74,18 @@ export function clientIp(c: C): string {
  */
 export function limitAddress(ip: string): string {
   if (!ip.includes(":")) return ip;
+  // IPv4-mapped IPv6 (::ffff:192.0.2.1) is the IPv4 address.
+  const mapped = /^(?:0{0,4}:){0,5}(?::|ffff:)(?:ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+  if (mapped) return mapped[1];
+  if (!/^[0-9a-f:]+$/i.test(ip) || ip.split("::").length > 2) return ip;
   const [head, tail] = ip.split("::");
   const h = head ? head.split(":") : [];
   const t = tail ? tail.split(":") : [];
   const groups = ip.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : ip.split(":");
+  if (groups.length === 8 && groups.slice(0, 5).every((g) => /^0+$/.test(g)) && /^ffff$/i.test(groups[5])) {
+    const n = (g: string) => parseInt(g, 16);
+    return [n(groups[6]) >> 8, n(groups[6]) & 255, n(groups[7]) >> 8, n(groups[7]) & 255].join(".");
+  }
   return `${groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 

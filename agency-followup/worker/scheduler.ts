@@ -8,7 +8,7 @@ import { OPEN_STATUSES, WORKING_STATUSES, type TaskStatus } from "../shared/doma
 import { actorFor, loadCtx, type BlockerRow, type Ctx, type TaskRow } from "./db";
 import { businessMinutesBetween, isBusinessTime } from "./lib/time";
 import { ACK_KINDS, BLOCKER_KINDS_N, DUE_KINDS, PUSH_TEXT, REVIEW_KINDS, notifyStmts, type NotifyInput } from "./notify";
-import { canViewTask, escalationChain, reviewerChain, type Member } from "./policy";
+import { canViewTask, escalationChain, type Member } from "./policy";
 import { deliver, type SubRow } from "./push";
 
 export type SchedulerSummary = { tasks: number; created: number; sent: number; skipped: number; failed: number; cancelled: number; retried: number; inHours: boolean };
@@ -76,6 +76,11 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
     const client = ctx.clientsById.get(t.client_id);
     const assignee = ctx.membersById.get(t.assignee_id);
     if (!client || !assignee) continue;
+    /** The first person above both `holder` and the assignee, so an escalation never lands on either of them. */
+    const above = (holder: Member) => {
+      const top = holder.rank >= assignee.rank ? holder : assignee;
+      return escalationChain(top, client, ctx.members).filter((m) => m.id !== holder.id && m.id !== assignee.id && sees(m))[0];
+    };
     const g = grants.get(t.id) ?? new Set<string>();
     const sees = (m: Member) => {
       const a = actorFor(ctx, m.id);
@@ -110,8 +115,10 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
     }
 
     // 2. Due soon / overdue. While a blocker is open the task waits on its
-    // resolver, so the assignee is not chased for it.
-    if (WORKING_STATUSES.includes(t.status as TaskStatus) && t.due_at && open.length === 0) {
+    // resolver, so the assignee is not chased for it, unless he holds that
+    // blocker himself (an account manager waiting on her own client).
+    const waitingOnOthers = open.some((b) => b.resolver_id !== assignee.id || assignee.role === "owner");
+    if (WORKING_STATUSES.includes(t.status as TaskStatus) && t.due_at && !waitingOnOthers) {
       const due = new Date(t.due_at);
       const soon = ctx.rules.dueSoonMinutes[speed] * 60_000;
       if (ctx.now < due && due.getTime() - ctx.now.getTime() <= soon) {
@@ -135,12 +142,15 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
       const since = b.resolver_since && b.resolver_since > b.opened_at ? b.resolver_since : b.opened_at;
       const elapsed = businessMinutesBetween(new Date(since), ctx.now, ctx.workHours);
       const label = b.kind === "client_wait" ? "بانتظار العميل" : b.kind === "clarification" ? "طلب توضيح" : "عائق";
+      // Keys carry the holder and since when he holds it, so a blocker that
+      // moves (or comes back) is followed up afresh with its current holder.
+      const stint = `${resolver.id}:${since}`;
       if (elapsed >= follow) {
-        push({ userId: resolver.id, task: ref, kind: "blocker_follow", title: `${label} ما زال مفتوحاً: ${t.title}`, body: `${b.reason.slice(0, 120)} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, refId: b.id, dedupeKey: `blocker_follow:${b.id}:${resolver.id}:1` });
+        push({ userId: resolver.id, task: ref, kind: "blocker_follow", title: `${label} ما زال مفتوحاً: ${t.title}`, body: `${b.reason.slice(0, 120)} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, refId: b.id, dedupeKey: `blocker_follow:${b.id}:${stint}:1` });
       }
       if (elapsed >= follow * 2) {
-        const up = escalationChain(resolver, client, ctx.members).filter(sees)[0];
-        if (up) push({ userId: up.id, task: ref, kind: "blocker_escalation", title: `${label} عند ${resolver.name} ما زال مفتوحاً: ${t.title}`, body: b.reason.slice(0, 120), url, refId: b.id, dedupeKey: `blocker_follow:${b.id}:${resolver.id}:2` });
+        const up = above(resolver);
+        if (up) push({ userId: up.id, task: ref, kind: "blocker_escalation", title: `${label} عند ${resolver.name} ما زال مفتوحاً: ${t.title}`, body: b.reason.slice(0, 120), url, refId: b.id, dedupeKey: `blocker_follow:${b.id}:${stint}:2` });
       }
     }
 
@@ -151,11 +161,11 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
       const since = t.reviewer_since && t.reviewer_since > t.submitted_at ? t.reviewer_since : t.submitted_at;
       const elapsed = businessMinutesBetween(new Date(since), ctx.now, ctx.workHours);
       if (reviewer && elapsed >= remind) {
-        push({ userId: reviewer.id, task: ref, kind: "review_reminder", title: `بانتظار مراجعتك منذ ${fmtBusinessDuration(elapsed)}: ${t.title}`, body: `${assignee.name} · ${client.name}`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:${t.reviewer_id}:0` });
+        push({ userId: reviewer.id, task: ref, kind: "review_reminder", title: `بانتظار مراجعتك منذ ${fmtBusinessDuration(elapsed)}: ${t.title}`, body: `${assignee.name} · ${client.name}`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:${t.reviewer_id}:${since}:0` });
       }
       if (reviewer && escalate && elapsed >= escalate) {
-        const up = reviewerChain(reviewer, client, ctx.members).filter(sees)[0];
-        if (up) push({ userId: up.id, task: ref, kind: "review_escalation", title: `مراجعة متأخرة عند ${reviewer.name}: ${t.title}`, body: `${client.name} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:${t.reviewer_id}:1` });
+        const up = above(reviewer);
+        if (up) push({ userId: up.id, task: ref, kind: "review_escalation", title: `مراجعة متأخرة عند ${reviewer.name}: ${t.title}`, body: `${client.name} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:${t.reviewer_id}:${since}:1` });
       }
     }
   }
@@ -175,8 +185,11 @@ type NoteRow = { id: string; kind: string; url: string | null; ref_id: string | 
 
 const BACKOFF_MIN = [1, 5, 15];
 const MAX_ATTEMPTS = 4;
-// Push requests per run: Workers Free allows 50 outbound requests per invocation.
-const FETCH_BUDGET = 40;
+// Push requests per run. Each one costs about a millisecond of CPU for its
+// encryption and signature, and Workers Free allows 10 ms of CPU and 50
+// outbound requests per invocation; the cron runs every minute, so the rest
+// simply go out on the next runs.
+export const FETCH_BUDGET = 8;
 
 /**
  * Deliver due outbox entries to devices. At-least-once: a crash mid-send can
@@ -221,8 +234,8 @@ export async function drainOutbox(ctx: Ctx, limit = 20): Promise<{ sent: number;
   for (const sub of subs.results) subsByUser.set(sub.user_id, [...(subsByUser.get(sub.user_id) ?? []), sub]);
   const subject = origin?.value ?? "mailto:admin@agency-followup.invalid";
 
-  // Status writes go out every few rows, so a run that dies part-way repeats
-  // at most the rows since the last flush.
+  // Status writes go out every three rows or so, so a run that dies part-way
+  // repeats at most the rows since the last flush.
   let writes: D1PreparedStatement[] = [];
   const flush = async () => {
     for (let i = 0; i < writes.length; i += 80) await ctx.db.batch(writes.slice(i, i + 80));
@@ -273,7 +286,7 @@ export async function drainOutbox(ctx: Ctx, limit = 20): Promise<{ sent: number;
       setStatus(o.id, "failed", r.errors.join("; ").slice(0, 300));
       stats.failed++;
     }
-    if (writes.length >= 15) await flush();
+    if (writes.length >= 6) await flush();
   }
   await flush();
   return stats;

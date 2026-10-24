@@ -418,31 +418,46 @@ tasks.patch("/:id", async (c) => {
     const { results: openBlockers } = await ctx.db.prepare("select * from blockers where task_id = ? and resolved_at is null").bind(t.id).all<BlockerRow>();
     for (const b of openBlockers) {
       if (b.kind === "clarification" && b.opened_by === t.assignee_id) {
-        stmts.push(ctx.db.prepare("update blockers set resolved_at = ?, resolved_by = ?, resolution = ? where id = ? and resolved_at is null").bind(nowIso, actor.id, "أُغلق مع إعادة إسناد المهمة", b.id));
+        const resolution = "أُغلق مع إعادة إسناد المهمة";
+        stmts.push(
+          ctx.db.prepare("update blockers set resolved_at = ?, resolved_by = ?, resolution = ? where id = ? and resolved_at is null").bind(nowIso, actor.id, resolution, b.id),
+          logEventStmt(ctx.db, t.id, actor.id, "blocker_resolved", { blocker: b.id, kind: b.kind, resolution }, ctx.now),
+        );
         continue;
       }
-      // Who should now clear it: not someone who lost the task, and not the new assignee for an internal blocker.
-      const move = (b.resolver_id === t.assignee_id && !oldStillSees) || (b.kind === "internal" && b.resolver_id === newAssignee.id && newAssignee.role !== "owner");
-      if (!move || handTo === b.resolver_id) continue;
+      // Who should now clear it: not someone who lost the task; not the new
+      // assignee for an internal blocker; and waiting on the client goes back
+      // to the client's account manager when it would land on the new assignee.
+      const am = client.account_manager_id;
+      const dest = b.kind === "client_wait" && b.resolver_id === newAssignee.id && newAssignee.id !== am && newAssignee.role !== "owner" ? am : handTo;
+      const move =
+        (b.resolver_id === t.assignee_id && !oldStillSees) ||
+        (b.kind === "internal" && b.resolver_id === newAssignee.id && newAssignee.role !== "owner") ||
+        (b.kind === "client_wait" && b.resolver_id === newAssignee.id && newAssignee.id !== am && newAssignee.role !== "owner");
+      if (!move || dest === b.resolver_id) continue;
       stmts.push(
-        ctx.db.prepare("update blockers set resolver_id = ?, resolver_since = ? where id = ? and resolved_at is null").bind(handTo, nowIso, b.id),
-        logEventStmt(ctx.db, t.id, actor.id, "blocker_handed_over", { blocker: b.id, from: b.resolver_id, to: handTo }, ctx.now),
-        ...notifyVisible(ctx, updated, newGrants, [handTo], actor.id, () => ({
+        ctx.db.prepare("update blockers set resolver_id = ?, resolver_since = ? where id = ? and resolved_at is null").bind(dest, nowIso, b.id),
+        logEventStmt(ctx.db, t.id, actor.id, "blocker_handed_over", { blocker: b.id, from: b.resolver_id, to: dest }, ctx.now),
+        ...notifyVisible(ctx, updated, newGrants, [dest], actor.id, () => ({
           task: { id: t.id, cycle: newCycle, priority: updated.priority },
           kind: "blocker_opened",
           title: `${b.kind === "client_wait" ? "بانتظار العميل" : "عائق"} انتقل إليك: ${t.title}`,
           body: b.reason.slice(0, 200),
           url: taskUrl(t.id),
           refId: b.id,
-          dedupeKey: `blocker_handover:${b.id}:${handTo}:${newCycle}`,
+          dedupeKey: `blocker_handover:${b.id}:${dest}:${newCycle}`,
         })),
       );
     }
-    stmts.push(
-      ctx.db
-        .prepare("update due_proposals set status = 'rejected', decided_by = ?, decided_at = ?, decision_note = ? where task_id = ? and status = 'pending' and proposed_by = ?")
-        .bind(actor.id, nowIso, "أُعيد إسناد المهمة", t.id, t.assignee_id),
-    );
+    const { results: pendingProposals } = await ctx.db.prepare("select id from due_proposals where task_id = ? and status = 'pending' and proposed_by = ?").bind(t.id, t.assignee_id).all<{ id: string }>();
+    for (const p of pendingProposals) {
+      stmts.push(
+        ctx.db
+          .prepare("update due_proposals set status = 'rejected', decided_by = ?, decided_at = ?, decision_note = ? where id = ? and status = 'pending'")
+          .bind(actor.id, nowIso, "أُعيد إسناد المهمة", p.id),
+        logEventStmt(ctx.db, t.id, actor.id, "due_proposal_rejected", { proposal: p.id, note: "أُعيد إسناد المهمة" }, ctx.now),
+      );
+    }
   }
   stmts.unshift(...updateStmts(ctx, opId, t, set));
   stmts.push(logEventStmt(ctx.db, t.id, actor.id, "edited", { changes, reason: input.reason ?? null }, ctx.now));

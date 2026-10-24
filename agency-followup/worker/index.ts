@@ -59,7 +59,9 @@ app.post("/api/auth/sign-in/username", async (c) => {
   // The attempt is reserved before the password check (so parallel guesses
   // are counted too) and refunded only when the sign-in fully succeeds.
   const pairKey = `login:u:${uname}:${ip}`;
-  if (!(await hit(db, `login:ip:${ip}`, 30, 900, now)) || !(await hit(db, pairKey, 8, 900, now))) {
+  // The member's own budget first: once he is over it, further taps do not
+  // use up the address's shared budget (the office's four phones share one).
+  if (!(await hit(db, pairKey, 8, 900, now)) || !(await hit(db, `login:ip:${ip}`, 30, 900, now))) {
     throw new ApiError(429, "rate_limited", "محاولات دخول كثيرة. انتظر ربع ساعة ثم أعد المحاولة.");
   }
 

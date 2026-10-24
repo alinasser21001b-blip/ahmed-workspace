@@ -139,7 +139,9 @@ async function photographerConflicts(ctx: Ctx, actor: Actor, bookings: BookingRo
       /* ignore */
     }
     if (actor.role !== "owner" && d.client && !actor.scopes[d.client]) continue;
-    out.push({ kind: "refused_booking", at: d.starts_at ?? e.created_at, text: `${ctx.membersById.get(e.actor_id)?.name ?? ""} طلب وقتاً محجوزاً مسبقاً (${ctx.clientsById.get(d.client ?? "")?.name ?? ""})`, task_id: e.task_id });
+    // Link only tasks on this member's open list (archived or hidden ones stay unlinked).
+    const linkable = e.task_id && taskRows.some((t) => t.id === e.task_id) ? e.task_id : null;
+    out.push({ kind: "refused_booking", at: d.starts_at ?? e.created_at, text: `${ctx.membersById.get(e.actor_id)?.name ?? ""} طلب وقتاً محجوزاً مسبقاً (${ctx.clientsById.get(d.client ?? "")?.name ?? ""})`, task_id: linkable });
   }
   const photographers = new Set(ctx.members.filter((m) => m.role === "photographer").map((m) => m.id));
   for (const t of taskRows) {

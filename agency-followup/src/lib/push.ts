@@ -46,6 +46,15 @@ export async function enablePush(publicKey: string): Promise<void> {
   if (!reg) throw new Error("no_sw");
   await navigator.serviceWorker.ready;
   let sub = await reg.pushManager.getSubscription();
+  // A subscription the server has dropped (the push service refused it) is
+  // replaced with a fresh one rather than sent back.
+  if (sub) {
+    const r = await api<{ active: boolean }>("/api/push/check", { body: { endpoint: sub.endpoint } }).catch(() => ({ active: true }));
+    if (!r.active) {
+      await sub.unsubscribe();
+      sub = null;
+    }
+  }
   // A subscription made with another key cannot be reused.
   if (sub) {
     const existing = sub.options.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null;
