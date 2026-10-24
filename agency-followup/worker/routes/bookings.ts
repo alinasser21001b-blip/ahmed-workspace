@@ -53,13 +53,14 @@ export async function shapeBookingsForViewer(ctx: Ctx, actor: Actor, rows: Booki
   if (taskIds === "[]") return shaped.map((b) => (b.busy_only ? b : { ...b, task_id: null }));
   const [linked, granted] = await Promise.all([
     ctx.db
-      .prepare("select id, client_id, requester_id, assignee_id, reviewer_id, status from tasks where id in (select value from json_each(?))")
+      .prepare("select id, client_id, requester_id, assignee_id, reviewer_id, status, archived_at from tasks where id in (select value from json_each(?))")
       .bind(taskIds)
-      .all<{ id: string; client_id: string; requester_id: string; assignee_id: string; reviewer_id: string; status: string }>(),
+      .all<{ id: string; client_id: string; requester_id: string; assignee_id: string; reviewer_id: string; status: string; archived_at: string | null }>(),
     ctx.db.prepare("select task_id from task_grants where user_id = ? and task_id in (select value from json_each(?))").bind(actor.id, taskIds).all<{ task_id: string }>(),
   ]);
   const grantedIds = new Set(granted.results.map((g) => g.task_id));
-  const visible = new Set(linked.results.filter((t) => canViewTask(actor, t, grantedIds.has(t.id))).map((t) => t.id));
+  // Same rule as opening the task: archived tasks are the owner's only.
+  const visible = new Set(linked.results.filter((t) => canViewTask(actor, t, grantedIds.has(t.id)) && (!t.archived_at || actor.role === "owner")).map((t) => t.id));
   return shaped.map((b) => (b.busy_only ? b : { ...b, task_id: b.task_id && visible.has(b.task_id) ? b.task_id : null }));
 }
 

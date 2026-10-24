@@ -63,7 +63,7 @@ npx wrangler d1 execute agency-followup-db --local --file /tmp/s.sql
 ## الاختبارات
 
 ```bash
-npx vitest run     # 84 اختباراً داخل بيئة Workers (الصلاحيات، الدورة، المجدول، الحجوزات، الدخول، Push)
+npx vitest run     # 123 اختباراً داخل بيئة Workers: الصلاحيات والدورة والمجدول والحجوزات والدخول وPush، ومعها اختبارات انحدار لملاحظات المراجعة الأمنية
 BASE_URL=http://localhost:5173 LINKS=/tmp/links.txt node e2e/run.mjs   # سيناريو التجربة في متصفح حقيقي
 BASE_URL=https://... node e2e/smoke.mjs                               # فحوص النسخة المنشورة دون حسابات
 ```
