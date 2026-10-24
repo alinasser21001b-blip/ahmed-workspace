@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getAuth } from "./auth";
 import { actorFor, loadCtx } from "./db";
 import { seedDemo } from "./demo";
-import { ApiError, clientIp, hit, type AppEnv } from "./http";
+import { ApiError, clientIp, hit, peek, type AppEnv } from "./http";
 import { account, setup } from "./routes/account";
 import { admin } from "./routes/admin";
 import { bookings } from "./routes/bookings";
@@ -54,13 +54,20 @@ app.post("/api/auth/sign-in/username", async (c) => {
   }
   const uname = String(raw.username ?? "").trim().toLowerCase().slice(0, 40);
   const ip = clientIp(c);
-  const allowed = (await hit(db, `login:ip:${ip}`, 30, 900, now)) && (await hit(db, `login:u:${uname}:${ip}`, 8, 900, now)) && (await hit(db, `login:u:${uname}`, 40, 3600, now));
+  // Limits are per address, and per username from that address. Nothing is
+  // counted per username alone, so nobody elsewhere can lock a member out.
+  const pairKey = `login:u:${uname}:${ip}`;
+  const allowed = (await hit(db, `login:ip:${ip}`, 30, 900, now)) && (await peek(db, pairKey, 900, now)) < 8;
   if (!allowed) throw new ApiError(429, "rate_limited", "محاولات دخول كثيرة. انتظر ربع ساعة ثم أعد المحاولة.");
 
   const auth = getAuth(c.env, new URL(c.req.url).origin);
   const res = await auth.handler(c.req.raw);
   if (res.status === 429) throw new ApiError(429, "rate_limited", "محاولات دخول كثيرة. انتظر قليلاً ثم أعد المحاولة.");
-  if (!res.ok) throw new ApiError(401, "invalid_credentials", GENERIC_LOGIN_ERROR);
+  if (!res.ok) {
+    await hit(db, pairKey, 8, 900, now);
+    throw new ApiError(401, "invalid_credentials", GENERIC_LOGIN_ERROR);
+  }
+  await db.prepare("delete from request_limits where key = ?").bind(pairKey).run();
   const data = (await res.clone().json()) as { user?: { id?: string } };
   const member = data.user?.id ? await db.prepare("select active from members where user_id = ?").bind(data.user.id).first<{ active: number }>() : null;
   if (!member || member.active !== 1) {

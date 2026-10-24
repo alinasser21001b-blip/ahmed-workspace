@@ -84,6 +84,14 @@ push.post("/subscribe", async (c) => {
     )
     .bind(randomId("ps_"), c.get("actor").id, c.get("sessionId"), input.endpoint, input.keys.p256dh, input.keys.auth, (c.req.header("user-agent") ?? "").slice(0, 200), nowIso)
     .run();
+  // At most five active devices per member; the oldest beyond that are dropped.
+  await ctx.db
+    .prepare(
+      `update push_subscriptions set revoked_at = ? where user_id = ? and revoked_at is null and id not in
+         (select id from push_subscriptions where user_id = ? and revoked_at is null order by created_at desc limit 5)`,
+    )
+    .bind(nowIso, c.get("actor").id, c.get("actor").id)
+    .run();
   return c.json({ ok: true });
 });
 

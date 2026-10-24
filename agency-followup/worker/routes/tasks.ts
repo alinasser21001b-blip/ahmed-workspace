@@ -61,6 +61,11 @@ function canSee(ctx: Ctx, t: TaskRow, grants: Set<string>, userId: string): bool
   return !!a && canViewTask(a, t, grants.has(userId));
 }
 
+/** Task notifications go only to people who may open the task (as it stands after this change). */
+function notifyVisible(ctx: Ctx, t: TaskRow, grants: Set<string>, userIds: (string | null | undefined)[], actorId: string, make: Parameters<typeof notifyMany>[3]) {
+  return notifyMany(ctx, userIds.filter((u): u is string => !!u && canSee(ctx, t, grants, u)), actorId, make);
+}
+
 const taskUrl = (taskId: string) => `/tasks/${taskId}`;
 const clientName = (ctx: Ctx, t: Pick<TaskRow, "client_id">) => ctx.clientsById.get(t.client_id)?.name ?? "";
 
@@ -341,11 +346,13 @@ tasks.patch("/:id", async (c) => {
   const stmts: D1PreparedStatement[] = [];
   let newCycle = t.cycle;
   let newAssignee = assignee;
+  let grantsNewAssignee = false;
   if (assigneeChanged) {
     if (t.status === "in_review") throw badRequest("لا يمكن تغيير المنفذ أثناء المراجعة. اطلب تعديلاً أولاً.");
     newAssignee = member(ctx, input.assignee_id!);
     const d = canAssignTo(actor, client, newAssignee, ctx.members);
     if (!d.ok) throw forbidden(d.reason);
+    grantsNewAssignee = !!d.grant;
     newCycle = t.cycle + 1;
     Object.assign(set, {
       assignee_id: newAssignee.id,
@@ -358,6 +365,13 @@ tasks.patch("/:id", async (c) => {
       ack_clock_from: ctx.now.toISOString(),
     });
     note("assignee_id", t.assignee_id, newAssignee.id);
+    // The single-task access that came with the old assignment ends with it.
+    if (grants.has(t.assignee_id)) {
+      stmts.push(
+        ctx.db.prepare("delete from task_grants where task_id = ? and user_id = ?").bind(t.id, t.assignee_id),
+        logEventStmt(ctx.db, t.id, actor.id, "grant_revoked", { user: t.assignee_id, reason: "إعادة الإسناد" }, ctx.now),
+      );
+    }
     if (d.grant && !grants.has(newAssignee.id)) {
       const reason = "إعادة إسناد من المدير إلى عضو خارج فريق العميل";
       stmts.push(
@@ -390,12 +404,26 @@ tasks.patch("/:id", async (c) => {
 
   const opId = randomId("op_");
   const updated = { ...t, ...set } as TaskRow;
+  const newGrants = new Set(grants);
+  if (assigneeChanged) {
+    newGrants.delete(t.assignee_id);
+    if (grantsNewAssignee) newGrants.add(newAssignee.id);
+    // What the old assignee was holding moves on with the task: blockers he was
+    // to resolve go to the requester, and his pending date proposals close.
+    const handTo = updated.requester_id !== newAssignee.id ? updated.requester_id : updated.reviewer_id;
+    stmts.push(
+      ctx.db.prepare("update blockers set resolver_id = ? where task_id = ? and resolved_at is null and resolver_id = ?").bind(handTo, t.id, t.assignee_id),
+      ctx.db
+        .prepare("update due_proposals set status = 'rejected', decided_by = ?, decided_at = ?, decision_note = ? where task_id = ? and status = 'pending' and proposed_by = ?")
+        .bind(actor.id, ctx.now.toISOString(), "أُعيد إسناد المهمة", t.id, t.assignee_id),
+    );
+  }
   stmts.unshift(...updateStmts(ctx, opId, t, set));
   stmts.push(logEventStmt(ctx.db, t.id, actor.id, "edited", { changes, reason: input.reason ?? null }, ctx.now));
   if (assigneeChanged) {
     stmts.push(...cancelPendingStmts(ctx, t.id, { beforeCycle: newCycle }));
     stmts.push(
-      ...notifyMany(ctx, [newAssignee.id], actor.id, () => ({
+      ...notifyVisible(ctx, updated, newGrants, [newAssignee.id], actor.id, () => ({
         task: { id: t.id, cycle: newCycle, priority: updated.priority },
         kind: "reassigned",
         title: `أُسندت إليك: ${t.title}`,
@@ -403,11 +431,11 @@ tasks.patch("/:id", async (c) => {
         url: taskUrl(t.id),
         dedupeKey: `assigned:${t.id}:${newCycle}`,
       })),
-      ...notifyMany(ctx, [t.assignee_id], actor.id, () => ({
+      ...notifyVisible(ctx, t, grants, [t.assignee_id], actor.id, () => ({
         task: { id: t.id, cycle: newCycle, priority: updated.priority },
         kind: "reassigned_away",
-        title: `أُسندت مهمة «${t.title}» إلى ${newAssignee.name}`,
-        body: `السبب: ${input.reason}`,
+        title: `أُسندت مهمة «${t.title}» إلى شخص آخر`,
+        body: "لم تعد هذه المهمة مسندة إليك.",
         url: null,
         push: false,
         dedupeKey: `reassigned_away:${t.id}:${newCycle}`,
@@ -417,7 +445,7 @@ tasks.patch("/:id", async (c) => {
   if (dueChanged) {
     stmts.push(...cancelPendingStmts(ctx, t.id, { kinds: DUE_KINDS }));
     stmts.push(
-      ...notifyMany(ctx, [updated.assignee_id], actor.id, () => ({
+      ...notifyVisible(ctx, updated, newGrants, [updated.assignee_id], actor.id, () => ({
         task: { id: t.id, cycle: newCycle, priority: updated.priority },
         kind: "due_changed",
         title: `تغيّر موعد: ${t.title}`,
@@ -429,10 +457,20 @@ tasks.patch("/:id", async (c) => {
   }
   if (reviewerChanged && updated.status === "in_review") {
     stmts.push(...cancelPendingStmts(ctx, t.id, { kinds: REVIEW_KINDS }));
+    stmts.push(
+      ...notifyVisible(ctx, updated, newGrants, [reviewerId], actor.id, () => ({
+        task: { id: t.id, cycle: newCycle, priority: updated.priority },
+        kind: "submitted",
+        title: `بانتظار مراجعتك: ${t.title}`,
+        body: `أصبحت المراجع بدلاً من ${member(ctx, t.reviewer_id).name}`,
+        url: taskUrl(t.id),
+        dedupeKey: `submitted:${t.id}:${t.cycle}:${t.review_round}:${reviewerId}`,
+      })),
+    );
   }
   if (priorityChanged && !assigneeChanged && !dueChanged) {
     stmts.push(
-      ...notifyMany(ctx, [updated.assignee_id], actor.id, () => ({
+      ...notifyVisible(ctx, updated, newGrants, [updated.assignee_id], actor.id, () => ({
         task: { id: t.id, cycle: newCycle, priority: updated.priority },
         kind: "due_changed",
         title: `تغيّرت أولوية: ${t.title} ← ${PRIORITY_LABEL[updated.priority]}`,
@@ -499,7 +537,7 @@ tasks.post("/:id/actions/:action", async (c) => {
   const ctx = c.get("ctx");
   const actor = c.get("actor");
   const action = c.req.param("action") as ActionName;
-  if (!(action in schemas)) throw notFound();
+  if (!Object.hasOwn(schemas, action)) throw notFound();
   const { t, grants } = await loadVisibleTask(ctx, actor, c.req.param("id"));
   const input = (await body(c, schemas[action])) as Record<string, unknown> & { version: number };
   if (input.version !== t.version) throw conflict();
@@ -523,7 +561,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       Object.assign(set, { status: "acknowledged", acknowledged_at: nowIso });
       event("acknowledged");
       stmts.push(...cancelPendingStmts(ctx, t.id, { kinds: ACK_KINDS }));
-      stmts.push(...notifyMany(ctx, [t.requester_id], actor.id, () => ({ task: ref, kind: "acknowledged", title: `${actor.name} استلم: ${t.title}`, body: cname, url: taskUrl(t.id), push: false, dedupeKey: `acknowledged:${t.id}:${t.cycle}` })));
+      stmts.push(...notifyVisible(ctx, t, grants, [t.requester_id], actor.id, () => ({ task: ref, kind: "acknowledged", title: `${actor.name} استلم: ${t.title}`, body: cname, url: taskUrl(t.id), push: false, dedupeKey: `acknowledged:${t.id}:${t.cycle}` })));
       break;
     }
     case "start": {
@@ -546,7 +584,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       );
       event("clarification_requested", { blocker: blockerId, resolver: resolverId });
       stmts.push(
-        ...notifyMany(ctx, [resolverId], actor.id, () => ({
+        ...notifyVisible(ctx, t, grants, [resolverId], actor.id, () => ({
           task: ref,
           kind: "clarification",
           title: `${actor.name} يحتاج توضيحاً: ${t.title}`,
@@ -564,6 +602,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       const client = ctx.clientsById.get(t.client_id)!;
       let resolverId = (input.resolver_id as string | null) ?? null;
       if (!resolverId) resolverId = kind === "client_wait" ? client.account_manager_id : t.requester_id !== t.assignee_id ? t.requester_id : t.reviewer_id;
+      if (kind === "internal" && resolverId === actor.id && isAssignee(actor, t)) throw badRequest("اختر شخصاً آخر يحل العائق؛ لا يكون المنفذ مسؤولاً عن حل عائقه");
       if (!ctx.membersById.get(resolverId)?.active || !canSee(ctx, t, grants, resolverId)) throw badRequest("هذا الشخص لا يستطيع رؤية المهمة؛ اختر مسؤولاً آخر عن الحل");
       if (ctx.membersById.get(resolverId)!.role === "photographer" && kind === "client_wait") throw badRequest("متابعة العميل مسؤولية مسؤول الحساب");
       const blockerId = randomId("b_");
@@ -574,7 +613,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       );
       event("blocker_opened", { blocker: blockerId, kind, resolver: resolverId, reason: input.reason });
       stmts.push(
-        ...notifyMany(ctx, [resolverId], actor.id, () => ({
+        ...notifyVisible(ctx, t, grants, [resolverId], actor.id, () => ({
           task: ref,
           kind: "blocker_opened",
           title: `${kind === "client_wait" ? "بانتظار العميل" : "عائق"}: ${t.title}`,
@@ -595,12 +634,13 @@ tasks.post("/:id/actions/:action", async (c) => {
       if (b.kind === "clarification") {
         stmts.push(ctx.db.prepare("insert into comments (id, task_id, author_id, kind, body, created_at) values (?, ?, ?, 'clarification_answer', ?, ?)").bind(randomId("c_"), t.id, actor.id, resolution, nowIso));
         // The acknowledgement clock restarts from the answer: asking was not a delay.
-        if (t.status === "new") Object.assign(set, { ack_epoch: t.ack_epoch + 1, ack_clock_from: nowIso });
+        // Withdrawing one's own question does not restart the clock; an answer does.
+        if (t.status === "new" && actor.id !== b.opened_by) Object.assign(set, { ack_epoch: t.ack_epoch + 1, ack_clock_from: nowIso });
       }
       event("blocker_resolved", { blocker: b.id, kind: b.kind, resolution });
       stmts.push(...cancelPendingStmts(ctx, t.id, { refId: b.id }));
       stmts.push(
-        ...notifyMany(ctx, [t.assignee_id, b.opened_by], actor.id, () => ({
+        ...notifyVisible(ctx, t, grants, [t.assignee_id, b.opened_by], actor.id, () => ({
           task: ref,
           kind: b.kind === "clarification" ? "clarification_answered" : "blocker_resolved",
           title: `${b.kind === "clarification" ? "وصل التوضيح" : "زال العائق"}: ${t.title}`,
@@ -614,6 +654,7 @@ tasks.post("/:id/actions/:action", async (c) => {
     }
     case "propose_due": {
       if (!can.propose_due) deny();
+      if (Date.parse(input.proposed_due_at as string) < ctx.now.getTime()) throw badRequest("الموعد المقترح في الماضي", { field: "proposed_due_at" });
       const pid = randomId("p_");
       stmts.push(
         ctx.db
@@ -623,7 +664,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       event("due_proposed", { proposal: pid, proposed_due_at: input.proposed_due_at, reason: input.reason });
       const decider = t.requester_id !== actor.id ? t.requester_id : t.reviewer_id;
       stmts.push(
-        ...notifyMany(ctx, [decider], actor.id, () => ({
+        ...notifyVisible(ctx, t, grants, [decider], actor.id, () => ({
           task: ref,
           kind: "due_proposal",
           title: `${actor.name} يقترح موعداً: ${t.title}`,
@@ -642,6 +683,7 @@ tasks.post("/:id/actions/:action", async (c) => {
         .bind(input.proposal_id, t.id)
         .first<{ id: string; proposed_due_at: string; proposed_by: string; reason: string }>();
       if (!p) throw badRequest("الاقتراح غير موجود أو تقرر مسبقاً");
+      if (input.accept && Date.parse(p.proposed_due_at) < ctx.now.getTime()) throw badRequest("الموعد المقترح مضى؛ ارفضه أو غيّر الموعد مباشرة مع ذكر السبب");
       const accept = input.accept as boolean;
       stmts.push(
         ctx.db
@@ -655,7 +697,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       }
       event(accept ? "due_proposal_accepted" : "due_proposal_rejected", { proposal: p.id, from: t.due_at, to: accept ? p.proposed_due_at : t.due_at, note: input.note ?? null });
       stmts.push(
-        ...notifyMany(ctx, [p.proposed_by], actor.id, () => ({
+        ...notifyVisible(ctx, t, grants, [p.proposed_by], actor.id, () => ({
           task: ref,
           kind: "due_decided",
           title: `${accept ? "قُبل" : "رُفض"} الموعد المقترح: ${t.title}`,
@@ -681,7 +723,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       event("submitted", { round, url, version_label: input.version_label ?? null });
       stmts.push(...cancelPendingStmts(ctx, t.id, { kinds: [...ACK_KINDS, ...DUE_KINDS] }));
       stmts.push(
-        ...notifyMany(ctx, [t.reviewer_id], actor.id, () => ({
+        ...notifyVisible(ctx, t, grants, [t.reviewer_id], actor.id, () => ({
           task: ref,
           kind: "submitted",
           title: `بانتظار مراجعتك: ${t.title}`,
@@ -701,7 +743,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       event("approved", { round: t.review_round, publish_url: publishUrl ?? null });
       stmts.push(...cancelPendingStmts(ctx, t.id, {}));
       stmts.push(
-        ...notifyMany(ctx, [t.assignee_id, t.requester_id], actor.id, (u) => ({
+        ...notifyVisible(ctx, t, grants, [t.assignee_id, t.requester_id], actor.id, (u) => ({
           task: ref,
           kind: "approved",
           title: `اعتُمد وأُكمل: ${t.title}`,
@@ -720,7 +762,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       event("changes_requested", { round: t.review_round });
       stmts.push(...cancelPendingStmts(ctx, t.id, { kinds: REVIEW_KINDS }));
       stmts.push(
-        ...notifyMany(ctx, [t.assignee_id], actor.id, () => ({
+        ...notifyVisible(ctx, t, grants, [t.assignee_id], actor.id, () => ({
           task: ref,
           kind: "changes_requested",
           title: `مطلوب تعديل: ${t.title}`,
@@ -737,7 +779,7 @@ tasks.post("/:id/actions/:action", async (c) => {
       event("cancelled", { reason: input.reason, from: t.status });
       stmts.push(...cancelPendingStmts(ctx, t.id, {}));
       stmts.push(
-        ...notifyMany(ctx, [t.assignee_id, t.reviewer_id], actor.id, (u) => ({
+        ...notifyVisible(ctx, t, grants, [t.assignee_id, t.reviewer_id], actor.id, (u) => ({
           task: ref,
           kind: "cancelled",
           title: `أُلغيت: ${t.title}`,
@@ -796,7 +838,7 @@ const commentSchema = z.object({ body: text(2000, 1, "اكتب التعليق"),
 tasks.post("/:id/comments", async (c) => {
   const ctx = c.get("ctx");
   const actor = c.get("actor");
-  const { t } = await loadVisibleTask(ctx, actor, c.req.param("id"));
+  const { t, grants } = await loadVisibleTask(ctx, actor, c.req.param("id"));
   if (t.archived_at) throw badRequest("المهمة مؤرشفة");
   const input = await body(c, commentSchema);
   const cid = randomId("c_");
@@ -805,7 +847,7 @@ tasks.post("/:id/comments", async (c) => {
     .bind(cid, t.id, actor.id, input.body, input.client_key, ctx.now.toISOString())
     .run();
   if (res.meta.changes === 1) {
-    const stmts = notifyMany(ctx, [t.assignee_id, t.requester_id, t.reviewer_id], actor.id, (u) => ({
+    const stmts = notifyVisible(ctx, t, grants, [t.assignee_id, t.requester_id, t.reviewer_id], actor.id, (u) => ({
       task: { id: t.id, cycle: t.cycle, priority: t.priority },
       kind: "comment",
       title: `تعليق من ${actor.name}: ${t.title}`,

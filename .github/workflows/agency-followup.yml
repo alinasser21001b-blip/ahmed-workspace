@@ -108,6 +108,7 @@ jobs:
           rm -f "$RUNNER_TEMP/plinks.txt" "$RUNNER_TEMP/p.sql"
       - name: Summary
         if: always()
+        working-directory: ${{ runner.temp }}
         run: |
           {
             echo "### Staging: ${{ steps.deploy.outputs.url }}"
@@ -164,6 +165,7 @@ jobs:
           echo "::error::no scheduler run recorded within 10 minutes of the deploy"; exit 1
       - name: Summary
         if: always()
+        working-directory: ${{ runner.temp }}
         run: |
           {
             echo "### Production: ${{ steps.deploy.outputs.url }}"

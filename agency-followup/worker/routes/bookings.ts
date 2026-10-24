@@ -110,12 +110,17 @@ bookings.get("/", async (c) => {
   // tasks it links to, only keep the link when the viewer may open the task.
   const shaped = shapeBookings(ctx, actor, results);
   const linkable = new Set<string>();
-  for (const b of results) {
-    if (!b.task_id) continue;
-    const t = await ctx.db.prepare("select id, client_id, requester_id, assignee_id, reviewer_id, status from tasks where id = ?").bind(b.task_id).first<{ id: string; client_id: string; requester_id: string; assignee_id: string; reviewer_id: string; status: string }>();
-    const g = await ctx.db.prepare("select 1 from task_grants where task_id = ? and user_id = ?").bind(b.task_id, actor.id).first();
-    if (t && canViewTask(actor, t, !!g)) linkable.add(b.id);
-  }
+  const taskIds = JSON.stringify([...new Set(results.map((b) => b.task_id).filter(Boolean))]);
+  const [linked, granted] = await Promise.all([
+    ctx.db
+      .prepare("select id, client_id, requester_id, assignee_id, reviewer_id, status from tasks where id in (select value from json_each(?))")
+      .bind(taskIds)
+      .all<{ id: string; client_id: string; requester_id: string; assignee_id: string; reviewer_id: string; status: string }>(),
+    ctx.db.prepare("select task_id from task_grants where user_id = ? and task_id in (select value from json_each(?))").bind(actor.id, taskIds).all<{ task_id: string }>(),
+  ]);
+  const grantedIds = new Set(granted.results.map((g) => g.task_id));
+  const visibleTaskIds = new Set(linked.results.filter((t) => canViewTask(actor, t, grantedIds.has(t.id))).map((t) => t.id));
+  for (const b of results) if (b.task_id && visibleTaskIds.has(b.task_id)) linkable.add(b.id);
   const p = photographer(ctx);
   return c.json({
     bookings: shaped.map((b) => (b.busy_only ? b : { ...b, task_id: linkable.has(b.id) ? b.task_id : null })),
@@ -217,9 +222,10 @@ bookings.patch("/:id", async (c) => {
   const b = await loadBooking(ctx, actor, c.req.param("id"));
   const input = await body(c, moveSchema);
   validateSlot(input.starts_at, input.ends_at);
+  if (Date.parse(input.starts_at) < ctx.now.getTime() - 10 * 60_000) throw badRequest("لا يمكن نقل الحجز إلى وقت مضى");
   const opId = randomId("op_");
   const stmts = [
-    guardStmt(ctx.db, opId, overlapSql, [b.resource_id, input.ends_at, input.starts_at, b.id]),
+    guardStmt(ctx.db, opId, `select (select count(*) from bookings where id = ? and status = 'active') = 1 and (${overlapSql})`, [b.id, b.resource_id, input.ends_at, input.starts_at, b.id]),
     ctx.db.prepare("update bookings set starts_at = ?, ends_at = ? where id = ? and status = 'active'").bind(input.starts_at, input.ends_at, b.id),
     logEventStmt(ctx.db, b.task_id, actor.id, "booking_rescheduled", { booking: b.id, from: [b.starts_at, b.ends_at], to: [input.starts_at, input.ends_at], reason: input.reason }, ctx.now),
     ...notifyMany(ctx, [b.resource_id, b.created_by], actor.id, (u) => ({
@@ -250,7 +256,9 @@ bookings.post("/:id/cancel", async (c) => {
   const actor = c.get("actor");
   const b = await loadBooking(ctx, actor, c.req.param("id"));
   const input = await body(c, z.object({ reason: text(500, 3, "اكتب سبب الإلغاء") }));
-  await ctx.db.batch([
+  const opId = randomId("op_");
+  const stmts = [
+    guardStmt(ctx.db, opId, "select count(*) from bookings where id = ? and status = 'active'", [b.id]),
     ctx.db.prepare("update bookings set status = 'cancelled', cancelled_at = ?, cancel_reason = ? where id = ? and status = 'active'").bind(ctx.now.toISOString(), input.reason, b.id),
     logEventStmt(ctx.db, b.task_id, actor.id, "booking_cancelled", { booking: b.id, reason: input.reason }, ctx.now),
     ...notifyMany(ctx, [b.resource_id, b.created_by], actor.id, (u) => ({
@@ -262,6 +270,13 @@ bookings.post("/:id/cancel", async (c) => {
       refId: b.id,
       dedupeKey: `booking_cancelled:${b.id}:${u}`,
     })),
-  ]);
+    unguardStmt(ctx.db, opId),
+  ];
+  try {
+    await ctx.db.batch(stmts);
+  } catch (e) {
+    if (isGuardFailure(e)) throw new ApiError(409, "booking_gone", "أُلغي هذا الحجز أو تغيّر للتو. حدّث الصفحة.");
+    throw e;
+  }
   return c.json({ ok: true });
 });

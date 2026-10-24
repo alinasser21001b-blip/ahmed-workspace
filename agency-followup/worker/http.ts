@@ -68,6 +68,13 @@ export function clientIp(c: C): string {
   return c.req.header("cf-connecting-ip") ?? "local";
 }
 
+/** Current count of a fixed-window counter, without adding to it. */
+export async function peek(db: D1Database, key: string, windowSeconds: number, now: Date): Promise<number> {
+  const windowStart = new Date(Math.floor(now.getTime() / (windowSeconds * 1000)) * windowSeconds * 1000).toISOString();
+  const row = await db.prepare("select count from request_limits where key = ? and window_start = ?").bind(key, windowStart).first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
 /**
  * Fixed-window counter in D1 for login and setup attempts. Returns false when
  * the key is over its limit. One upsert statement, so concurrent attempts

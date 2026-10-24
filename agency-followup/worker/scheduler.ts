@@ -9,7 +9,7 @@ import { actorFor, loadCtx, type BlockerRow, type Ctx, type TaskRow } from "./db
 import { businessMinutesBetween, isBusinessTime } from "./lib/time";
 import { ACK_KINDS, BLOCKER_KINDS_N, DUE_KINDS, PUSH_TEXT, REVIEW_KINDS, notifyStmts, type NotifyInput } from "./notify";
 import { canViewTask, escalationChain, reviewerChain, type Member } from "./policy";
-import { sendToUser } from "./push";
+import { deliver, type SubRow } from "./push";
 
 export type SchedulerSummary = { tasks: number; created: number; sent: number; skipped: number; failed: number; cancelled: number; retried: number; inHours: boolean };
 
@@ -126,7 +126,10 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
 
     // 3. Open blockers: follow up with the resolver, then the person above him.
     for (const b of open) {
-      const resolver = ctx.membersById.get(b.resolver_id);
+      // Follow-ups go to someone who can still open the task.
+      const named = ctx.membersById.get(b.resolver_id);
+      const requester = ctx.membersById.get(t.requester_id);
+      const resolver = named && sees(named) ? named : requester && sees(requester) ? requester : null;
       if (!resolver) continue;
       const follow = ctx.rules.blockerFollowMinutes[speed];
       const elapsed = businessMinutesBetween(new Date(b.opened_at), ctx.now, ctx.workHours);
@@ -146,11 +149,11 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
       const [remind, escalate] = ctx.rules.reviewMinutes[speed];
       const elapsed = businessMinutesBetween(new Date(t.submitted_at), ctx.now, ctx.workHours);
       if (reviewer && elapsed >= remind) {
-        push({ userId: reviewer.id, task: ref, kind: "review_reminder", title: `بانتظار مراجعتك منذ ${fmtBusinessDuration(elapsed)}: ${t.title}`, body: `${assignee.name} · ${client.name}`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:0` });
+        push({ userId: reviewer.id, task: ref, kind: "review_reminder", title: `بانتظار مراجعتك منذ ${fmtBusinessDuration(elapsed)}: ${t.title}`, body: `${assignee.name} · ${client.name}`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:${t.reviewer_id}:0` });
       }
       if (reviewer && escalate && elapsed >= escalate) {
         const up = reviewerChain(reviewer, client, ctx.members).filter(sees)[0];
-        if (up) push({ userId: up.id, task: ref, kind: "review_escalation", title: `مراجعة متأخرة عند ${reviewer.name}: ${t.title}`, body: `${client.name} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:1` });
+        if (up) push({ userId: up.id, task: ref, kind: "review_escalation", title: `مراجعة متأخرة عند ${reviewer.name}: ${t.title}`, body: `${client.name} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:${t.reviewer_id}:1` });
       }
     }
   }
@@ -165,102 +168,107 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
   return { tasks: tasks.length, created, inHours };
 }
 
-type OutboxJoin = {
-  id: string;
-  user_id: string;
-  task_id: string | null;
-  task_cycle: number | null;
-  attempts: number;
-  kind: string;
-  url: string | null;
-  ref_id: string | null;
-  cancelled_at: string | null;
-  notification_id: string;
-};
+type OutboxRow = { id: string; user_id: string; task_id: string | null; task_cycle: number | null; attempts: number; notification_id: string };
+type NoteRow = { id: string; kind: string; url: string | null; ref_id: string | null; cancelled_at: string | null };
 
 const BACKOFF_MIN = [1, 5, 15];
 const MAX_ATTEMPTS = 4;
 
-/** Deliver due outbox entries to devices. At-least-once: a crash mid-send can repeat a push, never lose the in-app record. */
-export async function drainOutbox(ctx: Ctx, limit = 40): Promise<{ sent: number; skipped: number; failed: number; cancelled: number; retried: number }> {
+/**
+ * Deliver due outbox entries to devices. At-least-once: a crash mid-send can
+ * repeat a push, never lose the in-app record. A fixed number of D1 queries
+ * per run however many rows are due, so the run stays inside per-invocation
+ * limits; only the push requests themselves grow with the number of devices.
+ */
+export async function drainOutbox(ctx: Ctx, limit = 20): Promise<{ sent: number; skipped: number; failed: number; cancelled: number; retried: number }> {
   const stats = { sent: 0, skipped: 0, failed: 0, cancelled: 0, retried: 0 };
   const nowIso = ctx.now.toISOString();
-  const { results } = await ctx.db
+  // Claim a batch in one statement: an overlapping run sees these rows leased for three minutes.
+  const lease = new Date(ctx.now.getTime() + 3 * 60_000).toISOString();
+  const { results: claimed } = await ctx.db
     .prepare(
-      `select o.id, o.user_id, o.task_id, o.task_cycle, o.attempts, o.notification_id, n.kind, n.url, n.ref_id, n.cancelled_at
-       from outbox o join notifications n on n.id = o.notification_id
-       where o.status = 'pending' and o.next_attempt_at <= ? order by o.next_attempt_at limit ?`,
+      `update outbox set attempts = attempts + 1, next_attempt_at = ?
+       where id in (select id from outbox where status = 'pending' and next_attempt_at <= ? order by next_attempt_at limit ?)
+       returning id, user_id, task_id, task_cycle, attempts, notification_id`,
     )
-    .bind(nowIso, limit)
-    .all<OutboxJoin>();
-  if (!results.length) return stats;
-  const origin = (await ctx.db.prepare("select value from settings where key = 'app_origin'").first<{ value: string }>())?.value ?? "mailto:admin@agency-followup.invalid";
-  const taskCache = new Map<string, { t: TaskRow | null; grants: Set<string> }>();
+    .bind(lease, nowIso, limit)
+    .all<OutboxRow>();
+  if (!claimed.length) return stats;
+
+  const list = (xs: (string | null)[]) => JSON.stringify([...new Set(xs.filter((x): x is string => !!x))]);
+  const taskIds = list(claimed.map((o) => o.task_id));
+  const [notes, tasks, grantRows, subs, origin] = await Promise.all([
+    ctx.db.prepare("select id, kind, url, ref_id, cancelled_at from notifications where id in (select value from json_each(?))").bind(list(claimed.map((o) => o.notification_id))).all<NoteRow>(),
+    ctx.db.prepare("select * from tasks where id in (select value from json_each(?))").bind(taskIds).all<TaskRow>(),
+    ctx.db.prepare("select task_id, user_id from task_grants where task_id in (select value from json_each(?))").bind(taskIds).all<{ task_id: string; user_id: string }>(),
+    ctx.db.prepare("select id, user_id, endpoint, p256dh, auth from push_subscriptions where revoked_at is null and user_id in (select value from json_each(?))").bind(list(claimed.map((o) => o.user_id))).all<SubRow & { user_id: string }>(),
+    ctx.db.prepare("select value from settings where key = 'app_origin'").first<{ value: string }>(),
+  ]);
+  const noteById = new Map(notes.results.map((n) => [n.id, n]));
+  const refIds = list(notes.results.map((n) => n.ref_id));
+  const blockers = await ctx.db.prepare("select id, resolved_at from blockers where id in (select value from json_each(?))").bind(refIds).all<{ id: string; resolved_at: string | null }>();
+  const blockerOpen = new Map(blockers.results.map((b) => [b.id, !b.resolved_at]));
+  const taskById = new Map(tasks.results.map((t) => [t.id, t]));
+  const grants = new Map<string, Set<string>>();
+  for (const g of grantRows.results) grants.set(g.task_id, (grants.get(g.task_id) ?? new Set()).add(g.user_id));
+  const subsByUser = new Map<string, SubRow[]>();
+  for (const sub of subs.results) subsByUser.set(sub.user_id, [...(subsByUser.get(sub.user_id) ?? []), sub]);
+  const subject = origin?.value ?? "mailto:admin@agency-followup.invalid";
+
+  const writes: D1PreparedStatement[] = [];
   const setStatus = (id: string, status: string, err: string | null) =>
-    ctx.db.prepare("update outbox set status = ?, last_error = ?, sent_at = case when ? = 'sent' then ? else sent_at end where id = ?").bind(status, err, status, nowIso, id).run();
+    writes.push(ctx.db.prepare("update outbox set status = ?, last_error = ?, sent_at = case when ? = 'sent' then ? else sent_at end where id = ?").bind(status, err, status, nowIso, id));
 
-  for (const o of results) {
-    // Claim the row for three minutes so an overlapping run skips it.
-    const lease = new Date(ctx.now.getTime() + 3 * 60_000).toISOString();
-    const claim = await ctx.db.prepare("update outbox set attempts = attempts + 1, next_attempt_at = ? where id = ? and status = 'pending' and attempts = ?").bind(lease, o.id, o.attempts).run();
-    if (claim.meta.changes !== 1) continue;
-
-    const reason = await irrelevance(ctx, o, taskCache);
-    if (reason) {
-      await setStatus(o.id, "cancelled", reason);
+  for (const o of claimed) {
+    const n = noteById.get(o.notification_id);
+    const reason = !n ? "cancelled" : irrelevance(ctx, o, n, o.task_id ? (taskById.get(o.task_id) ?? null) : null, grants.get(o.task_id ?? "") ?? new Set(), blockerOpen);
+    if (reason || !n) {
+      setStatus(o.id, "cancelled", reason ?? "cancelled");
       stats.cancelled++;
       continue;
     }
-    const r = await sendToUser(
+    const { result: r, stmts } = await deliver(
       ctx,
-      o.user_id,
-      { title: "متابعة الوكالة", body: PUSH_TEXT[o.kind] ?? "تنبيه جديد", url: o.url ?? "/notifications", tag: o.task_id ?? o.notification_id },
-      origin,
-      o.kind.includes("escalation") || o.kind === "assigned" ? "high" : "normal",
+      subsByUser.get(o.user_id) ?? [],
+      { title: "متابعة الوكالة", body: PUSH_TEXT[n.kind] ?? "تنبيه جديد", url: n.url ?? "/notifications", tag: o.task_id ?? o.notification_id },
+      subject,
+      n.kind.includes("escalation") || n.kind === "assigned" ? "high" : "normal",
     );
+    writes.push(...stmts);
     if (r.sent > 0) {
-      await setStatus(o.id, "sent", r.failed ? r.errors.join("; ").slice(0, 300) : null);
+      setStatus(o.id, "sent", r.failed ? r.errors.join("; ").slice(0, 300) : null);
       stats.sent++;
     } else if (r.devices === 0 || r.errors.includes("push_not_configured") || (r.devices === r.gone && r.failed === 0)) {
-      await setStatus(o.id, "skipped", r.errors.includes("push_not_configured") ? "push_not_configured" : "no_device");
+      setStatus(o.id, "skipped", r.errors.includes("push_not_configured") ? "push_not_configured" : "no_device");
       stats.skipped++;
-    } else if (r.retryable && o.attempts + 1 < MAX_ATTEMPTS) {
-      const next = new Date(ctx.now.getTime() + BACKOFF_MIN[Math.min(o.attempts, BACKOFF_MIN.length - 1)] * 60_000).toISOString();
-      await ctx.db.prepare("update outbox set next_attempt_at = ?, last_error = ? where id = ?").bind(next, r.errors.join("; ").slice(0, 300), o.id).run();
+    } else if (r.retryable && o.attempts < MAX_ATTEMPTS) {
+      // `attempts` already counts this try (the claim incremented it).
+      const next = new Date(ctx.now.getTime() + BACKOFF_MIN[Math.min(o.attempts - 1, BACKOFF_MIN.length - 1)] * 60_000).toISOString();
+      writes.push(ctx.db.prepare("update outbox set next_attempt_at = ?, last_error = ? where id = ?").bind(next, r.errors.join("; ").slice(0, 300), o.id));
       stats.retried++;
     } else {
-      await setStatus(o.id, "failed", r.errors.join("; ").slice(0, 300));
+      setStatus(o.id, "failed", r.errors.join("; ").slice(0, 300));
       stats.failed++;
     }
   }
+  for (let i = 0; i < writes.length; i += 80) await ctx.db.batch(writes.slice(i, i + 80));
   return stats;
 }
 
 /** Why a queued delivery should no longer go out, or null if it still should. */
-async function irrelevance(ctx: Ctx, o: OutboxJoin, cache: Map<string, { t: TaskRow | null; grants: Set<string> }>): Promise<string | null> {
-  if (o.cancelled_at) return "cancelled";
+function irrelevance(ctx: Ctx, o: OutboxRow, n: NoteRow, t: TaskRow | null, taskGrants: Set<string>, blockerOpen: Map<string, boolean>): string | null {
+  if (n.cancelled_at) return "cancelled";
   const member = actorFor(ctx, o.user_id);
   if (!member || !member.active) return "member_inactive";
   if (!o.task_id) return null;
-  let entry = cache.get(o.task_id);
-  if (!entry) {
-    const t = await ctx.db.prepare("select * from tasks where id = ?").bind(o.task_id).first<TaskRow>();
-    const g = await ctx.db.prepare("select user_id from task_grants where task_id = ?").bind(o.task_id).all<{ user_id: string }>();
-    entry = { t, grants: new Set(g.results.map((r) => r.user_id)) };
-    cache.set(o.task_id, entry);
-  }
-  const t = entry.t;
   if (!t || t.archived_at) return "task_gone";
-  if (!canViewTask(member, t, entry.grants.has(member.id))) return "no_longer_visible";
+  if (!canViewTask(member, t, taskGrants.has(member.id))) return "no_longer_visible";
   const cycleMatches = o.task_cycle === null || o.task_cycle === t.cycle;
-  if (ACK_KINDS.includes(o.kind) && (t.status !== "new" || !cycleMatches)) return "already_acknowledged";
-  if (DUE_KINDS.includes(o.kind) && (!WORKING_STATUSES.includes(t.status as TaskStatus) || !cycleMatches)) return "no_longer_due";
-  if (REVIEW_KINDS.includes(o.kind) && (t.status !== "in_review" || !cycleMatches)) return "already_reviewed";
-  if (o.kind === "reassigned" && !cycleMatches) return "reassigned_again";
-  if ((BLOCKER_KINDS_N.includes(o.kind) || o.kind === "clarification") && o.ref_id) {
-    const b = await ctx.db.prepare("select resolved_at from blockers where id = ?").bind(o.ref_id).first<{ resolved_at: string | null }>();
-    if (!b || b.resolved_at) return "blocker_resolved";
-  }
+  if (ACK_KINDS.includes(n.kind) && (t.status !== "new" || !cycleMatches)) return "already_acknowledged";
+  if (DUE_KINDS.includes(n.kind) && (!WORKING_STATUSES.includes(t.status as TaskStatus) || !cycleMatches)) return "no_longer_due";
+  if (REVIEW_KINDS.includes(n.kind) && (t.status !== "in_review" || !cycleMatches)) return "already_reviewed";
+  if (n.kind === "reassigned" && !cycleMatches) return "reassigned_again";
+  if ((BLOCKER_KINDS_N.includes(n.kind) || n.kind === "clarification") && n.ref_id && !blockerOpen.get(n.ref_id)) return "blocker_resolved";
   return null;
 }
 
@@ -275,5 +283,7 @@ async function housekeeping(ctx: Ctx) {
     ctx.db.prepare("delete from scheduler_runs where started_at < ?").bind(threeDays),
     ctx.db.prepare(`delete from "session" where "expiresAt" < ?`).bind(now.toISOString()),
     ctx.db.prepare(`delete from "rateLimit" where "lastRequest" < ?`).bind(now.getTime() - 86_400_000),
+    // A device whose session ended (expired or signed out elsewhere) stops receiving the account's pushes.
+    ctx.db.prepare(`update push_subscriptions set revoked_at = ? where revoked_at is null and session_id is not null and session_id not in (select id from "session")`).bind(now.toISOString()),
   ]);
 }
