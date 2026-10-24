@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "agency-followup",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "agency-followup-db",
+      "database_id": "281ead82-3664-438c-9a85-26d97fdbc5cf",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": { "PBKDF2_ITERATIONS": "100000" },
+  // Secrets (never in this file): BETTER_AUTH_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.
+  // scripts/ensure-secrets.mjs creates them on first deploy.
+  "env": {
+    // A separate Worker and database where the deploy workflow runs the
+    // browser and push tests before production is touched. No cron.
+    "staging": {
+      "name": "agency-followup-staging",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "agency-followup-staging-db",
+          "database_id": "45e6bce7-4106-4afb-8646-27d46e3ad269",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "triggers": { "crons": [] },
+      "vars": { "PBKDF2_ITERATIONS": "100000" }
+    }
+  }
+}

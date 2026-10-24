@@ -1,0 +1,175 @@
+name: agency-followup deploy
+
+# ---------------------------------------------------------------------------
+# Tests, then a staging deploy that is exercised in real browsers (including
+# real Web Push in Google Chrome), then production. Belongs to agency-followup
+# alone: the paths filter keeps it away from the other projects in this
+# workspace, and every step runs inside agency-followup/.
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   token with Workers Scripts: Edit and D1: Edit
+#   CLOUDFLARE_ACCOUNT_ID  the account id (optional when the token sees one account)
+# The app's own secrets (auth secret, VAPID keys) are generated on the first
+# deploy by scripts/ensure-secrets.mjs and are never printed.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: ['claude/awesome-goodall-bbhv9g', 'main']
+    paths:
+      - 'agency-followup/**'
+      - '.github/workflows/agency-followup.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agency-followup-deploy
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: agency-followup
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  WRANGLER_SEND_METRICS: 'false'
+  PLAYWRIGHT_VERSION: '1.63.0'
+
+jobs:
+  test:
+    name: Typecheck, tests in the Workers runtime, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: agency-followup/package-lock.json
+      - run: npm ci
+      - run: npx tsc -p tsconfig.worker.json --noEmit && npx tsc -p tsconfig.app.json --noEmit && npx tsc -p test/tsconfig.json --noEmit
+      - run: npx vitest run
+      - run: npx vite build
+
+  staging:
+    name: Staging deploy + browser and push tests
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Cloudflare credentials present
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error title=Cloudflare token missing::Add the repository secret CLOUDFLARE_API_TOKEN (Workers Scripts: Edit, D1: Edit) and CLOUDFLARE_ACCOUNT_ID, then re-run this workflow."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: agency-followup/package-lock.json
+      - run: npm ci
+      - name: Migrate staging database
+        run: npx wrangler d1 migrations apply agency-followup-staging-db --remote --env staging
+      - name: Build for staging
+        run: CLOUDFLARE_ENV=staging npx vite build
+      - name: Deploy staging
+        id: deploy
+        run: |
+          npx wrangler deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
+          [ -n "$url" ] || { echo "::error::could not read the staging URL from wrangler output"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Staging secrets
+        run: node scripts/ensure-secrets.mjs agency-followup-staging
+      - name: Install Playwright
+        run: |
+          npm install --no-save "playwright@$PLAYWRIGHT_VERSION"
+          npx playwright install --with-deps chromium
+      - name: Smoke checks
+        run: sleep 15 && BASE_URL="${{ steps.deploy.outputs.url }}" node e2e/smoke.mjs
+      - name: Trial walk-through in a real browser
+        run: |
+          node scripts/setup-links.mjs --origin "${{ steps.deploy.outputs.url }}" --sql "$RUNNER_TEMP/s.sql" --links "$RUNNER_TEMP/links.txt" > /dev/null
+          echo "delete from request_limits;" >> "$RUNNER_TEMP/s.sql"
+          npx wrangler d1 execute agency-followup-staging-db --remote --file "$RUNNER_TEMP/s.sql" > /dev/null
+          BASE_URL="${{ steps.deploy.outputs.url }}" LINKS="$RUNNER_TEMP/links.txt" OUT="$RUNNER_TEMP/shots" node e2e/run.mjs | tee "$RUNNER_TEMP/e2e.txt"
+          rm -f "$RUNNER_TEMP/links.txt" "$RUNNER_TEMP/s.sql"
+      - name: Real Web Push in Google Chrome
+        run: |
+          node scripts/setup-links.mjs --origin "${{ steps.deploy.outputs.url }}" --users hussein,sama --sql "$RUNNER_TEMP/p.sql" --links "$RUNNER_TEMP/plinks.txt" > /dev/null
+          npx wrangler d1 execute agency-followup-staging-db --remote --file "$RUNNER_TEMP/p.sql" > /dev/null
+          LINK=$(grep '^hussein' "$RUNNER_TEMP/plinks.txt" | cut -f2) SECOND_LINK=$(grep '^sama' "$RUNNER_TEMP/plinks.txt" | cut -f2) BASE_URL="${{ steps.deploy.outputs.url }}" xvfb-run -a node e2e/push.mjs | tee "$RUNNER_TEMP/push.txt"
+          rm -f "$RUNNER_TEMP/plinks.txt" "$RUNNER_TEMP/p.sql"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Staging: ${{ steps.deploy.outputs.url }}"
+            echo '```'
+            cat "$RUNNER_TEMP/e2e.txt" "$RUNNER_TEMP/push.txt" 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-screenshots
+          path: ${{ runner.temp }}/shots
+          retention-days: 7
+          if-no-files-found: ignore
+
+  production:
+    name: Production deploy + checks
+    needs: staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: agency-followup/package-lock.json
+      - run: npm ci
+      - name: Migrate production database
+        run: npx wrangler d1 migrations apply agency-followup-db --remote
+      - run: npx vite build
+      - name: Deploy production
+        id: deploy
+        run: |
+          date -u +%Y-%m-%dT%H:%M:%SZ > "$RUNNER_TEMP/deployed_at"
+          npx wrangler deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
+          version=$(grep -oiE 'Version ID: *[0-9a-f-]+' "$RUNNER_TEMP/deploy.log" | head -1 | awk '{print $NF}')
+          [ -n "$url" ] || { echo "::error::could not read the production URL from wrangler output"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Production secrets
+        run: node scripts/ensure-secrets.mjs agency-followup
+      - name: Smoke checks
+        run: sleep 15 && BASE_URL="${{ steps.deploy.outputs.url }}" node e2e/smoke.mjs | tee "$RUNNER_TEMP/smoke.txt"
+      - name: The cron is actually running
+        run: |
+          since=$(cat "$RUNNER_TEMP/deployed_at")
+          for i in $(seq 1 20); do
+            out=$(npx wrangler d1 execute agency-followup-db --remote --json --command "select count(*) as n, max(started_at) as last, min(ok) as all_ok from scheduler_runs where started_at > '$since'")
+            n=$(echo "$out" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s)[0].results[0];console.log(r.n)})")
+            if [ "$n" -ge 2 ]; then echo "scheduler ran $n times since deploy"; echo "$out" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s)[0].results[0])))" | tee "$RUNNER_TEMP/cron.txt"; exit 0; fi
+            sleep 30
+          done
+          echo "::error::no scheduler run recorded within 10 minutes of the deploy"; exit 1
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Production: ${{ steps.deploy.outputs.url }}"
+            echo "- commit: \`${GITHUB_SHA}\`"
+            echo "- version: \`${{ steps.deploy.outputs.version }}\`"
+            echo '```'
+            cat "$RUNNER_TEMP/smoke.txt" "$RUNNER_TEMP/cron.txt" 2>/dev/null
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
