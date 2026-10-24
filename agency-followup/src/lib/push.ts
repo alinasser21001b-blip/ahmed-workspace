@@ -21,7 +21,12 @@ export async function currentState(serverConfigured: boolean): Promise<{ state: 
   if (Notification.permission === "denied") return { state: "denied", subscribed: false };
   const reg = await registration();
   const sub = await reg?.pushManager.getSubscription();
-  if (Notification.permission === "granted" && sub) return { state: "enabled", subscribed: true };
+  if (Notification.permission === "granted" && sub) {
+    // The browser may still hold a subscription the server has dropped
+    // (expired, replaced, or the session ended): then it needs re-linking.
+    const r = await api<{ active: boolean }>("/api/push/check", { body: { endpoint: sub.endpoint } }).catch(() => ({ active: true }));
+    if (r.active) return { state: "enabled", subscribed: true };
+  }
   return { state: "needs_permission", subscribed: false };
 }
 

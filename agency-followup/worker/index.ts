@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { getAuth } from "./auth";
 import { actorFor, loadCtx } from "./db";
 import { seedDemo } from "./demo";
-import { ApiError, clientIp, hit, peek, type AppEnv } from "./http";
+import { ApiError, clientIp, hit, limitAddress, type AppEnv } from "./http";
 import { account, setup } from "./routes/account";
 import { admin } from "./routes/admin";
 import { bookings } from "./routes/bookings";
@@ -53,27 +53,27 @@ app.post("/api/auth/sign-in/username", async (c) => {
     /* handled below */
   }
   const uname = String(raw.username ?? "").trim().toLowerCase().slice(0, 40);
-  const ip = clientIp(c);
+  const ip = limitAddress(clientIp(c));
   // Limits are per address, and per username from that address. Nothing is
   // counted per username alone, so nobody elsewhere can lock a member out.
+  // The attempt is reserved before the password check (so parallel guesses
+  // are counted too) and refunded only when the sign-in fully succeeds.
   const pairKey = `login:u:${uname}:${ip}`;
-  const allowed = (await hit(db, `login:ip:${ip}`, 30, 900, now)) && (await peek(db, pairKey, 900, now)) < 8;
-  if (!allowed) throw new ApiError(429, "rate_limited", "محاولات دخول كثيرة. انتظر ربع ساعة ثم أعد المحاولة.");
+  if (!(await hit(db, `login:ip:${ip}`, 30, 900, now)) || !(await hit(db, pairKey, 8, 900, now))) {
+    throw new ApiError(429, "rate_limited", "محاولات دخول كثيرة. انتظر ربع ساعة ثم أعد المحاولة.");
+  }
 
   const auth = getAuth(c.env, new URL(c.req.url).origin);
   const res = await auth.handler(c.req.raw);
   if (res.status === 429) throw new ApiError(429, "rate_limited", "محاولات دخول كثيرة. انتظر قليلاً ثم أعد المحاولة.");
-  if (!res.ok) {
-    await hit(db, pairKey, 8, 900, now);
-    throw new ApiError(401, "invalid_credentials", GENERIC_LOGIN_ERROR);
-  }
-  await db.prepare("delete from request_limits where key = ?").bind(pairKey).run();
+  if (!res.ok) throw new ApiError(401, "invalid_credentials", GENERIC_LOGIN_ERROR);
   const data = (await res.clone().json()) as { user?: { id?: string } };
   const member = data.user?.id ? await db.prepare("select active from members where user_id = ?").bind(data.user.id).first<{ active: number }>() : null;
   if (!member || member.active !== 1) {
     if (data.user?.id) await db.prepare(`delete from "session" where "userId" = ?`).bind(data.user.id).run();
     throw new ApiError(401, "invalid_credentials", GENERIC_LOGIN_ERROR);
   }
+  await db.prepare("delete from request_limits where key = ?").bind(pairKey).run();
   await db.prepare("insert into events (task_id, actor_id, type, data, created_at) values (null, ?, 'signed_in', ?, ?)").bind(data.user!.id, JSON.stringify({ ua: (c.req.header("user-agent") ?? "").slice(0, 120) }), now.toISOString()).run();
   const out = c.json({ ok: true });
   for (const cookie of res.headers.getSetCookie()) out.headers.append("set-cookie", cookie);

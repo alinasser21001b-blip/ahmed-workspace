@@ -386,6 +386,7 @@ tasks.patch("/:id", async (c) => {
     if (!rv.ok) throw badRequest(rv.reason);
     if (reviewerChanged) {
       set.reviewer_id = reviewerId;
+      if (t.status === "in_review") set.reviewer_since = ctx.now.toISOString();
       note("reviewer_id", t.reviewer_id, reviewerId);
     }
   }
@@ -408,14 +409,39 @@ tasks.patch("/:id", async (c) => {
   if (assigneeChanged) {
     newGrants.delete(t.assignee_id);
     if (grantsNewAssignee) newGrants.add(newAssignee.id);
-    // What the old assignee was holding moves on with the task: blockers he was
-    // to resolve go to the requester, and his pending date proposals close.
+    // The old cycle's loose ends: the old assignee's open questions close
+    // (they would otherwise pause the new assignee's clock), his pending date
+    // proposals close, and blockers move to someone who can act on them.
+    const nowIso = ctx.now.toISOString();
     const handTo = updated.requester_id !== newAssignee.id ? updated.requester_id : updated.reviewer_id;
+    const oldStillSees = canSee(ctx, updated, newGrants, t.assignee_id);
+    const { results: openBlockers } = await ctx.db.prepare("select * from blockers where task_id = ? and resolved_at is null").bind(t.id).all<BlockerRow>();
+    for (const b of openBlockers) {
+      if (b.kind === "clarification" && b.opened_by === t.assignee_id) {
+        stmts.push(ctx.db.prepare("update blockers set resolved_at = ?, resolved_by = ?, resolution = ? where id = ? and resolved_at is null").bind(nowIso, actor.id, "أُغلق مع إعادة إسناد المهمة", b.id));
+        continue;
+      }
+      // Who should now clear it: not someone who lost the task, and not the new assignee for an internal blocker.
+      const move = (b.resolver_id === t.assignee_id && !oldStillSees) || (b.kind === "internal" && b.resolver_id === newAssignee.id && newAssignee.role !== "owner");
+      if (!move || handTo === b.resolver_id) continue;
+      stmts.push(
+        ctx.db.prepare("update blockers set resolver_id = ?, resolver_since = ? where id = ? and resolved_at is null").bind(handTo, nowIso, b.id),
+        logEventStmt(ctx.db, t.id, actor.id, "blocker_handed_over", { blocker: b.id, from: b.resolver_id, to: handTo }, ctx.now),
+        ...notifyVisible(ctx, updated, newGrants, [handTo], actor.id, () => ({
+          task: { id: t.id, cycle: newCycle, priority: updated.priority },
+          kind: "blocker_opened",
+          title: `${b.kind === "client_wait" ? "بانتظار العميل" : "عائق"} انتقل إليك: ${t.title}`,
+          body: b.reason.slice(0, 200),
+          url: taskUrl(t.id),
+          refId: b.id,
+          dedupeKey: `blocker_handover:${b.id}:${handTo}:${newCycle}`,
+        })),
+      );
+    }
     stmts.push(
-      ctx.db.prepare("update blockers set resolver_id = ? where task_id = ? and resolved_at is null and resolver_id = ?").bind(handTo, t.id, t.assignee_id),
       ctx.db
         .prepare("update due_proposals set status = 'rejected', decided_by = ?, decided_at = ?, decision_note = ? where task_id = ? and status = 'pending' and proposed_by = ?")
-        .bind(actor.id, ctx.now.toISOString(), "أُعيد إسناد المهمة", t.id, t.assignee_id),
+        .bind(actor.id, nowIso, "أُعيد إسناد المهمة", t.id, t.assignee_id),
     );
   }
   stmts.unshift(...updateStmts(ctx, opId, t, set));
@@ -457,6 +483,7 @@ tasks.patch("/:id", async (c) => {
   }
   if (reviewerChanged && updated.status === "in_review") {
     stmts.push(...cancelPendingStmts(ctx, t.id, { kinds: REVIEW_KINDS }));
+    stmts.push(...cancelPendingStmts(ctx, t.id, { kinds: ["submitted"], userId: t.reviewer_id }));
     stmts.push(
       ...notifyVisible(ctx, updated, newGrants, [reviewerId], actor.id, () => ({
         task: { id: t.id, cycle: newCycle, priority: updated.priority },
@@ -602,7 +629,13 @@ tasks.post("/:id/actions/:action", async (c) => {
       const client = ctx.clientsById.get(t.client_id)!;
       let resolverId = (input.resolver_id as string | null) ?? null;
       if (!resolverId) resolverId = kind === "client_wait" ? client.account_manager_id : t.requester_id !== t.assignee_id ? t.requester_id : t.reviewer_id;
-      if (kind === "internal" && resolverId === actor.id && isAssignee(actor, t)) throw badRequest("اختر شخصاً آخر يحل العائق؛ لا يكون المنفذ مسؤولاً عن حل عائقه");
+      // An internal blocker is cleared by someone other than the assignee, so
+      // it is never a way to stop his own reminders. The owner has nobody
+      // above him, so he may hold his own. Waiting on the client stays with
+      // the client's account manager, even when she is the assignee.
+      const assigneeIsOwner = member(ctx, t.assignee_id).role === "owner";
+      if (kind === "internal" && resolverId === t.assignee_id && !assigneeIsOwner) throw badRequest("اختر شخصاً آخر يحل العائق؛ لا يكون المنفذ مسؤولاً عن حل عائقه");
+      if (kind === "client_wait" && resolverId === t.assignee_id && resolverId !== client.account_manager_id && !assigneeIsOwner) throw badRequest("متابعة العميل مسؤولية مسؤول الحساب");
       if (!ctx.membersById.get(resolverId)?.active || !canSee(ctx, t, grants, resolverId)) throw badRequest("هذا الشخص لا يستطيع رؤية المهمة؛ اختر مسؤولاً آخر عن الحل");
       if (ctx.membersById.get(resolverId)!.role === "photographer" && kind === "client_wait") throw badRequest("متابعة العميل مسؤولية مسؤول الحساب");
       const blockerId = randomId("b_");

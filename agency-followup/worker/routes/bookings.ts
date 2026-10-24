@@ -46,6 +46,23 @@ export function shapeBookings(ctx: Ctx, actor: Actor, rows: BookingRow[]) {
   });
 }
 
+/** shapeBookings plus task links only where the viewer may open the task. Use this for every list a member receives. */
+export async function shapeBookingsForViewer(ctx: Ctx, actor: Actor, rows: BookingRow[]) {
+  const shaped = shapeBookings(ctx, actor, rows);
+  const taskIds = JSON.stringify([...new Set(rows.map((b) => b.task_id).filter(Boolean))]);
+  if (taskIds === "[]") return shaped.map((b) => (b.busy_only ? b : { ...b, task_id: null }));
+  const [linked, granted] = await Promise.all([
+    ctx.db
+      .prepare("select id, client_id, requester_id, assignee_id, reviewer_id, status from tasks where id in (select value from json_each(?))")
+      .bind(taskIds)
+      .all<{ id: string; client_id: string; requester_id: string; assignee_id: string; reviewer_id: string; status: string }>(),
+    ctx.db.prepare("select task_id from task_grants where user_id = ? and task_id in (select value from json_each(?))").bind(actor.id, taskIds).all<{ task_id: string }>(),
+  ]);
+  const grantedIds = new Set(granted.results.map((g) => g.task_id));
+  const visible = new Set(linked.results.filter((t) => canViewTask(actor, t, grantedIds.has(t.id))).map((t) => t.id));
+  return shaped.map((b) => (b.busy_only ? b : { ...b, task_id: b.task_id && visible.has(b.task_id) ? b.task_id : null }));
+}
+
 const overlapSql = "select count(*) = 0 from bookings where resource_id = ? and status = 'active' and starts_at < ? and ends_at > ? and id != ?";
 
 async function conflictsAndSuggestion(ctx: Ctx, actor: Actor, resourceId: string, startsAt: string, endsAt: string, excludeId = "") {
@@ -53,7 +70,7 @@ async function conflictsAndSuggestion(ctx: Ctx, actor: Actor, resourceId: string
     .prepare("select * from bookings where resource_id = ? and status = 'active' and starts_at < ? and ends_at > ? and id != ? order by starts_at")
     .bind(resourceId, endsAt, startsAt, excludeId)
     .all<BookingRow>();
-  return { conflicts: shapeBookings(ctx, actor, results), suggestion: await suggestSlot(ctx, resourceId, new Date(startsAt), new Date(endsAt).getTime() - new Date(startsAt).getTime(), excludeId) };
+  return { conflicts: await shapeBookingsForViewer(ctx, actor, results), suggestion: await suggestSlot(ctx, resourceId, new Date(startsAt), new Date(endsAt).getTime() - new Date(startsAt).getTime(), excludeId) };
 }
 
 /** First free slot of the same length, inside one working window, from the requested start onwards. */
@@ -106,24 +123,12 @@ bookings.get("/", async (c) => {
     .prepare("select * from bookings where status = 'active' and ends_at > ? and starts_at < ? order by starts_at limit 500")
     .bind(fromIso, toIso)
     .all<BookingRow>();
-  // The photographer's calendar holds every booking of his time; for the
-  // tasks it links to, only keep the link when the viewer may open the task.
-  const shaped = shapeBookings(ctx, actor, results);
-  const linkable = new Set<string>();
-  const taskIds = JSON.stringify([...new Set(results.map((b) => b.task_id).filter(Boolean))]);
-  const [linked, granted] = await Promise.all([
-    ctx.db
-      .prepare("select id, client_id, requester_id, assignee_id, reviewer_id, status from tasks where id in (select value from json_each(?))")
-      .bind(taskIds)
-      .all<{ id: string; client_id: string; requester_id: string; assignee_id: string; reviewer_id: string; status: string }>(),
-    ctx.db.prepare("select task_id from task_grants where user_id = ? and task_id in (select value from json_each(?))").bind(actor.id, taskIds).all<{ task_id: string }>(),
-  ]);
-  const grantedIds = new Set(granted.results.map((g) => g.task_id));
-  const visibleTaskIds = new Set(linked.results.filter((t) => canViewTask(actor, t, grantedIds.has(t.id))).map((t) => t.id));
-  for (const b of results) if (b.task_id && visibleTaskIds.has(b.task_id)) linkable.add(b.id);
+  // The photographer's calendar holds every booking of his time; a task link
+  // is kept only when the viewer may open that task.
+  const shaped = await shapeBookingsForViewer(ctx, actor, results);
   const p = photographer(ctx);
   return c.json({
-    bookings: shaped.map((b) => (b.busy_only ? b : { ...b, task_id: linkable.has(b.id) ? b.task_id : null })),
+    bookings: shaped,
     resource: p ? { id: p.id, name: p.name } : null,
     can_create: ctx.clients.some((cl) => canCreateBooking(actor, cl.id)),
   });
@@ -222,7 +227,8 @@ bookings.patch("/:id", async (c) => {
   const b = await loadBooking(ctx, actor, c.req.param("id"));
   const input = await body(c, moveSchema);
   validateSlot(input.starts_at, input.ends_at);
-  if (Date.parse(input.starts_at) < ctx.now.getTime() - 10 * 60_000) throw badRequest("لا يمكن نقل الحجز إلى وقت مضى");
+  if (input.starts_at !== b.starts_at && Date.parse(input.starts_at) < ctx.now.getTime() - 10 * 60_000) throw badRequest("لا يمكن نقل الحجز إلى وقت مضى");
+  if (Date.parse(input.ends_at) <= ctx.now.getTime()) throw badRequest("نهاية الحجز في وقت مضى");
   const opId = randomId("op_");
   const stmts = [
     guardStmt(ctx.db, opId, `select (select count(*) from bookings where id = ? and status = 'active') = 1 and (${overlapSql})`, [b.id, b.resource_id, input.ends_at, input.starts_at, b.id]),
@@ -243,6 +249,8 @@ bookings.patch("/:id", async (c) => {
     await ctx.db.batch(stmts);
   } catch (e) {
     if (isGuardFailure(e)) {
+      const still = await ctx.db.prepare("select 1 as x from bookings where id = ? and status = 'active'").bind(b.id).first();
+      if (!still) throw new ApiError(409, "booking_gone", "أُلغي هذا الحجز أو تغيّر للتو. حدّث الصفحة.");
       const info = await conflictsAndSuggestion(ctx, actor, b.resource_id, input.starts_at, input.ends_at, b.id);
       throw new ApiError(409, "booking_conflict", "الوقت الجديد يتعارض مع حجز آخر.", info);
     }

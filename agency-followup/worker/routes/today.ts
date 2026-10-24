@@ -4,7 +4,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../http";
 import { taskSummary, listVisibleTasks, visibleClients, type TaskSummary } from "../views";
-import { shapeBookings, type BookingRow } from "./bookings";
+import { shapeBookingsForViewer, type BookingRow } from "./bookings";
 import type { Actor } from "../policy";
 import { localParts, zonedToUtc } from "../lib/time";
 import type { Ctx } from "../db";
@@ -98,7 +98,7 @@ today.get("/", async (c) => {
     .prepare("select * from bookings where status = 'active' and ends_at > ? and starts_at < ? order by starts_at limit 100")
     .bind(ctx.now.toISOString(), new Date(ctx.now.getTime() + 7 * 86_400_000).toISOString())
     .all<BookingRow>();
-  const bookings = shapeBookings(ctx, actor, bookingsRows.results);
+  const bookings = await shapeBookingsForViewer(ctx, actor, bookingsRows.results);
   const conflicts = actor.role === "owner" || actor.role === "exec" ? await photographerConflicts(ctx, actor, bookingsRows.results, rows) : [];
 
   return c.json({

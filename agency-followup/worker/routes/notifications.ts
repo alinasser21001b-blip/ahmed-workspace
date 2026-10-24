@@ -95,6 +95,14 @@ push.post("/subscribe", async (c) => {
   return c.json({ ok: true });
 });
 
+/** Is this browser's subscription still bound to the signed-in member on the server? */
+push.post("/check", async (c) => {
+  const ctx = c.get("ctx");
+  const input = await body(c, z.object({ endpoint: z.string().max(1000) }));
+  const row = await ctx.db.prepare("select 1 as x from push_subscriptions where endpoint = ? and user_id = ? and revoked_at is null").bind(input.endpoint, c.get("actor").id).first();
+  return c.json({ active: !!row });
+});
+
 push.post("/unsubscribe", async (c) => {
   const ctx = c.get("ctx");
   const input = await body(c, z.object({ endpoint: z.string().max(1000) }));

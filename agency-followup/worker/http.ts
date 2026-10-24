@@ -68,11 +68,17 @@ export function clientIp(c: C): string {
   return c.req.header("cf-connecting-ip") ?? "local";
 }
 
-/** Current count of a fixed-window counter, without adding to it. */
-export async function peek(db: D1Database, key: string, windowSeconds: number, now: Date): Promise<number> {
-  const windowStart = new Date(Math.floor(now.getTime() / (windowSeconds * 1000)) * windowSeconds * 1000).toISOString();
-  const row = await db.prepare("select count from request_limits where key = ? and window_start = ?").bind(key, windowStart).first<{ count: number }>();
-  return row?.count ?? 0;
+/**
+ * The address a rate limit counts against. IPv6 hosts usually control a
+ * whole /64, so they are grouped by it (as Better Auth does).
+ */
+export function limitAddress(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const [head, tail] = ip.split("::");
+  const h = head ? head.split(":") : [];
+  const t = tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill("0"), ...t] : ip.split(":");
+  return `${groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, "")).join(":")}::/64`;
 }
 
 /**

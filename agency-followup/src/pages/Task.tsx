@@ -559,7 +559,7 @@ function ActionSheet({ sheet, data, busy, run, close, reload }: { sheet: Exclude
                 <select id="who" className="input" value={resolver} onChange={(e) => setResolver(e.target.value)}>
                   <option value="">الافتراضي</option>
                   {me.members
-                    .filter((m) => m.id !== me.user.id && [t.requester?.id, t.reviewer?.id, ...me.members.filter((x) => x.role === "owner" || x.role === "exec").map((x) => x.id)].includes(m.id))
+                    .filter((m) => m.id !== t.assignee?.id && m.role !== "photographer" && [t.requester?.id, t.reviewer?.id, ...me.members.filter((x) => x.role === "owner" || x.role === "exec").map((x) => x.id)].includes(m.id))
                     .map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}

@@ -58,6 +58,7 @@ export type TaskRow = {
   completed_at: string | null;
   cancelled_at: string | null;
   cancel_reason: string | null;
+  reviewer_since: string | null;
 };
 
 export type BlockerRow = {
@@ -72,6 +73,7 @@ export type BlockerRow = {
   resolved_at: string | null;
   resolved_by: string | null;
   resolution: string | null;
+  resolver_since: string | null;
 };
 
 type MemberRow = { user_id: string; username: string; display_name: string; role: Role; rank: number; active: number; must_change_password: number; title: string };

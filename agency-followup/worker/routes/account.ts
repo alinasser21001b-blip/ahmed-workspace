@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { getAuth } from "../auth";
 import { loadMembers } from "../db";
-import { ApiError, badRequest, body, clientIp, hit, type AppEnv } from "../http";
+import { ApiError, badRequest, body, hit, limitAddress, type AppEnv } from "../http";
 import { hashPassword, randomId, sha256, verifyPassword } from "../lib/crypto";
 import { assignmentOptions } from "./tasks";
 import { visibleClients } from "../views";
@@ -37,7 +37,7 @@ async function limitSetup(db: D1Database, ip: string, now: Date) {
 
 setup.post("/check", async (c) => {
   const now = new Date();
-  const ip = c.req.header("cf-connecting-ip") ?? "local";
+  const ip = limitAddress(c.req.header("cf-connecting-ip") ?? "local");
   await limitSetup(c.env.DB, ip, now);
   const { token } = await body(c as never, z.object({ token: z.string().max(100) }));
   const row = await findToken(c.env.DB, token, now);
@@ -50,7 +50,7 @@ setup.post("/check", async (c) => {
 setup.post("/complete", async (c) => {
   const now = new Date();
   const db = c.env.DB;
-  const ip = c.req.header("cf-connecting-ip") ?? "local";
+  const ip = limitAddress(c.req.header("cf-connecting-ip") ?? "local");
   await limitSetup(db, ip, now);
   const input = await body(c as never, z.object({ token: z.string().max(100), password: passwordRule }));
   const row = await findToken(db, input.token, now);
@@ -104,8 +104,9 @@ account.get("/me", (c) => {
 account.post("/password", async (c) => {
   const ctx = c.get("ctx");
   const a = c.get("actor");
-  const ip = clientIp(c);
-  if (!(await hit(ctx.db, `pw:${a.id}:${ip}`, 5, 900, ctx.now))) throw new ApiError(429, "rate_limited", "محاولات كثيرة. انتظر ربع ساعة.");
+  // Per member, wherever the requests come from: only a signed-in session can
+  // count against it, and it caps guessing the current password.
+  if (!(await hit(ctx.db, `pw:${a.id}`, 5, 900, ctx.now))) throw new ApiError(429, "rate_limited", "محاولات كثيرة. انتظر ربع ساعة.");
   const input = await body(c, z.object({ current: z.string().max(128), next: passwordRule }));
   if (input.next.toLowerCase().includes(a.username)) throw badRequest("لا تستخدم اسم المستخدم داخل كلمة المرور");
   if (input.next === input.current) throw badRequest("اختر كلمة مرور جديدة مختلفة");

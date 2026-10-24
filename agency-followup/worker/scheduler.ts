@@ -132,14 +132,15 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
       const resolver = named && sees(named) ? named : requester && sees(requester) ? requester : null;
       if (!resolver) continue;
       const follow = ctx.rules.blockerFollowMinutes[speed];
-      const elapsed = businessMinutesBetween(new Date(b.opened_at), ctx.now, ctx.workHours);
+      const since = b.resolver_since && b.resolver_since > b.opened_at ? b.resolver_since : b.opened_at;
+      const elapsed = businessMinutesBetween(new Date(since), ctx.now, ctx.workHours);
       const label = b.kind === "client_wait" ? "بانتظار العميل" : b.kind === "clarification" ? "طلب توضيح" : "عائق";
       if (elapsed >= follow) {
-        push({ userId: resolver.id, task: ref, kind: "blocker_follow", title: `${label} ما زال مفتوحاً: ${t.title}`, body: `${b.reason.slice(0, 120)} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, refId: b.id, dedupeKey: `blocker_follow:${b.id}:1` });
+        push({ userId: resolver.id, task: ref, kind: "blocker_follow", title: `${label} ما زال مفتوحاً: ${t.title}`, body: `${b.reason.slice(0, 120)} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, refId: b.id, dedupeKey: `blocker_follow:${b.id}:${resolver.id}:1` });
       }
       if (elapsed >= follow * 2) {
         const up = escalationChain(resolver, client, ctx.members).filter(sees)[0];
-        if (up) push({ userId: up.id, task: ref, kind: "blocker_escalation", title: `${label} عند ${resolver.name} ما زال مفتوحاً: ${t.title}`, body: b.reason.slice(0, 120), url, refId: b.id, dedupeKey: `blocker_follow:${b.id}:2` });
+        if (up) push({ userId: up.id, task: ref, kind: "blocker_escalation", title: `${label} عند ${resolver.name} ما زال مفتوحاً: ${t.title}`, body: b.reason.slice(0, 120), url, refId: b.id, dedupeKey: `blocker_follow:${b.id}:${resolver.id}:2` });
       }
     }
 
@@ -147,7 +148,8 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
     if (t.status === "in_review" && t.submitted_at) {
       const reviewer = ctx.membersById.get(t.reviewer_id);
       const [remind, escalate] = ctx.rules.reviewMinutes[speed];
-      const elapsed = businessMinutesBetween(new Date(t.submitted_at), ctx.now, ctx.workHours);
+      const since = t.reviewer_since && t.reviewer_since > t.submitted_at ? t.reviewer_since : t.submitted_at;
+      const elapsed = businessMinutesBetween(new Date(since), ctx.now, ctx.workHours);
       if (reviewer && elapsed >= remind) {
         push({ userId: reviewer.id, task: ref, kind: "review_reminder", title: `بانتظار مراجعتك منذ ${fmtBusinessDuration(elapsed)}: ${t.title}`, body: `${assignee.name} · ${client.name}`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:${t.reviewer_id}:0` });
       }
@@ -173,16 +175,20 @@ type NoteRow = { id: string; kind: string; url: string | null; ref_id: string | 
 
 const BACKOFF_MIN = [1, 5, 15];
 const MAX_ATTEMPTS = 4;
+// Push requests per run: Workers Free allows 50 outbound requests per invocation.
+const FETCH_BUDGET = 40;
 
 /**
  * Deliver due outbox entries to devices. At-least-once: a crash mid-send can
  * repeat a push, never lose the in-app record. A fixed number of D1 queries
- * per run however many rows are due, so the run stays inside per-invocation
- * limits; only the push requests themselves grow with the number of devices.
+ * per run however many rows are due, and at most FETCH_BUDGET push requests;
+ * rows beyond the budget are released for the next run.
  */
 export async function drainOutbox(ctx: Ctx, limit = 20): Promise<{ sent: number; skipped: number; failed: number; cancelled: number; retried: number }> {
   const stats = { sent: 0, skipped: 0, failed: 0, cancelled: 0, retried: 0 };
   const nowIso = ctx.now.toISOString();
+  // Rows that kept dying mid-run (attempts beyond the limit) are given up on.
+  await ctx.db.prepare("update outbox set status = 'failed', last_error = coalesce(last_error, 'too_many_attempts') where status = 'pending' and attempts >= ?").bind(MAX_ATTEMPTS + 2).run();
   // Claim a batch in one statement: an overlapping run sees these rows leased for three minutes.
   const lease = new Date(ctx.now.getTime() + 3 * 60_000).toISOString();
   const { results: claimed } = await ctx.db
@@ -215,11 +221,18 @@ export async function drainOutbox(ctx: Ctx, limit = 20): Promise<{ sent: number;
   for (const sub of subs.results) subsByUser.set(sub.user_id, [...(subsByUser.get(sub.user_id) ?? []), sub]);
   const subject = origin?.value ?? "mailto:admin@agency-followup.invalid";
 
-  const writes: D1PreparedStatement[] = [];
+  // Status writes go out every few rows, so a run that dies part-way repeats
+  // at most the rows since the last flush.
+  let writes: D1PreparedStatement[] = [];
+  const flush = async () => {
+    for (let i = 0; i < writes.length; i += 80) await ctx.db.batch(writes.slice(i, i + 80));
+    writes = [];
+  };
   const setStatus = (id: string, status: string, err: string | null) =>
     writes.push(ctx.db.prepare("update outbox set status = ?, last_error = ?, sent_at = case when ? = 'sent' then ? else sent_at end where id = ?").bind(status, err, status, nowIso, id));
 
-  for (const o of claimed) {
+  let fetches = 0;
+  for (const [i, o] of claimed.entries()) {
     const n = noteById.get(o.notification_id);
     const reason = !n ? "cancelled" : irrelevance(ctx, o, n, o.task_id ? (taskById.get(o.task_id) ?? null) : null, grants.get(o.task_id ?? "") ?? new Set(), blockerOpen);
     if (reason || !n) {
@@ -227,14 +240,24 @@ export async function drainOutbox(ctx: Ctx, limit = 20): Promise<{ sent: number;
       stats.cancelled++;
       continue;
     }
-    const { result: r, stmts } = await deliver(
+    const devices = subsByUser.get(o.user_id) ?? [];
+    if (fetches + devices.length > FETCH_BUDGET) {
+      // Out of push requests for this run: hand the rest back untouched.
+      const rest = claimed.slice(i).map((x) => x.id);
+      writes.push(ctx.db.prepare("update outbox set attempts = attempts - 1, next_attempt_at = ? where id in (select value from json_each(?)) and status = 'pending'").bind(nowIso, JSON.stringify(rest)));
+      break;
+    }
+    fetches += devices.length;
+    const { result: r, stmts, gone } = await deliver(
       ctx,
-      subsByUser.get(o.user_id) ?? [],
+      devices,
       { title: "متابعة الوكالة", body: PUSH_TEXT[n.kind] ?? "تنبيه جديد", url: n.url ?? "/notifications", tag: o.task_id ?? o.notification_id },
       subject,
       n.kind.includes("escalation") || n.kind === "assigned" ? "high" : "normal",
     );
     writes.push(...stmts);
+    // A device the push service says is gone is not tried again in this run.
+    if (gone.length) subsByUser.set(o.user_id, devices.filter((d) => !gone.includes(d.id)));
     if (r.sent > 0) {
       setStatus(o.id, "sent", r.failed ? r.errors.join("; ").slice(0, 300) : null);
       stats.sent++;
@@ -250,8 +273,9 @@ export async function drainOutbox(ctx: Ctx, limit = 20): Promise<{ sent: number;
       setStatus(o.id, "failed", r.errors.join("; ").slice(0, 300));
       stats.failed++;
     }
+    if (writes.length >= 15) await flush();
   }
-  for (let i = 0; i < writes.length; i += 80) await ctx.db.batch(writes.slice(i, i + 80));
+  await flush();
   return stats;
 }
 
@@ -273,14 +297,18 @@ function irrelevance(ctx: Ctx, o: OutboxRow, n: NoteRow, t: TaskRow | null, task
 }
 
 // Cleanup follows the wall clock, not the injectable reminder clock, so a
-// test that moves `now` forward cannot expire real sessions.
+// test that moves `now` forward cannot expire real sessions. It runs at most
+// once an hour; every statement uses an index, so the minute-by-minute cron
+// stays far below D1's daily read allowance.
 async function housekeeping(ctx: Ctx) {
   const now = new Date();
+  const last = await ctx.db.prepare("select value from settings where key = 'housekeeping_at'").first<{ value: string }>();
+  if (last && now.getTime() - Date.parse(last.value) < 3_600_000) return;
   const day = new Date(now.getTime() - 86_400_000).toISOString();
-  const threeDays = new Date(now.getTime() - 3 * 86_400_000).toISOString();
   await ctx.db.batch([
+    ctx.db.prepare("insert into settings (key, value, updated_at) values ('housekeeping_at', ?, ?) on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at").bind(now.toISOString(), now.toISOString()),
     ctx.db.prepare("delete from request_limits where window_start < ?").bind(day),
-    ctx.db.prepare("delete from scheduler_runs where started_at < ?").bind(threeDays),
+    ctx.db.prepare("delete from scheduler_runs where started_at < ?").bind(day),
     ctx.db.prepare(`delete from "session" where "expiresAt" < ?`).bind(now.toISOString()),
     ctx.db.prepare(`delete from "rateLimit" where "lastRequest" < ?`).bind(now.getTime() - 86_400_000),
     // A device whose session ended (expired or signed out elsewhere) stops receiving the account's pushes.

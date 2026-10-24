@@ -36,7 +36,7 @@ function build(env: Env, origin: string) {
       customRules: {
         // Backstop only: the four phones share one office address, so the
         // real limit is per address and username in worker/index.ts.
-        "/sign-in/username": { window: 900, max: 40 },
+        "/sign-in/username": { window: 900, max: 80 },
       },
     },
     advanced: {
