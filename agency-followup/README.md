@@ -75,7 +75,7 @@ BASE_URL=https://... node e2e/smoke.mjs                               # فحوص
 مصادر الدليل:
 - **vitest**: `npx vitest run` داخل بيئة Workers، شُغّل اليوم محلياً وفي CI: 151 من 151 في 14 ملفاً. الأسماء أدناه أسماء الاختبارات كما هي.
 - **متصفح محلي**: `e2e/run.mjs` (32 من 32) و`e2e/smoke.mjs` (14 من 14) على نسخة إنتاج مبنية محلياً في Chromium، شُغّلا اليوم بعد إصلاحات اليوم.
-- **على Cloudflare (CI)**: نسخة staging المنشورة: `e2e/smoke.mjs` 14 من 14، و`e2e/run.mjs` 32 من 32 في Chromium، و`e2e/push.mjs` 7 من 7 في Google Chrome حقيقي. الإنتاج: `e2e/smoke.mjs` 14 من 14.
+- **على Cloudflare (CI)**: نسخة staging المنشورة: `e2e/smoke.mjs` 14 من 14، و`e2e/run.mjs` 32 من 32 في Chromium، و`e2e/push.mjs` 7 من 7 في Google Chrome حقيقي. الإنتاج: `e2e/smoke.mjs` 14 من 14، والمجدول يعمل عليه كل دقيقة دون خطأ.
 - لم يُختبر شيء بعد على هاتف حقيقي.
 
 | البند (§14) | الحالة | الدليل |
@@ -101,18 +101,18 @@ BASE_URL=https://... node e2e/smoke.mjs                               # فحوص
 | 18ب. Push يصل فعلياً إلى متصفح مدعوم (Google Chrome) | نجح | `e2e/push.mjs` 7 من 7 على staging المنشور في Google Chrome: «server accepted by the push service (201)» و«notification arrives on the device and is shown by the service worker» و«sign-out removes the device subscription» و«the previous account has no device bound after another member used it». |
 | 18ج. Push على آيفون وأندرويد حقيقيين | فحص يدوي مطلوب | لم يُجرَّب على أي هاتف حقيقي. الخطوات في «فحص يدوي مطلوب اليوم» أدناه. |
 | 19. رابط إشعار أو مهمة محجوبة لا يتجاوز الصلاحيات | نجح | vitest: `push.test.ts` «§14.19 opening a pushed link re-checks permission: the old assignee cannot open a reassigned task» و`lifecycle.test.ts` «§14.19 after reassignment the old assignee's link is a 404 and the new assignee must acknowledge again» |
-| 20. التنقل المباشر على رابط Cloudflare المنشور، وAPI مجهول يرجع JSON | نجح | على staging والإنتاج المنشورين: `e2e/smoke.mjs` 14 من 14، منها «deep link returns the app (SPA fallback)» و«unknown /api route returns JSON, not HTML». | محلياً نجح: `auth.test.ts` «§14.20 unknown routes are JSON: 401 without a session, 404 with one»، و`e2e/smoke.mjs` «deep link returns the app (SPA fallback)» و«unknown /api route returns JSON, not HTML». على الرابط المنشور يعمل `e2e/smoke.mjs` في CI. |
+| 20. التنقل المباشر على رابط Cloudflare المنشور، وAPI مجهول يرجع JSON | نجح | على staging والإنتاج المنشورين: `e2e/smoke.mjs` 14 من 14، منها «deep link returns the app (SPA fallback)» و«unknown /api route returns JSON, not HTML». ومحلياً: `auth.test.ts` «§14.20 unknown routes are JSON: 401 without a session, 404 with one». |
 | فحص الأنواع والبناء | نجح | `tsc` للمشاريع الثلاثة و`npx vite build`، شُغّلت اليوم محلياً. |
-| الهاتف والحاسوب مع نص عربي طويل | نجح محلياً | متصفح محلي على عرض الهاتف (iPhone 13 في Chromium) والحاسوب (1280px): «long Arabic text: no sideways scroll on the phone (Today and task page)» و«long Arabic text: no sideways scroll on the desktop (Today and task page)»، بعنوان من 140 حرفاً فيه كلمة عربية من 56 حرفاً دون مسافات، ووصف ومعيار قبول طويلان. لم يُفحص على هاتف حقيقي. |
+| الهاتف والحاسوب مع نص عربي طويل | نجح في المتصفح | محلياً وعلى staging المنشور، على عرض الهاتف (iPhone 13 في Chromium) والحاسوب (1280px): «long Arabic text: no sideways scroll on the phone (Today and task page)» و«long Arabic text: no sideways scroll on the desktop (Today and task page)»، بعنوان من 140 حرفاً فيه كلمة عربية من 56 حرفاً دون مسافات، ووصف ومعيار قبول طويلان. لم يُفحص على هاتف حقيقي. |
 | تجربة المتصفح الكاملة على staging | نجح | `e2e/run.mjs` 32 من 32 على staging المنشور، داخل ساعات العمل. |
-| المجدول يعمل على الإنتاج دون أخطاء | فشل في النشر الأول، ويُعاد التحقق | أول نشر للإنتاج لم يسجّل Cron Trigger: الحساب بلغ حد الخطة المجانية (5 مهام Cron)، فلم يعمل المجدول. استُبدل بمنبّه Durable Object كل دقيقة (`test/clock.test.ts`)، وخطوة «The scheduler is actually running» في CI تتحقق منه على الإنتاج. |
-| دخول الأعضاء الأربعة على رابط الإنتاج | جارٍ | روابط الإعداد الأربعة طابقت قاعدة الإنتاج وسُلّمت بشكل خاص، واستُخدم أول رابط فعلاً على الإنتاج. |
+| المجدول يعمل على الإنتاج دون أخطاء | نجح بعد إصلاح | منبّه Durable Object (`worker/clock.ts`، و`test/clock.test.ts`) يشغّل المجدول على الإنتاج كل دقيقة منذ 09:04 UTC، وكل تشغيل ناجح. خطوة «The scheduler is actually running» في CI نجحت: تشغيلان ناجحان ولا تشغيل فاشل منذ النشر. قبل ذلك لم يسجّل أول نشر للإنتاج Cron Trigger، لأن الحساب بلغ حد الخطة المجانية (5 مهام Cron)، فلم يعمل المجدول من 08:32 إلى 09:04 UTC. لم تكن على الإنتاج مهام حقيقية في تلك المدة. |
+| دخول الأعضاء الأربعة على رابط الإنتاج | نجح لرابط محمد، والباقي لم يُستخدم | روابط الإعداد الأربعة طابقت قاعدة الإنتاج وسُلّمت بشكل خاص. استُخدم رابط محمد ودُخل به على الإنتاج، ورُبط بالحساب جهاز للإشعارات. روابط عمار وسما وحسين لم تُستخدم بعد. |
 
-بند «فشل» الوحيد هو المجدول في النشر الأول، وأسبابه ومعالجته في صفه.
+لا بند «فشل» قائماً. المجدول فشل في أول نشر للإنتاج، ثم أُصلح وتُحقّق منه على الإنتاج نفسه (صفه أعلاه). ما بقي هو الفحص اليدوي لإشعارات الأجهزة على هواتف حقيقية.
 
 ### فحص يدوي مطلوب اليوم
 
-**لم تُختبر إشعارات الجهاز (Web Push) على آيفون أو أندرويد حقيقي.** الاختبار الآلي الحقيقي (`e2e/push.mjs`) يعمل في Google Chrome على الحاسوب ضمن CI على staging، ولم يُشغَّل بعد (الصف 18ب). وتجربة الآيفون في المتصفح المحلي محاكاة لحجم الشاشة لا أكثر. على هاتف واحد على الأقل من كل نوع موجود في الفريق:
+**لم تُختبر إشعارات الجهاز (Web Push) على آيفون أو أندرويد حقيقي.** الاختبار الآلي الحقيقي (`e2e/push.mjs`) نجح 7 من 7 في Google Chrome على الحاسوب ضمن CI على staging (الصف 18ب). وتجربة الآيفون في المتصفح المحلي محاكاة لحجم الشاشة لا أكثر. على هاتف واحد على الأقل من كل نوع موجود في الفريق:
 
 1. **آيفون (iOS 16.4 أو أحدث):** افتح الرابط في Safari ← المشاركة ← «إضافة إلى الشاشة الرئيسية» ← افتح التطبيق من الأيقونة وسجّل الدخول. **أندرويد:** Chrome ← ⋮ ← «تثبيت التطبيق».
 2. من صفحة الحساب: «فعّل إشعارات جهازي» ← «سماح» ← «أرسل إشعار اختبار لي». يجب أن يصل الإشعار خلال دقيقة.
