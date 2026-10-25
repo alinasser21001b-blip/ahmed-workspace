@@ -11,7 +11,8 @@ const BASE = process.env.BASE_URL.replace(/\/$/, "");
 const results = [];
 // A setup token travels after '#'. Output goes to CI logs, so a URL in an
 // error line (e.g. a failed goto) must never carry one.
-const redact = (s) => String(s).replace(/#[A-Za-z0-9_-]{16,}/g, "#…");
+// Push endpoints are capability URLs, so any absolute URL is dropped as well.
+const redact = (s) => String(s).replace(/#[A-Za-z0-9_-]{16,}/g, "#…").replace(/https?:\/\/[^\s"']+/g, "<url>");
 const check = (name, ok, detail = "") => {
   results.push(ok);
   console.log(redact(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`));
@@ -20,11 +21,19 @@ const check = (name, ok, detail = "") => {
 // Push is unavailable in Chrome incognito contexts (browser.newContext).
 // An empty userDataDir creates an isolated temporary regular profile, removed
 // when this context closes. Never use a real person\'s Chrome profile.
+// Playwright also turns off background networking by default; Chrome's push
+// connection needs it, and without it the push service answers 410 at once.
 const context = await chromium.launchPersistentContext("", {
   channel: "chrome", headless: false, locale: "ar-IQ", timezoneId: "Asia/Baghdad",
+  ignoreDefaultArgs: ["--disable-background-networking"],
 });
 await context.grantPermissions(["notifications"], { origin: BASE });
 const page = await context.newPage();
+// The server's answer to the test send (devices, sent, errors) explains a failure.
+let lastTest = null;
+page.on("response", (r) => {
+  if (new URL(r.url()).pathname === "/api/push/test") r.json().then((j) => (lastTest = j)).catch(() => {});
+});
 
 async function setup(link) {
   const pw = `Push-${randomBytes(9).toString("base64url")}`;
@@ -81,8 +90,8 @@ try {
   check("a task link outside the member's scope opens nothing", true);
 } catch (e) {
   const state = await page.evaluate(() => ({ permission: Notification.permission, controlled: !!navigator.serviceWorker.controller })).catch(() => null);
-  const alerts = await page.locator('[role="alert"]').allInnerTexts().catch(() => []);
-  check("push scenario ran to the end", false, `${String(e?.message ?? e).split("\n")[0]}; state=${JSON.stringify(state)}; alerts=${JSON.stringify(alerts)}`);
+  const alerts = await page.locator('[role="alert"], [role="status"]').allInnerTexts().catch(() => []);
+  check("push scenario ran to the end", false, `${String(e?.message ?? e).split("\n")[0]}; state=${JSON.stringify(state)}; alerts=${JSON.stringify(alerts)}; test=${JSON.stringify(lastTest)}`);
 } finally {
   await context.close();
 }
