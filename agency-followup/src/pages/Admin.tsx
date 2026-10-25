@@ -237,17 +237,26 @@ function SettingsCard({ data, done }: { data: Overview; done: () => void }) {
         <Field label="عدم الاستلام — عادية (دقائق عمل)" htmlFor="an" help="تذكير، ثم تصعيد ثلاث مراحل">
           <input id="an" className="input ltr" dir="ltr" defaultValue={rules.ack.normal.join(", ")} onChange={(e) => setRules({ ...rules, ack: { ...rules.ack, normal: nums(e.target.value) } })} />
         </Field>
-        <Field label="عدم الاستلام — عاجلة" htmlFor="au">
+        <Field label="عدم الاستلام — عاجلة (دقائق عمل)" htmlFor="au" help="تذكير، ثم تصعيد ثلاث مراحل">
           <input id="au" className="input ltr" dir="ltr" defaultValue={rules.ack.urgent.join(", ")} onChange={(e) => setRules({ ...rules, ack: { ...rules.ack, urgent: nums(e.target.value) } })} />
         </Field>
-        <Field label="تذكير قبل الموعد — عادية" htmlFor="dn">
+        <Field label="تذكير قبل الموعد — عادية (دقائق عمل)" htmlFor="dn">
           <input id="dn" className="input ltr" dir="ltr" type="number" value={rules.dueSoonMinutes.normal} onChange={(e) => setRules({ ...rules, dueSoonMinutes: { ...rules.dueSoonMinutes, normal: Number(e.target.value) } })} />
         </Field>
-        <Field label="متابعة العائق بعد (دقائق عمل)" htmlFor="bn">
+        <Field label="تذكير قبل الموعد — عاجلة (دقائق عمل)" htmlFor="du">
+          <input id="du" className="input ltr" dir="ltr" type="number" value={rules.dueSoonMinutes.urgent} onChange={(e) => setRules({ ...rules, dueSoonMinutes: { ...rules.dueSoonMinutes, urgent: Number(e.target.value) } })} />
+        </Field>
+        <Field label="متابعة العائق بعد — عادية (دقائق عمل)" htmlFor="bn">
           <input id="bn" className="input ltr" dir="ltr" type="number" value={rules.blockerFollowMinutes.normal} onChange={(e) => setRules({ ...rules, blockerFollowMinutes: { ...rules.blockerFollowMinutes, normal: Number(e.target.value) } })} />
         </Field>
-        <Field label="انتظار المراجعة — تذكير، تصعيد" htmlFor="rn">
+        <Field label="متابعة العائق بعد — عاجلة (دقائق عمل)" htmlFor="bu">
+          <input id="bu" className="input ltr" dir="ltr" type="number" value={rules.blockerFollowMinutes.urgent} onChange={(e) => setRules({ ...rules, blockerFollowMinutes: { ...rules.blockerFollowMinutes, urgent: Number(e.target.value) } })} />
+        </Field>
+        <Field label="انتظار المراجعة — عادية (دقائق عمل)" htmlFor="rn" help="تذكير، ثم تصعيد">
           <input id="rn" className="input ltr" dir="ltr" defaultValue={rules.reviewMinutes.normal.join(", ")} onChange={(e) => setRules({ ...rules, reviewMinutes: { ...rules.reviewMinutes, normal: nums(e.target.value) } })} />
+        </Field>
+        <Field label="انتظار المراجعة — عاجلة (دقائق عمل)" htmlFor="ru" help="تذكير، ثم تصعيد">
+          <input id="ru" className="input ltr" dir="ltr" defaultValue={rules.reviewMinutes.urgent.join(", ")} onChange={(e) => setRules({ ...rules, reviewMinutes: { ...rules.reviewMinutes, urgent: nums(e.target.value) } })} />
         </Field>
       </div>
       <label className="check">

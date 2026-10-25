@@ -102,8 +102,17 @@ admin.post("/members/:id/reset", async (c) => {
 });
 
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "الوقت بصيغة 09:00");
-const minutes = (min: number, max: number) => z.number().int().min(min).max(max);
+// Each message names the field as the settings page labels it, so Mohammed sees which value to fix.
+const minutes = (min: number, max: number, what: string) => {
+  const range = `${what}: القيمة بين ${min} و${max} دقيقة`;
+  return z.number(`${what}: أدخل رقماً`).int(`${what}: أدخل رقماً صحيحاً`).min(min, range).max(max, range);
+};
 const increasing = (arr: number[]) => arr.every((x, i) => i === 0 || x > arr[i - 1]);
+const stages = (count: 2 | 4, min: number, max: number, what: string) =>
+  z
+    .array(minutes(min, max, what))
+    .length(count, `${what}: أدخل ${count === 4 ? "أربع قيم" : "قيمتين"} مفصولة بفواصل`)
+    .refine(increasing, `${what}: المراحل تصاعدية`);
 const settingsSchema = z.object({
   work_hours: z
     .object({
@@ -115,16 +124,16 @@ const settingsSchema = z.object({
           return false;
         }
       }, "منطقة زمنية غير معروفة"),
-      days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+      days: z.array(z.number().int().min(0).max(6)).min(1, "اختر يوم عمل واحداً على الأقل").max(7),
       start: hhmm,
       end: hhmm,
     })
     .refine((w) => w.end > w.start, "نهاية الدوام يجب أن تكون بعد بدايته"),
   rules: z.object({
-    ack: z.object({ normal: z.array(minutes(5, 6000)).length(4).refine(increasing, "المراحل تصاعدية"), urgent: z.array(minutes(5, 6000)).length(4).refine(increasing, "المراحل تصاعدية") }),
-    dueSoonMinutes: z.object({ normal: minutes(5, 1440), urgent: minutes(5, 1440) }),
-    blockerFollowMinutes: z.object({ normal: minutes(15, 2880), urgent: minutes(15, 2880) }),
-    reviewMinutes: z.object({ normal: z.array(minutes(15, 6000)).length(2).refine(increasing, "المراحل تصاعدية"), urgent: z.array(minutes(15, 6000)).length(2).refine(increasing, "المراحل تصاعدية") }),
+    ack: z.object({ normal: stages(4, 5, 6000, "عدم الاستلام — عادية"), urgent: stages(4, 5, 6000, "عدم الاستلام — عاجلة") }),
+    dueSoonMinutes: z.object({ normal: minutes(5, 1440, "تذكير قبل الموعد — عادية"), urgent: minutes(5, 1440, "تذكير قبل الموعد — عاجلة") }),
+    blockerFollowMinutes: z.object({ normal: minutes(15, 2880, "متابعة العائق بعد — عادية"), urgent: minutes(15, 2880, "متابعة العائق بعد — عاجلة") }),
+    reviewMinutes: z.object({ normal: stages(2, 15, 6000, "انتظار المراجعة — عادية"), urgent: stages(2, 15, 6000, "انتظار المراجعة — عاجلة") }),
     urgentOutsideHours: z.boolean(),
     demoReminders: z.boolean(),
   }),

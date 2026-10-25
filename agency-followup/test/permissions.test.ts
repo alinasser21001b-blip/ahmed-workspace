@@ -33,6 +33,15 @@ describe("§14.1 Mohammed assigns to each member", () => {
     const list = await T.sama.get("/api/tasks?status=all");
     const wardIds = list.body.tasks.filter((t: any) => t.client.id === "c_ward").map((t: any) => t.id);
     expect(wardIds).toEqual([toSamaWard]);
+
+    // Each member finds the task in his own account: the task list and his Today screen.
+    const ids = (r: { body: any }) => r.body.tasks.map((t: any) => t.id);
+    const section = (r: { body: any }, k: string) => r.body.sections.find((s: any) => s.key === k).tasks.map((t: any) => t.id);
+    expect(ids(await T.ammar.get("/api/tasks"))).toContain(toAmmar);
+    expect(ids(await T.hussein.get("/api/tasks"))).toContain(toHussein);
+    expect(section(await T.ammar.get("/api/today"), "mine")).toContain(toAmmar);
+    expect(section(await T.hussein.get("/api/today"), "waiting_ack")).toContain(toHussein);
+    expect(ids(await T.sama.get("/api/tasks"))).toContain(toSamaWard);
   });
 });
 

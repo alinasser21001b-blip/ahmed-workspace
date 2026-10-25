@@ -115,6 +115,7 @@ export const PUSH_TEXT: Record<string, string> = {
   due_soon: "موعد تسليم يقترب",
   overdue: "مهمة تجاوزت موعدها",
   overdue_escalation: "مهمة في فريقك تجاوزت موعدها",
+  daily_summary: "ملخص اليوم: مواعيد تسليم قريبة",
   blocker_opened: "عائق بانتظار حلك",
   blocker_follow: "متابعة: عائق ما زال مفتوحاً",
   blocker_escalation: "عائق في فريقك ما زال مفتوحاً",

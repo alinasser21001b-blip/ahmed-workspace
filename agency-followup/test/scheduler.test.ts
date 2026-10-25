@@ -174,9 +174,15 @@ describe("§14.13 blockers", () => {
     expect(only(await noteCounts(id), ["blocker_follow", "blocker_escalation"])).toEqual({ "sama:blocker_follow": 1, "ammar:blocker_escalation": 1 });
     expect(only(await noteCounts(id), DUE)).toEqual({});
 
-    // Resolving resumes measurement and keeps the waiting history.
+    // Resolving resumes measurement and keeps the waiting history. The wait
+    // (09:00 → 13:05) is not his lateness: his own time runs out at 14:05.
     expect((await act(T.sama, id, "resolve_blocker", { blocker_id: b.id, resolution: "وصل المنتج" })).status).toBe(200);
+    await sql("update blockers set resolved_at = ? where id = ?", plus(B, 245).toISOString(), b.id);
     await run(250);
+    await run(305);
+    expect(only(await noteCounts(id), DUE)).toEqual({});
+    await run(306);
+    await run(310);
     expect(only(await noteCounts(id), DUE)).toEqual({ "hussein:overdue": 1, "sama:overdue_escalation": 1 });
     const after = await task(T.sama, id);
     expect(after.blockers[0].resolved_at).toBeTruthy();
@@ -232,8 +238,7 @@ describe("demo data", () => {
     const today = (await T.mohammed.get("/api/today")).body;
     const kinds = today.conflicts.map((c: any) => c.kind);
     expect(kinds).toContain("refused_booking");
-    const wardBooking = (await rows("select ends_at from bookings where id = 'bk_demo_04'"))[0];
-    if (wardBooking.ends_at > new Date().toISOString()) expect(kinds).toContain("due_during_booking");
+    expect(kinds).toContain("due_during_booking");
     const samaBookings = (await T.sama.get("/api/bookings?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z")).body.bookings;
     const wardForSama = samaBookings.filter((b: any) => b.id === "bk_demo_04");
     expect(wardForSama).toEqual([expect.objectContaining({ busy_only: true, title: "مشغول" })]);

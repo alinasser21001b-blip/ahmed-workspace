@@ -22,9 +22,12 @@ const links = Object.fromEntries(
 );
 
 const results = [];
+// A setup token travels after '#'. Output goes to CI logs, so a URL in an
+// error line (e.g. a failed goto) must never carry one.
+const redact = (s) => String(s).replace(/#[A-Za-z0-9_-]{16,}/g, "#…");
 const check = (name, ok, detail = "") => {
   results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(redact(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`));
 };
 const shot = (page, name) => page.screenshot({ path: `${OUT}/${name}.png`, fullPage: true });
 
@@ -102,6 +105,51 @@ try {
   check("sama: creates a shoot request for hussein", /\/tasks\/t_/.test(taskUrl));
   await s.getByText("جديدة").first().waitFor();
   await shot(s, "task-new-sama");
+
+  // Long Arabic text (spec §14): a 140-character title with one long unbroken
+  // word, and long description and acceptance, must not make Today or the
+  // task page scroll sideways, on the phone (Sama) or the desktop (Mohammed).
+  {
+    const word = "تصويرومونتاجونشرلحملةالعيادة".repeat(2); // 56 letters, nowhere to break
+    const head = "عنوان طويل للتجربة";
+    const longTitle = `${head} ${word} ${"يبقى داخل البطاقة على الهاتف والحاسوب ".repeat(3)}`.slice(0, 140).trim(); // exactly 140
+    const r = await s.request.post(`${BASE}/api/tasks`, {
+      headers: { origin: BASE, "content-type": "application/json", "idempotency-key": `e2e-long-${randomBytes(6).toString("hex")}` },
+      data: {
+        client_id: "c_obesity",
+        assignee_id: "u_hussein",
+        title: longTitle,
+        description: `${"وصف طويل يشرح المطلوب بالتفصيل مع ملاحظات العميل والمواعيد. ".repeat(20)}${word}${word}`,
+        acceptance: `${word}${word} ${"يُقبل العمل بعد مراجعة العميل. ".repeat(10)}`,
+        priority: "normal",
+        due_at: due.toISOString(),
+      },
+    });
+    const longId = r.status() === 201 ? (await r.json()).id : null;
+    for (const [label, p] of [["phone", s], ["desktop", m]]) {
+      let ok = !!longId;
+      const seen = [longId ? `title ${longTitle.length} chars` : `create status ${r.status()}`];
+      if (longId) {
+        for (const [page, path] of [["today", "/"], ["task", `/tasks/${longId}`]]) {
+          try {
+            await p.goto(`${BASE}${path}`);
+            await p.getByText(head).first().waitFor({ timeout: 15000 });
+            const [sw, iw] = await p.evaluate(async () => {
+              await document.fonts.ready;
+              return [document.documentElement.scrollWidth, window.innerWidth];
+            });
+            seen.push(`${page} ${sw}/${iw}`);
+            ok &&= sw <= iw + 1;
+            await shot(p, `long-text-${page}-${label}`);
+          } catch (e) {
+            seen.push(`${page}: ${String(e?.message ?? e).split("\n")[0]}`);
+            ok = false;
+          }
+        }
+      }
+      check(`long Arabic text: no sideways scroll on the ${label} (Today and task page)`, ok, seen.join(", "));
+    }
+  }
 
   // Hussein receives, acknowledges, starts, submits.
   // During working hours the notification is delivered at once; outside them

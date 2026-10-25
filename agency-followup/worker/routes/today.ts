@@ -29,8 +29,10 @@ today.get("/", async (c) => {
     .bind(JSON.stringify(rows.map((r) => r.id)))
     .all<{ task_id: string }>();
   const proposalTasks = new Set(pendingProposals.results.map((p) => p.task_id));
-  const myBlockers = new Set(blockers.filter((b) => b.resolver_id === me).map((b) => b.task_id));
-  const myOpenQuestions = new Set(blockers.filter((b) => b.opened_by === me && b.kind === "clarification").map((b) => b.task_id));
+  // `blockers` also holds this cycle's resolved ones (for lateness); these sets want the open ones.
+  const open = blockers.filter((b) => !b.resolved_at);
+  const myBlockers = new Set(open.filter((b) => b.resolver_id === me).map((b) => b.task_id));
+  const myOpenQuestions = new Set(open.filter((b) => b.opened_by === me && b.kind === "clarification").map((b) => b.task_id));
   const rowById = new Map(rows.map((r) => [r.id, r]));
   // A due-date proposal waits on the requester (or on the reviewer when the requester assigned himself).
   const decidesProposal = (t: TaskSummary) => {
@@ -51,13 +53,15 @@ today.get("/", async (c) => {
   if (actor.role === "owner") {
     sections.push(
       { key: "waiting_ack", title: "لم تُستلم بعد", empty: "كل المهام المسندة استُلمت.", tasks: all.filter((t) => t.flags.waiting_ack).sort(byAge) },
-      { key: "overdue", title: "متأخرة", hint: "المهام المتوقفة بانتظار العميل معلّمة ولا تُحتسب على المنفذ.", empty: "لا توجد مهام متأخرة.", tasks: all.filter((t) => t.flags.overdue).sort(byDue) },
+      { key: "overdue", title: "متأخرة", hint: "ما تجاوز موعده بسبب الانتظار على العميل أو على زميل معلّم، ولا يُحتسب على المنفذ.", empty: "لا توجد مهام متأخرة.", tasks: all.filter((t) => t.flags.overdue).sort(byDue) },
       { key: "at_risk", title: "معرّضة للتأخر", empty: "لا توجد مهام قريبة من موعدها دون تقدم.", tasks: all.filter((t) => t.flags.at_risk).sort(byDue) },
       { key: "awaiting_me", title: "بانتظار قراري", empty: "لا شيء بانتظار قرارك.", tasks: awaitingMe.sort(byAge) },
       { key: "blocked", title: "متوقفة بعائق", empty: "لا توجد عوائق مفتوحة.", tasks: all.filter((t) => t.flags.blocked).sort(byAge) },
     );
   } else if (actor.role === "exec") {
     const followIds = ctx.members.filter((m) => m.role === "account_manager" || m.role === "photographer").map((m) => m.id);
+    const follow = all.filter((t) => followIds.includes(t.assignee?.id ?? "") && (t.flags.waiting_ack || t.flags.overdue || t.flags.blocked || t.flags.at_risk)).sort(byDue);
+    const followSet = new Set(follow.map((t) => t.id));
     sections.push(
       { key: "awaiting_me", title: "بانتظار قراري أو مراجعتي", empty: "لا شيء بانتظارك.", tasks: awaitingMe.sort(byAge) },
       { key: "mine", title: "مهامي", empty: "لا مهام مسندة إليك الآن.", tasks: all.filter((t) => t.assignee?.id === me && t.status !== "in_review").sort(byDue) },
@@ -66,9 +70,10 @@ today.get("/", async (c) => {
         title: "متابعة سما وحسين",
         hint: "غير مستلمة أو متأخرة أو متوقفة.",
         empty: "لا يوجد ما يحتاج متابعة.",
-        tasks: all.filter((t) => followIds.includes(t.assignee?.id ?? "") && (t.flags.waiting_ack || t.flags.overdue || t.flags.blocked || t.flags.at_risk)).sort(byDue),
+        tasks: follow,
       },
-      { key: "open", title: "كل المهام المفتوحة", empty: "لا مهام مفتوحة.", tasks: all.filter((t) => t.assignee?.id !== me).sort(byDue) },
+      // Cards already under «متابعة سما وحسين» are not repeated here.
+      { key: "open", title: "كل المهام المفتوحة", empty: "لا مهام مفتوحة.", tasks: all.filter((t) => t.assignee?.id !== me && !followSet.has(t.id)).sort(byDue) },
     );
   } else if (actor.role === "account_manager") {
     const photographerIds = ctx.members.filter((m) => m.role === "photographer").map((m) => m.id);

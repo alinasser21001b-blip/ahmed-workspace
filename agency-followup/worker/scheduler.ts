@@ -5,11 +5,12 @@
 // move time; nothing in production lets a request choose it.
 
 import { OPEN_STATUSES, WORKING_STATUSES, type TaskStatus } from "../shared/domain";
-import { actorFor, loadCtx, type BlockerRow, type Ctx, type TaskRow } from "./db";
-import { businessMinutesBetween, isBusinessTime } from "./lib/time";
+import { actorFor, cycleBlockers, loadCtx, type Ctx, type TaskRow } from "./db";
+import { addBusinessMinutes, businessMinutesBetween, isBusinessTime, localParts, zonedToUtc } from "./lib/time";
 import { ACK_KINDS, BLOCKER_KINDS_N, DUE_KINDS, PUSH_TEXT, REVIEW_KINDS, notifyStmts, type NotifyInput } from "./notify";
 import { canViewTask, escalationChain, type Member } from "./policy";
 import { deliver, type SubRow } from "./push";
+import { ownDeadline, waitsOnOthers } from "./views";
 
 export type SchedulerSummary = { tasks: number; created: number; sent: number; skipped: number; failed: number; cancelled: number; retried: number; inHours: boolean };
 
@@ -54,13 +55,12 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
   if (!eligible.length) return { tasks: tasks.length, created: 0, inHours };
 
   const ids = eligible.map((t) => t.id);
-  const blockers: BlockerRow[] = [];
+  // This cycle's blockers, resolved ones too: the time spent waiting on others is given back on the deadline.
+  const blockers = await cycleBlockers(ctx.db, ids);
   const grants = new Map<string, Set<string>>();
   for (let i = 0; i < ids.length; i += 80) {
     const chunk = ids.slice(i, i + 80);
     const ph = chunk.map(() => "?").join(",");
-    const b = await ctx.db.prepare(`select * from blockers where resolved_at is null and task_id in (${ph})`).bind(...chunk).all<BlockerRow>();
-    blockers.push(...b.results);
     const g = await ctx.db.prepare(`select task_id, user_id from task_grants where task_id in (${ph})`).bind(...chunk).all<{ task_id: string; user_id: string }>();
     for (const r of g.results) {
       const s = grants.get(r.task_id) ?? new Set<string>();
@@ -72,6 +72,20 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
   const stmts: D1PreparedStatement[] = [];
   const noteIdx: number[] = [];
   const tz = ctx.workHours.tz;
+  // The first working hour of the day carries the start-of-day summary (§8).
+  const day = localParts(ctx.now, tz);
+  const [sh, sm] = ctx.workHours.start.split(":").map(Number);
+  const dayStart = zonedToUtc(day.y, day.m, day.d, sh || 0, sm || 0, tz);
+  const summaryDay =
+    inHours && ctx.now.getTime() - dayStart.getTime() < 60 * 60_000
+      ? { key: `${day.y}-${String(day.m).padStart(2, "0")}-${String(day.d).padStart(2, "0")}`, end: zonedToUtc(day.y, day.m, day.d + 1, 0, 0, tz) }
+      : null;
+  const summary = new Map<string, { title: string; due: number }[]>();
+  // Just past how far "due soon" reaches from now, in working minutes; a deadline beyond it is not counted out.
+  const soonBound = {
+    normal: addBusinessMinutes(ctx.now, ctx.rules.dueSoonMinutes.normal + 1, ctx.workHours),
+    urgent: addBusinessMinutes(ctx.now, ctx.rules.dueSoonMinutes.urgent + 1, ctx.workHours),
+  };
   for (const t of eligible) {
     const client = ctx.clientsById.get(t.client_id);
     const assignee = ctx.membersById.get(t.assignee_id);
@@ -87,7 +101,8 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
       return !!a && canViewTask(a, t, g.has(m.id));
     };
     const speed = t.priority === "urgent" ? "urgent" : "normal";
-    const open = blockers.filter((b) => b.task_id === t.id);
+    const cycleRows = blockers.filter((b) => b.task_id === t.id);
+    const open = cycleRows.filter((b) => !b.resolved_at);
     const chain = escalationChain(assignee, client, ctx.members).filter(sees);
     const ref = { id: t.id, cycle: t.cycle, priority: t.priority };
     const url = `/tasks/${t.id}`;
@@ -114,21 +129,35 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
       });
     }
 
-    // 2. Due soon / overdue. While a blocker is open the task waits on its
-    // resolver, so the assignee is not chased for it, unless he holds that
-    // blocker himself (an account manager waiting on her own client).
-    const waitingOnOthers = open.some((b) => b.resolver_id !== assignee.id || assignee.role === "owner");
-    if (WORKING_STATUSES.includes(t.status as TaskStatus) && t.due_at && !waitingOnOthers) {
-      const due = new Date(t.due_at);
-      const soon = ctx.rules.dueSoonMinutes[speed] * 60_000;
-      if (ctx.now < due && due.getTime() - ctx.now.getTime() <= soon) {
-        push({ userId: assignee.id, task: ref, kind: "due_soon", title: `يقترب موعد التسليم: ${t.title}`, body: `${client.name} · الموعد ${fmtTime(t.due_at, tz)}`, url, dedupeKey: `due_soon:${t.id}:${t.cycle}:${t.due_version}` });
+    // 2. Due soon / overdue, on the assignee's own working time: what he
+    // spent waiting on others this cycle is given back. While a blocker is
+    // open the task waits on its resolver, so the assignee is not chased for
+    // it, unless he holds that blocker himself (an account manager waiting on
+    // her own client). The keys stay per due date: overdue fires once, when
+    // his own time runs out.
+    const waitingOnOthers = open.some((b) => waitsOnOthers(t, b, assignee.role));
+    const own = WORKING_STATUSES.includes(t.status as TaskStatus) && t.due_at && !waitingOnOthers ? ownDeadline(ctx, t, cycleRows, assignee.role) : null;
+    if (own?.due && t.due_at) {
+      const soon = ctx.rules.dueSoonMinutes[speed];
+      const given = own.waited ? " بعد احتساب وقت الانتظار" : "";
+      // Working minutes left, counted only once the deadline is that close; a
+      // night run (urgent work) also waits until it is close on the clock.
+      if (ctx.now < own.due && own.due <= soonBound[speed] && (inHours || own.due.getTime() - ctx.now.getTime() <= soon * 60_000)) {
+        const left = businessMinutesBetween(ctx.now, own.due, ctx.workHours);
+        const body = own.waited ? `${client.name} · بقي ${fmtBusinessDuration(left)} عمل${given}` : `${client.name} · الموعد ${fmtTime(t.due_at, tz)}`;
+        if (left > 0 && left <= soon) push({ userId: assignee.id, task: ref, kind: "due_soon", title: `يقترب موعد التسليم: ${t.title}`, body, url, dedupeKey: `due_soon:${t.id}:${t.cycle}:${t.due_version}` });
       }
-      if (ctx.now >= due) {
-        push({ userId: assignee.id, task: ref, kind: "overdue", title: `تجاوزت موعدها: ${t.title}`, body: `${client.name} · كان الموعد ${fmtTime(t.due_at, tz)}`, url, dedupeKey: `overdue:${t.id}:${t.cycle}:${t.due_version}` });
+      if (own.overdueOwn) {
+        push({ userId: assignee.id, task: ref, kind: "overdue", title: `تجاوزت موعدها: ${t.title}`, body: `${client.name} · كان الموعد ${fmtTime(t.due_at, tz)}${own.waited ? ` ·${given}` : ""}`, url, dedupeKey: `overdue:${t.id}:${t.cycle}:${t.due_version}` });
         const first = chain[0];
-        if (first) push({ userId: first.id, task: ref, kind: "overdue_escalation", title: `تجاوزت موعدها: ${t.title}`, body: `${assignee.name} · ${client.name}`, url, dedupeKey: `overdue_esc:${t.id}:${t.cycle}:${t.due_version}` });
+        if (first) push({ userId: first.id, task: ref, kind: "overdue_escalation", title: `تجاوزت موعدها: ${t.title}`, body: `${assignee.name} · ${client.name}${own.waited ? ` ·${given}` : ""}`, url, dedupeKey: `overdue_esc:${t.id}:${t.cycle}:${t.due_version}` });
       }
+    }
+
+    // 2b. What goes into the assignee's start-of-day summary: work due today
+    // on his own time, or already past it.
+    if (summaryDay && own?.due && own.due < summaryDay.end && assignee.active && sees(assignee)) {
+      summary.set(assignee.id, [...(summary.get(assignee.id) ?? []), { title: t.title, due: own.due.getTime() }]);
     }
 
     // 3. Open blockers: follow up with the resolver, then the person above him.
@@ -167,6 +196,23 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
         const up = above(reviewer);
         if (up) push({ userId: up.id, task: ref, kind: "review_escalation", title: `مراجعة متأخرة عند ${reviewer.name}: ${t.title}`, body: `${client.name} · منذ ${fmtBusinessDuration(elapsed)} عمل`, url, dedupeKey: `review:${t.id}:${t.cycle}:${t.review_round}:${t.reviewer_id}:${since}:1` });
       }
+    }
+  }
+
+  // 5. One start-of-day summary per member, once a day.
+  if (summaryDay) {
+    for (const [userId, items] of summary) {
+      items.sort((a, b) => a.due - b.due);
+      const n = items.length;
+      const count = n === 1 ? "مهمة واحدة عليك تسليمها" : n === 2 ? "مهمتان عليك تسليمهما" : `${n} ${n > 10 ? "مهمة" : "مهام"} عليك تسليمها`;
+      const names = items
+        .slice(0, 3)
+        .map((i) => `«${i.title.slice(0, 80)}»`)
+        .join("، ");
+      noteIdx.push(stmts.length);
+      stmts.push(
+        ...notifyStmts(ctx, { userId, task: null, kind: "daily_summary", title: `ملخص اليوم: ${count} اليوم`, body: n > 3 ? `${names} و…` : names, url: "/", dedupeKey: `daily_summary:${userId}:${summaryDay.key}`, deliverAt: ctx.now }),
+      );
     }
   }
 

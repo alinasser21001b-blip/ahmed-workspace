@@ -5,7 +5,7 @@ import { ApiError, badRequest, body, forbidden, id, instant, notFound, text, typ
 import { randomId } from "../lib/crypto";
 import { businessMinutesBetween, isBusinessTime, nextBusinessStart } from "../lib/time";
 import { notifyMany } from "../notify";
-import { canCreateBooking, canManageBooking, canSeeBookingDetails, canViewTask, type Actor } from "../policy";
+import { canCreateBooking, canManageBooking, canOpenTask, canSeeBookingDetails, type Actor } from "../policy";
 import { loadVisibleTask } from "./tasks";
 
 export const bookings = new Hono<AppEnv>();
@@ -60,7 +60,7 @@ export async function shapeBookingsForViewer(ctx: Ctx, actor: Actor, rows: Booki
   ]);
   const grantedIds = new Set(granted.results.map((g) => g.task_id));
   // Same rule as opening the task: archived tasks are the owner's only.
-  const visible = new Set(linked.results.filter((t) => canViewTask(actor, t, grantedIds.has(t.id)) && (!t.archived_at || actor.role === "owner")).map((t) => t.id));
+  const visible = new Set(linked.results.filter((t) => canOpenTask(actor, t, grantedIds.has(t.id))).map((t) => t.id));
   return shaped.map((b) => (b.busy_only ? b : { ...b, task_id: b.task_id && visible.has(b.task_id) ? b.task_id : null }));
 }
 

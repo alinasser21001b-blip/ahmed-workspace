@@ -186,6 +186,28 @@ export async function openBlockers(db: D1Database, taskIds: string[]): Promise<B
   return out;
 }
 
+/**
+ * Open blockers plus those resolved during their task's current cycle, oldest
+ * first: what lateness needs to give back the time spent waiting on others.
+ */
+export async function cycleBlockers(db: D1Database, taskIds: string[]): Promise<BlockerRow[]> {
+  if (!taskIds.length) return [];
+  const out: BlockerRow[] = [];
+  for (let i = 0; i < taskIds.length; i += 80) {
+    const chunk = taskIds.slice(i, i + 80);
+    const { results } = await db
+      .prepare(
+        `select b.* from blockers b join tasks t on t.id = b.task_id
+         where b.task_id in (${chunk.map(() => "?").join(",")}) and (b.resolved_at is null or b.resolved_at > t.cycle_started_at)
+         order by b.opened_at`,
+      )
+      .bind(...chunk)
+      .all<BlockerRow>();
+    out.push(...results);
+  }
+  return out;
+}
+
 export function logEventStmt(db: D1Database, taskId: string | null, actorId: string | null, type: string, data: unknown, now: Date): D1PreparedStatement {
   return db.prepare("insert into events (task_id, actor_id, type, data, created_at) values (?, ?, ?, ?, ?)").bind(taskId, actorId, type, JSON.stringify(data ?? {}), now.toISOString());
 }

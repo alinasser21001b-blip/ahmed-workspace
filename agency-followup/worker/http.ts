@@ -36,7 +36,9 @@ export async function body<T extends z.ZodType>(c: C, schema: T): Promise<z.infe
   const r = schema.safeParse(raw);
   if (!r.success) {
     const first = r.error.issues[0];
-    throw badRequest(first?.message && !first.message.startsWith("Invalid") ? first.message : "بيانات ناقصة أو غير صحيحة", { field: first?.path?.join(".") });
+    // Only our own Arabic messages reach the user; Zod's built-in ones are English.
+    const arabic = !!first?.message && /[\u0600-\u06FF]/.test(first.message);
+    throw badRequest(arabic ? first.message : "بيانات ناقصة أو غير صحيحة", { field: first?.path?.join(".") });
   }
   return r.data;
 }

@@ -6,7 +6,7 @@ import { useMe } from "../lib/session";
 import { fmtAgo, fmtDateTime, fmtDue, fmtFull, isoToLocalInput, localInputToIso } from "../lib/time";
 import { IBack, ICamera, ILink, IPlus } from "../ui/icons";
 import { Alert, Button, ErrorBox, Field, Loading, PriorityText, Sheet, StatusBadge, useApi, useToast } from "../ui/kit";
-import { FlagChips, TaskList, type TaskSummary } from "../ui/TaskCard";
+import { FlagChips, nextStepOf, TaskList, type TaskSummary } from "../ui/TaskCard";
 import type { Booking } from "./Today";
 
 type Detail = {
@@ -92,6 +92,7 @@ export function TaskPage({ id }: { id: string }) {
   if (can.propose_due) primary.push(<Button key="pd" onClick={() => setSheet("propose_due")}>{ACTION_LABEL.propose_due}</Button>);
   if (can.start && t.status === "new") primary.push(<Button key="start-new" busy={busy === "start"} onClick={() => run("start", {}, "سُجّل الاستلام والبدء.")}>{ACTION_LABEL.start}</Button>);
 
+  const next = nextStepOf(t);
   const openBlockers = data.blockers.filter((b) => !b.resolved_at);
   const closedBlockers = data.blockers.filter((b) => b.resolved_at);
   const pending = data.due_proposals.filter((p) => p.status === "pending");
@@ -108,9 +109,9 @@ export function TaskPage({ id }: { id: string }) {
           <StatusBadge status={t.status} />
           <PriorityText p={t.priority} />
         </div>
-        <h1>{t.title}</h1>
+        <h1 className="wrap">{t.title}</h1>
         {data.parent ? (
-          <p className="small">
+          <p className="small wrap">
             مهمة فرعية من: <Link to={`/tasks/${data.parent.id}`}>{data.parent.title}</Link>
           </p>
         ) : null}
@@ -143,9 +144,12 @@ export function TaskPage({ id }: { id: string }) {
         </div>
         <div className="divider" />
         <div className="row-between">
-          <div>
+          <div className="wrap">
             <div className="small muted">الخطوة التالية</div>
-            <div>{t.next_step || <span className="muted">لم تُحدد</span>}</div>
+            <div>
+              {next || <span className="muted">—</span>}
+              {next && !t.next_step ? <span className="tiny muted"> (تلقائية)</span> : null}
+            </div>
           </div>
           {can.next_step ? (
             <button className="btn small" onClick={() => setSheet("next_step")}>
@@ -162,13 +166,13 @@ export function TaskPage({ id }: { id: string }) {
           {t.description ? (
             <div>
               <h3>الوصف</h3>
-              <p style={{ whiteSpace: "pre-wrap" }}>{t.description}</p>
+              <p className="wrap" style={{ whiteSpace: "pre-wrap" }}>{t.description}</p>
             </div>
           ) : null}
           {t.acceptance ? (
             <div>
               <h3>معيار القبول</h3>
-              <p style={{ whiteSpace: "pre-wrap" }}>{t.acceptance}</p>
+              <p className="wrap" style={{ whiteSpace: "pre-wrap" }}>{t.acceptance}</p>
             </div>
           ) : null}
           {t.ref_url ? (
@@ -190,7 +194,7 @@ export function TaskPage({ id }: { id: string }) {
                 <strong>{BLOCKER_LABEL[b.kind]}</strong>
                 <span className="small muted">{fmtAgo(b.opened_at)}</span>
               </div>
-              <p style={{ whiteSpace: "pre-wrap" }}>{b.reason}</p>
+              <p className="wrap" style={{ whiteSpace: "pre-wrap" }}>{b.reason}</p>
               <p className="small muted">
                 سجّله {b.opened_by_name} · المسؤول عن الحل: {b.resolver}
                 {b.expected_at ? ` · الحل المتوقع: ${fmtDue(b.expected_at)}` : ""}
@@ -210,7 +214,7 @@ export function TaskPage({ id }: { id: string }) {
               <summary>عوائق محلولة ({closedBlockers.length})</summary>
               <div className="stack" style={{ marginTop: 8 }}>
                 {closedBlockers.map((b) => (
-                  <div key={b.id} className="blocker resolved small">
+                  <div key={b.id} className="blocker resolved small wrap">
                     <strong>{BLOCKER_LABEL[b.kind]}:</strong> {b.reason}
                     <div className="muted">
                       فُتح {fmtDateTime(b.opened_at)} · حُلّ {fmtDateTime(b.resolved_at!)} بواسطة {b.resolved_by_name}
@@ -233,10 +237,10 @@ export function TaskPage({ id }: { id: string }) {
                 <strong>{fmtFull(p.proposed_due_at)}</strong>
                 <span className={`chip ${p.status === "pending" ? "info" : p.status === "accepted" ? "ok" : ""}`}>{p.status === "pending" ? "بانتظار القرار" : p.status === "accepted" ? "قُبل" : "رُفض"}</span>
               </div>
-              <p className="small">
+              <p className="small wrap">
                 {p.proposed_by_name}: {p.reason}
               </p>
-              {p.decision_note ? <p className="small muted">قرار {p.decided_by_name}: {p.decision_note}</p> : null}
+              {p.decision_note ? <p className="small muted wrap">قرار {p.decided_by_name}: {p.decision_note}</p> : null}
               {p.status === "pending" && can.decide_due ? (
                 <span>
                   <button className="btn small primary" onClick={() => setSheet({ decide: p.id })}>
@@ -268,7 +272,7 @@ export function TaskPage({ id }: { id: string }) {
                   فتح رابط التسليم
                 </a>
               ) : null}
-              {d.evidence ? <p style={{ whiteSpace: "pre-wrap" }}>{d.evidence}</p> : null}
+              {d.evidence ? <p className="wrap" style={{ whiteSpace: "pre-wrap" }}>{d.evidence}</p> : null}
               <p className="small muted">سلّمه {d.submitted_by_name}</p>
             </div>
           ))}
@@ -487,7 +491,7 @@ function ActionSheet({ sheet, data, busy, run, close, reload }: { sheet: Exclude
     return (
       <Sheet title={b.kind === "clarification" ? "الإجابة عن طلب التوضيح" : "حل العائق"} onClose={close}>
         <div className="stack">
-          <p className="small muted">{b.reason}</p>
+          <p className="small muted wrap">{b.reason}</p>
           <Field label={b.kind === "clarification" ? "التوضيح" : "ما الذي حُلّ؟"} htmlFor="res">
             <textarea id="res" className="input" value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
@@ -707,6 +711,12 @@ function EditSheet({ data, close, reload }: { data: Detail; close: () => void; r
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dueIso = useMemo(() => (due ? localInputToIso(due) : null), [due]);
+  // Nobody reviews his own work, the owner excepted (validReviewer).
+  const reviewers = (opt?.reviewers ?? []).filter((r) => r.id !== assignee || r.role === "owner");
+  const pickAssignee = (id: string) => {
+    setAssignee(id);
+    if (id === reviewer && me.members.find((m) => m.id === id)?.role !== "owner") setReviewer("");
+  };
   const needsReason = dueIso !== t.due_at || priority !== t.priority || assignee !== t.assignee?.id;
   useEffect(() => setError(null), [due, priority, assignee]);
 
@@ -743,7 +753,7 @@ function EditSheet({ data, close, reload }: { data: Detail; close: () => void; r
         </Field>
         <div className="grid-2">
           <Field label="المنفذ" htmlFor="ea">
-            <select id="ea" className="input" value={assignee} onChange={(e) => setAssignee(e.target.value)} disabled={t.status === "in_review"}>
+            <select id="ea" className="input" value={assignee} onChange={(e) => pickAssignee(e.target.value)} disabled={t.status === "in_review"}>
               {!opt?.assignees.some((a) => a.id === assignee) ? <option value={assignee}>{t.assignee?.name}</option> : null}
               {opt?.assignees.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -753,9 +763,11 @@ function EditSheet({ data, close, reload }: { data: Detail; close: () => void; r
               ))}
             </select>
           </Field>
-          <Field label="المراجع" htmlFor="er2">
+          <Field label="المراجع" htmlFor="er2" error={!reviewer ? "لا يراجع أحد عمله بنفسه؛ اختر مراجعاً آخر." : null}>
             <select id="er2" className="input" value={reviewer} onChange={(e) => setReviewer(e.target.value)}>
-              {opt?.reviewers.map((r) => (
+              {!reviewer ? <option value="">اختر المراجع</option> : null}
+              {reviewer && !reviewers.some((r) => r.id === reviewer) ? <option value={reviewer}>{t.reviewer?.name}</option> : null}
+              {reviewers.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
@@ -789,7 +801,7 @@ function EditSheet({ data, close, reload }: { data: Detail; close: () => void; r
         </Field>
         {assignee !== t.assignee?.id ? <Alert kind="info">إعادة الإسناد تلغي تذكيرات المنفذ السابق، ويحتاج المنفذ الجديد إلى الاستلام من جديد. الحالة الحالية: {STATUS_LABEL[t.status as TaskStatus]}.</Alert> : null}
         {error ? <Alert kind="error">{error}</Alert> : null}
-        <Button className="primary" busy={busy} disabled={needsReason && reason.trim().length < 3} onClick={save}>
+        <Button className="primary" busy={busy} disabled={(needsReason && reason.trim().length < 3) || !reviewer} onClick={save}>
           حفظ التعديلات
         </Button>
       </div>

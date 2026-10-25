@@ -154,15 +154,29 @@ jobs:
       - name: Smoke checks
         run: sleep 15 && BASE_URL="${{ steps.deploy.outputs.url }}" node e2e/smoke.mjs | tee "$RUNNER_TEMP/smoke.txt"
       - name: The cron is actually running
+        # Passes on two successful runs since the deploy and none that finished
+        # with an error. A run killed mid-way (e.g. the CPU limit) never sets
+        # ok = 1, so it keeps the count short and the step times out.
         run: |
           since=$(cat "$RUNNER_TEMP/deployed_at")
+          d1() { npx wrangler d1 execute agency-followup-db --remote --json --command "$1"; }
+          field() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s)[0].results[0]??{};console.log(r[process.argv[1]]??0)})" "$1"; }
+          verdict=timeout
           for i in $(seq 1 20); do
-            out=$(npx wrangler d1 execute agency-followup-db --remote --json --command "select count(*) as n, max(started_at) as last, min(ok) as all_ok from scheduler_runs where started_at > '$since'")
-            n=$(echo "$out" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s)[0].results[0];console.log(r.n)})")
-            if [ "$n" -ge 2 ]; then echo "scheduler ran $n times since deploy"; echo "$out" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s)[0].results[0])))" | tee "$RUNNER_TEMP/cron.txt"; exit 0; fi
+            out=$(d1 "select count(*) as n, coalesce(sum(ok = 1), 0) as n_ok, coalesce(sum(ok = 0 and finished_at is not null), 0) as n_failed, max(started_at) as last from scheduler_runs where started_at > '$since'")
+            n_ok=$(echo "$out" | field n_ok)
+            n_failed=$(echo "$out" | field n_failed)
+            if [ "$n_failed" -gt 0 ]; then verdict=failed; break; fi
+            if [ "$n_ok" -ge 2 ]; then echo "scheduler ran $n_ok times without an error since deploy"; echo "$out" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s)[0].results[0])))" | tee "$RUNNER_TEMP/cron.txt"; exit 0; fi
             sleep 30
           done
-          echo "::error::no scheduler run recorded within 10 minutes of the deploy"; exit 1
+          {
+            echo "$out" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.stringify(JSON.parse(s)[0].results[0])))"
+            echo "last failed or unfinished runs since the deploy (finished_at null: killed, or still running):"
+            d1 "select started_at, finished_at, substr(error, 1, 300) as error from scheduler_runs where ok = 0 and started_at > '$since' order by id desc limit 3" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for (const r of JSON.parse(s)[0].results) console.log(JSON.stringify(r))})"
+          } | tee "$RUNNER_TEMP/cron.txt"
+          if [ "$verdict" = failed ]; then echo "::error::$n_failed scheduler run(s) finished with an error since the deploy"; else echo "::error::fewer than 2 successful scheduler runs ($n_ok) within 10 minutes of the deploy"; fi
+          exit 1
       - name: Summary
         if: always()
         working-directory: ${{ runner.temp }}

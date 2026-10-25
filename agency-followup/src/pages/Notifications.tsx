@@ -11,12 +11,14 @@ export function NotificationsPage() {
   const toast = useToast();
   const { data, error, loading, reload, setData } = useApi<{ notifications: N[]; unread: number }>((signal) => api("/api/notifications", { signal }), [], { pollMs: 30_000 });
 
-  const open = async (n: N) => {
+  const open = (n: N) => {
     if (!n.read_at) {
-      // The notification opens regardless; the server re-checks access to the task.
-      api("/api/notifications/read", { body: { ids: [n.id] } }).catch(() => {});
-      setData((d) => (d ? { ...d, unread: Math.max(0, d.unread - 1), notifications: d.notifications.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)) } : d));
+      // Shown as read only once the server saved it; offline it stays unread.
+      api("/api/notifications/read", { body: { ids: [n.id] } })
+        .then(() => setData((d) => (d ? { ...d, unread: Math.max(0, d.unread - 1), notifications: d.notifications.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)) } : d)))
+        .catch(() => toast("error", "تعذّر تعليم التنبيه كمقروء"));
     }
+    // The notification opens regardless; the server re-checks access to the task.
     if (n.url) navigate(n.url);
   };
   const readAll = async () => {
@@ -56,7 +58,7 @@ export function NotificationsPage() {
         {data?.notifications.map((n) => (
           <button key={n.id} className={`notif ${n.read_at ? "read" : "unread"}`} onClick={() => open(n)}>
             <span className="dot" aria-hidden="true" />
-            <span className="stack" style={{ gap: 2 }}>
+            <span className="stack wrap" style={{ gap: 2 }}>
               <strong style={{ fontWeight: n.read_at ? 500 : 700 }}>{n.title}</strong>
               {n.body ? <span className="small muted">{n.body}</span> : null}
               <span className="tiny muted">{fmtAgo(n.deliver_at)}</span>

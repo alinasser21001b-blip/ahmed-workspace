@@ -5,7 +5,7 @@ import { Link, navigate, useLocation, useTitle } from "../lib/router";
 import { ROLE_LABEL, useMe, useSession } from "../lib/session";
 import { fmtAgo } from "../lib/time";
 import { IShield } from "../ui/icons";
-import { Alert, Button, useToast } from "../ui/kit";
+import { Alert, Button, ErrorBox, Loading, useToast } from "../ui/kit";
 
 const STATE_TEXT: Record<PushState, { kind: "ok" | "warn" | "info" | "error"; text: string }> = {
   enabled: { kind: "ok", text: "الإشعارات مفعّلة على هذا الجهاز." },
@@ -23,14 +23,23 @@ export function AccountPage() {
   const toast = useToast();
   const { query } = useLocation();
   const [state, setState] = useState<PushState | null>(null);
+  const [pushErr, setPushErr] = useState<unknown>(null);
   const [server, setServer] = useState<{ configured: boolean; public_key: string | null; devices: { id: string; user_agent: string; last_success_at: string | null; this_session: number }[] } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
 
   const refreshPush = useCallback(async () => {
+    setPushErr(null);
+    let s: NonNullable<typeof server>;
     try {
-      const s = await api("/api/push/status");
-      setServer(s);
+      s = await api("/api/push/status");
+    } catch (e) {
+      // The server did not answer: say so, never "this browser is unsupported".
+      setPushErr(e);
+      return;
+    }
+    setServer(s);
+    try {
       setState((await currentState(s.configured)).state);
     } catch {
       setState("unsupported");
@@ -98,7 +107,9 @@ export function AccountPage() {
     }
   };
 
-  const st = state ? STATE_TEXT[state] : null;
+  // Nothing about this device is shown until its state is known.
+  const view = pushErr ? null : state;
+  const st = view ? STATE_TEXT[view] : null;
 
   return (
     <div className="stack-lg">
@@ -115,16 +126,17 @@ export function AccountPage() {
       <section className="card stack">
         <h2>إشعارات هذا الجهاز</h2>
         <p className="small muted">تصلك تنبيهات المهام الجديدة والتذكيرات والتصعيد حتى والتطبيق مغلق. نص شاشة القفل مختصر ولا يحتوي اسم العميل أو تفاصيل المهمة. لا يمكن ضمان الصوت أو تجاوز وضع الصامت وعدم الإزعاج.</p>
+        {pushErr ? <ErrorBox error={pushErr} retry={refreshPush} /> : view === null ? <Loading rows={1} /> : null}
         {st ? <Alert kind={st.kind}>{st.text}</Alert> : null}
-        {state === "needs_install" ? <IOSSteps /> : null}
-        {state === "needs_permission" ? (
+        {view === "needs_install" ? <IOSSteps /> : null}
+        {view === "needs_permission" ? (
           <span>
             <Button className="primary" busy={busy === "enable"} onClick={enable}>
               فعّل إشعارات جهازي
             </Button>
           </span>
         ) : null}
-        {state === "enabled" ? (
+        {view === "enabled" ? (
           <div className="row">
             <Button className="primary" busy={busy === "test"} onClick={test}>
               أرسل إشعار اختبار لي
@@ -141,7 +153,7 @@ export function AccountPage() {
             {server.devices.some((d) => d.last_success_at) ? ` · آخر وصول ناجح ${fmtAgo(server.devices.map((d) => d.last_success_at ?? "").sort().reverse()[0])}` : ""}
           </p>
         ) : null}
-        {!isIOS() && state !== "enabled" && state !== "denied" ? (
+        {view !== null && !isIOS() && view !== "enabled" && view !== "denied" ? (
           <details className="more">
             <summary>تثبيت التطبيق على أندرويد</summary>
             <ol className="steps small">

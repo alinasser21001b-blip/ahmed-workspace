@@ -4,7 +4,7 @@
 // the seed idempotent; Mohammed can archive the whole set from the admin page.
 
 import type { Ctx } from "./db";
-import { localParts, nextBusinessStart, zonedToUtc } from "./lib/time";
+import { localParts, zonedToUtc } from "./lib/time";
 
 type Demo = {
   id: string;
@@ -18,9 +18,12 @@ type Demo = {
   reviewer: string;
   priority: "normal" | "high" | "urgent";
   status: string;
-  due: string | null; // "D+0 15:00" style, relative to the trial day
+  due: string | null; // "D+0 15:00" style: working days from the trial day, local time
   requires_publish?: boolean;
 };
+
+// The earliest time seeded on the trial day itself (the first demo booking).
+const FIRST_D0 = "D+0 10:00";
 
 const DEMOS: Demo[] = [
   { id: "t_demo_01", client: "c_ward", template: "content_followup", title: "تجريبي: خطة محتوى أسبوع مستشفى ورد", description: "مثال: خطة منشورات الأسبوع القادم مع الجدول المقترح.", requester: "u_mohammed", assignee: "u_ammar", reviewer: "u_mohammed", priority: "normal", status: "in_progress", due: "D+2 14:00" },
@@ -28,7 +31,7 @@ const DEMOS: Demo[] = [
   { id: "t_demo_03", client: "c_obesity", template: "shoot_request", title: "تجريبي: تصوير لقطات استقبال العيادة", description: "مثال: لقطات عامة للاستقبال دون ظهور أي مراجع.", requester: "u_sama", assignee: "u_hussein", reviewer: "u_sama", priority: "high", status: "new", due: "D+0 16:00" },
   { id: "t_demo_04", client: "c_ward", template: "shoot_request", title: "تجريبي: تصوير جولة في مدخل مستشفى ورد", description: "مثال: لقطات للمدخل والممرات العامة فقط.", requester: "u_ammar", assignee: "u_hussein", reviewer: "u_ammar", priority: "normal", status: "acknowledged", due: "D+0 17:00" },
   { id: "t_demo_05", parent: "t_demo_04", client: "c_ward", title: "تجريبي: تجهيز قائمة اللقطات", description: "مهمة فرعية: قائمة مختصرة باللقطات المطلوبة.", requester: "u_ammar", assignee: "u_hussein", reviewer: "u_ammar", priority: "normal", status: "in_progress", due: "D+0 12:00" },
-  { id: "t_demo_06", client: "c_obesity", template: "shoot_request", title: "تجريبي: تصوير منتج جديد بانتظار موافقة العيادة", description: "مثال لعائق خارجي: العيادة لم تؤكد الموعد بعد.", requester: "u_sama", assignee: "u_hussein", reviewer: "u_sama", priority: "normal", status: "acknowledged", due: "D-1 15:00" },
+  { id: "t_demo_06", client: "c_obesity", template: "shoot_request", title: "تجريبي: تصوير منتج جديد بانتظار موافقة العيادة", description: "مثال لعائق خارجي: العيادة لم تؤكد الموعد بعد.", requester: "u_sama", assignee: "u_hussein", reviewer: "u_sama", priority: "normal", status: "acknowledged", due: "D+1 15:00" },
   { id: "t_demo_07", client: "c_ward", template: "footage_delivery", title: "تجريبي: تسليم صور فعالية المستشفى", description: "مثال لتسليم بانتظار المراجعة.", requester: "u_ammar", assignee: "u_hussein", reviewer: "u_ammar", priority: "normal", status: "in_review", due: "D+1 11:00" },
   { id: "t_demo_08", client: "c_obesity", template: "shoot_scheduling", title: "تجريبي: تنسيق موعد تصوير مع طبيب العيادة", description: "مثال لتعارض: الموعد المطلوب يقع أثناء حجز آخر لحسين.", requester: "u_sama", assignee: "u_hussein", reviewer: "u_sama", priority: "normal", status: "acknowledged", due: "D+0 14:00" },
   { id: "t_demo_09", client: "c_obesity", template: "content_followup", title: "تجريبي: تقرير أسبوعي لمنشورات العيادة", description: "مثال لعمل سما بانتظار مراجعة عمار.", requester: "u_ammar", assignee: "u_sama", reviewer: "u_ammar", priority: "normal", status: "in_review", due: "D+1 13:00" },
@@ -37,13 +40,28 @@ const DEMOS: Demo[] = [
 
 export async function seedDemo(ctx: Ctx): Promise<number> {
   const tz = ctx.workHours.tz;
-  const base = localParts(nextBusinessStart(ctx.now, ctx.workHours), tz);
-  const at = (spec: string | null) => {
-    if (!spec) return null;
-    const m = /^D([+-]\d+) (\d\d):(\d\d)$/.exec(spec)!;
-    const day = new Date(Date.UTC(base.y, base.m - 1, base.d + Number(m[1])));
-    return zonedToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), Number(m[2]), Number(m[3]), tz).toISOString();
+  const workday = (day: Date) => ctx.workHours.days.includes(day.getUTCDay());
+  // `n` working days from `from` (a local calendar date held as UTC midnight).
+  const shift = (from: Date, n: number) => {
+    const day = new Date(from);
+    const step = n < 0 ? -1 : 1;
+    for (let left = Math.abs(n), i = 0; left > 0 && i < 400; i++) {
+      day.setUTCDate(day.getUTCDate() + step);
+      if (workday(day)) left--;
+    }
+    return day;
   };
+  const dayAt = (base: Date, spec: string) => {
+    const m = /^D([+-]\d+) (\d\d):(\d\d)$/.exec(spec)!;
+    const day = shift(base, Number(m[1]));
+    return zonedToUtc(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), Number(m[2]), Number(m[3]), tz);
+  };
+  // The trial day is today while every time seeded on it is still ahead,
+  // otherwise the next working day, so nothing open is created already late.
+  const local = localParts(ctx.now, tz);
+  const today = new Date(Date.UTC(local.y, local.m - 1, local.d));
+  const base = workday(today) && ctx.now < dayAt(today, FIRST_D0) ? today : shift(today, 1);
+  const at = (spec: string | null) => (spec ? dayAt(base, spec).toISOString() : null);
   const nowIso = ctx.now.toISOString();
   const db = ctx.db;
   const stmts: D1PreparedStatement[] = [];
@@ -107,7 +125,7 @@ export async function seedDemo(ctx: Ctx): Promise<number> {
          select ?, ?, ?, 'u_hussein', ?, ?, ?, 'active', ?, ? where not exists (select 1 from bookings where resource_id = 'u_hussein' and status = 'active' and starts_at < ? and ends_at > ?)`,
       )
       .bind(bid, client, task, title, s, e, by, nowIso, e, s);
-  const s1 = at("D+0 10:00")!;
+  const s1 = at(FIRST_D0)!;
   const e1 = at("D+0 11:30")!;
   const s2 = at("D+0 13:00")!;
   const e2 = at("D+0 15:00")!;

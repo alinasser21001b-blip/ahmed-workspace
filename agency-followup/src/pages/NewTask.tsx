@@ -35,6 +35,11 @@ export function NewTaskPage() {
 
   const assignee = opt?.assignees.find((a) => a.id === assigneeId);
   const reviewers = (opt?.reviewers ?? []).filter((r) => r.id !== assigneeId || r.role === "owner");
+  // A reviewer who becomes the assignee drops out of the list; fall back to the default.
+  const pickAssignee = (id: string) => {
+    setAssigneeId(id);
+    if (id === reviewerId && opt?.reviewers.find((r) => r.id === id)?.role !== "owner") setReviewerId("");
+  };
 
   const pickTemplate = (k: TemplateKey | "") => {
     setTemplate(k);
@@ -125,7 +130,7 @@ export function NewTaskPage() {
 
         <div className="grid-2">
           <Field label="المنفذ" htmlFor="assignee">
-            <select id="assignee" className="input" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} disabled={!opt}>
+            <select id="assignee" className="input" value={assigneeId} onChange={(e) => pickAssignee(e.target.value)} disabled={!opt}>
               <option value="">اختر المنفذ</option>
               {opt?.assignees.map((a) => (
                 <option key={a.id} value={a.id}>

@@ -44,6 +44,15 @@ export function canViewTask(a: Actor, t: TaskRef, hasGrant: boolean): boolean {
 }
 
 /**
+ * May the actor open the task by id or follow a link to it? canViewTask, and
+ * archived tasks are the owner's only. canViewTask itself stays without the
+ * archive rule: notifications and the owner's archived list rely on it.
+ */
+export function canOpenTask(a: Actor, t: TaskRef & { archived_at: string | null }, hasGrant: boolean): boolean {
+  return canViewTask(a, t, hasGrant) && (!t.archived_at || isOwner(a));
+}
+
+/**
  * SQL twin of canViewTask for list queries, counters, search and export, so a
  * hidden task is never fetched and then filtered in the browser. `alias` is
  * the tasks table alias. Kept next to canViewTask so the two stay identical.

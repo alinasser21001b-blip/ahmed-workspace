@@ -3,6 +3,7 @@ import { z } from "zod";
 import { OPEN_STATUSES, PRIORITIES, PRIORITY_LABEL, STATUSES, TEMPLATES, WORKING_STATUSES, type TaskStatus } from "../../shared/domain";
 import {
   actorFor,
+  cycleBlockers,
   getTask,
   guardStmt,
   isGuardFailure,
@@ -21,6 +22,7 @@ import {
   canArchive,
   canAssignTo,
   canEditTask,
+  canOpenTask,
   canResolveBlocker,
   canReviewTask,
   canViewTask,
@@ -45,8 +47,7 @@ export async function loadVisibleTask(ctx: Ctx, actor: Actor, taskId: string): P
   const t = await getTask(ctx.db, taskId);
   if (!t) throw notFound();
   const grants = await taskGrants(ctx.db, t.id);
-  if (!canViewTask(actor, t, grants.has(actor.id))) throw notFound();
-  if (t.archived_at && actor.role !== "owner") throw notFound();
+  if (!canOpenTask(actor, t, grants.has(actor.id))) throw notFound();
   return { t, grants };
 }
 
@@ -250,14 +251,17 @@ tasks.get("/:id", async (c) => {
     db.prepare("select * from bookings where task_id = ? and status = 'active' order by starts_at").bind(t.id).all(),
   ]);
   const subGrants = await Promise.all(subtasks.results.map((s) => taskGrants(db, s.id)));
-  const visibleSubs = subtasks.results.filter((s, i) => canViewTask(actor, s, subGrants[i].has(actor.id)) && (!s.archived_at || actor.role === "owner"));
+  const visibleSubs = subtasks.results.filter((s, i) => canOpenTask(actor, s, subGrants[i].has(actor.id)));
   const parent = t.parent_id ? await getTask(db, t.parent_id) : null;
-  const parentVisible = parent ? canViewTask(actor, parent, (await taskGrants(db, parent.id)).has(actor.id)) : false;
+  // A live subtask of an archived parent shows no parent link to non-owners.
+  const parentVisible = parent ? canOpenTask(actor, parent, (await taskGrants(db, parent.id)).has(actor.id)) : false;
+  const subBlockers = await cycleBlockers(db, visibleSubs.map((s) => s.id));
   const name = (u: string | null) => (u ? (ctx.membersById.get(u)?.name ?? "—") : null);
 
   return c.json({
     task: {
       ...taskSummary(ctx, t, blockers.results),
+      parent_id: parentVisible ? t.parent_id : null,
       description: t.description,
       acceptance: t.acceptance,
       ref_url: t.ref_url,
@@ -277,7 +281,7 @@ tasks.get("/:id", async (c) => {
     blockers: blockers.results.map((b) => ({ ...b, resolver: name(b.resolver_id), opened_by_name: name(b.opened_by), resolved_by_name: name(b.resolved_by) })),
     due_proposals: proposals.results.map((p) => ({ ...p, proposed_by_name: name(p.proposed_by as string), decided_by_name: name(p.decided_by as string | null) })),
     events: events.results.map((e) => ({ ...e, data: safeJson(e.data), actor: name(e.actor_id) })),
-    subtasks: visibleSubs.map((s) => taskSummary(ctx, s, [])),
+    subtasks: visibleSubs.map((s) => taskSummary(ctx, s, subBlockers)),
     bookings: shapeBookings(ctx, actor, bookings.results as never),
   });
 });
@@ -917,7 +921,10 @@ export function assignmentOptions(ctx: Ctx, actor: Actor) {
     .map((cl) => {
       const client = ctx.clientsById.get(cl.id)!;
       const assignees = ctx.members.filter((m) => m.active && canAssignTo(actor, client, m, ctx.members).ok).map((m) => ({ id: m.id, name: m.name, role: m.role, outside_team: canAssignTo(actor, client, m, ctx.members).ok && (canAssignTo(actor, client, m, ctx.members) as { grant?: boolean }).grant === true }));
-      const reviewers = ctx.members.filter((m) => m.active && m.role !== "photographer").map((m) => ({ id: m.id, name: m.name, role: m.role }));
+      // Whom validReviewer accepts with the actor as requester: the owner, members with a scope on the client, or the actor himself.
+      const reviewers = ctx.members
+        .filter((m) => m.active && m.role !== "photographer" && (m.role === "owner" || (ctx.scopes.get(m.id) ?? {})[cl.id] !== undefined || m.id === actor.id))
+        .map((m) => ({ id: m.id, name: m.name, role: m.role }));
       return { client: cl, assignees, reviewers };
     });
 }

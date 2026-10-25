@@ -73,10 +73,14 @@ export function CalendarPage() {
                         <span className="small muted">
                           {b.client.name} · حجزه {b.created_by}
                         </span>
-                        <span className="row small">
-                          {b.task_id ? <Link to={`/tasks/${b.task_id}`}>فتح المهمة</Link> : null}
+                        <span className="row small" style={{ gap: 4 }}>
+                          {b.task_id ? (
+                            <Link to={`/tasks/${b.task_id}`} className="btn small ghost inline-link">
+                              فتح المهمة
+                            </Link>
+                          ) : null}
                           {b.can_manage ? (
-                            <button className="btn small ghost" style={{ minHeight: 32, padding: "2px 8px" }} onClick={() => setManaging(b)}>
+                            <button className="btn small ghost" onClick={() => setManaging(b)}>
                               تعديل أو إلغاء
                             </button>
                           ) : null}

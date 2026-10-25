@@ -1,42 +1,97 @@
 // What a member gets back about tasks. Rows come only from queries that
 // already apply taskVisibilitySql, so shaping never has to hide anything.
 
-import { WORKING_STATUSES, type TaskStatus } from "../shared/domain";
+import { WORKING_STATUSES, type Role, type TaskStatus } from "../shared/domain";
 import type { BlockerRow, Ctx, TaskRow } from "./db";
-import { openBlockers } from "./db";
-import { businessMinutesBetween } from "./lib/time";
+import { cycleBlockers } from "./db";
+import { addBusinessMinutes, businessMinutesBetween } from "./lib/time";
 import { taskVisibilitySql, type Actor } from "./policy";
 
 export type TaskFlags = {
   waiting_ack: boolean;
+  /** Past the due date. A task can be blocked and late at once; the mark stays until the task is handled. */
   overdue: boolean;
+  /** Past the deadline on the assignee's own time: working time spent waiting on others is given back. */
+  overdue_own: boolean;
+  /** Working minutes this cycle during which the assignee waited on others (overlapping waits count once). */
+  waited_business_minutes: number;
   at_risk: boolean;
   blocked: boolean;
   blocked_kind: BlockerRow["kind"] | null;
-  /** Late while waiting on the client: not counted against the assignee. */
+  /** Who must clear the first open blocker. */
+  blocker_resolver: { id: string; name: string } | null;
+  /** Waiting on the client, held by someone else: not counted against the assignee. */
   external_wait: boolean;
+  /** The assignee's own late working minutes (waiting on others taken off). */
   late_business_minutes: number;
   unacked_business_minutes: number;
 };
+
+/**
+ * Whether a blocker leaves the assignee waiting on someone else. An assignee
+ * who holds his own blocker (an account manager chasing her own client) keeps
+ * being chased; the owner has nobody above him, so his waits always count.
+ */
+export function waitsOnOthers(t: Pick<TaskRow, "assignee_id">, b: Pick<BlockerRow, "resolver_id">, assigneeRole: Role | null | undefined): boolean {
+  return b.resolver_id !== t.assignee_id || assigneeRole === "owner";
+}
+
+/**
+ * The deadline on the assignee's own time. The working minutes of this cycle
+ * during which he waited on others are given back, so resolving a blocker
+ * resumes the measurement without counting the wait against him (§6, §14.13).
+ * Reminders, escalations and the «متأخرة» mark use this; `overdue` stays the
+ * plain fact that the due date has passed.
+ */
+export function ownDeadline(ctx: Ctx, t: TaskRow, blockers: BlockerRow[], assigneeRole: Role | null | undefined): { waited: number; due: Date | null; overdueOwn: boolean } {
+  const now = ctx.now.getTime();
+  const from = Date.parse(t.cycle_started_at);
+  const spans = blockers
+    .filter((b) => b.task_id === t.id && waitsOnOthers(t, b, assigneeRole))
+    .map((b): [number, number] => [Math.max(Date.parse(b.opened_at), from), Math.min(b.resolved_at ? Date.parse(b.resolved_at) : now, now)])
+    .filter(([s, e]) => e > s)
+    .sort((a, b) => a[0] - b[0]);
+  // Merge overlapping waits, then count each stretch once in working minutes.
+  let waited = 0;
+  let [s0, e0] = [0, 0];
+  for (const [s, e] of spans) {
+    if (s > e0) {
+      waited += businessMinutesBetween(new Date(s0), new Date(e0), ctx.workHours);
+      [s0, e0] = [s, e];
+    } else e0 = Math.max(e0, e);
+  }
+  waited += businessMinutesBetween(new Date(s0), new Date(e0), ctx.workHours);
+  const due = t.due_at ? new Date(t.due_at) : null;
+  const ownDue = due && waited ? addBusinessMinutes(due, waited, ctx.workHours) : due;
+  const working = WORKING_STATUSES.includes(t.status as TaskStatus) && !t.archived_at;
+  return { waited, due: ownDue, overdueOwn: working && !!ownDue && ownDue < ctx.now };
+}
 
 export function flagsFor(ctx: Ctx, t: TaskRow, blockers: BlockerRow[]): TaskFlags {
   const now = ctx.now;
   const working = WORKING_STATUSES.includes(t.status as TaskStatus) && !t.archived_at;
   const open = blockers.filter((b) => b.task_id === t.id && !b.resolved_at);
+  const role = ctx.membersById.get(t.assignee_id)?.role;
+  const own = ownDeadline(ctx, t, blockers, role);
   const due = t.due_at ? new Date(t.due_at) : null;
   const overdue = working && !!due && due < now;
   const hoursLeft = due ? (due.getTime() - now.getTime()) / 3_600_000 : Infinity;
   const atRisk = working && !overdue && !!due && (hoursLeft <= 2 || (hoursLeft <= 24 && (t.status === "new" || t.status === "acknowledged" || open.length > 0)));
-  const external = open.some((b) => b.kind === "client_wait");
+  const external = open.some((b) => b.kind === "client_wait" && waitsOnOthers(t, b, role));
+  const first = open[0];
   return {
     waiting_ack: t.status === "new" && !t.archived_at,
     overdue,
+    overdue_own: own.overdueOwn,
+    waited_business_minutes: own.waited,
     at_risk: atRisk,
     blocked: open.length > 0,
-    blocked_kind: open[0]?.kind ?? null,
+    blocked_kind: first?.kind ?? null,
+    blocker_resolver: first ? { id: first.resolver_id, name: ctx.membersById.get(first.resolver_id)?.name ?? "—" } : null,
     external_wait: external,
-    late_business_minutes: overdue && due ? businessMinutesBetween(due, now, ctx.workHours) : 0,
-    unacked_business_minutes: t.status === "new" ? businessMinutesBetween(new Date(t.ack_clock_from), now, ctx.workHours) : 0,
+    late_business_minutes: overdue && due ? Math.max(0, businessMinutesBetween(due, now, ctx.workHours) - own.waited) : 0,
+    // An open clarification request pauses this clock, as in the scheduler.
+    unacked_business_minutes: t.status === "new" && !open.some((b) => b.kind === "clarification") ? businessMinutesBetween(new Date(t.ack_clock_from), now, ctx.workHours) : 0,
   };
 }
 
@@ -52,7 +107,6 @@ export function taskSummary(ctx: Ctx, t: TaskRow, blockers: BlockerRow[]) {
     id: t.id,
     title: t.title,
     client: { id: t.client_id, name: client?.name ?? "" },
-    parent_id: t.parent_id,
     template: t.template,
     status: t.status,
     priority: t.priority,
@@ -115,7 +169,8 @@ export async function listVisibleTasks(ctx: Ctx, actor: Actor, f: ListFilter = {
     .prepare(`select t.* from tasks t where ${where.join(" and ")} order by t.updated_at desc limit ${limit}`)
     .bind(...params)
     .all<TaskRow>();
-  const blockers = await openBlockers(
+  // This cycle's blockers, resolved ones too: lateness gives back the time spent waiting.
+  const blockers = await cycleBlockers(
     ctx.db,
     results.map((r) => r.id),
   );

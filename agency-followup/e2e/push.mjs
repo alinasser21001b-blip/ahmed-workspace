@@ -9,9 +9,12 @@ import { randomBytes } from "node:crypto";
 const { chromium } = createRequire(import.meta.url)("playwright");
 const BASE = process.env.BASE_URL.replace(/\/$/, "");
 const results = [];
+// A setup token travels after '#'. Output goes to CI logs, so a URL in an
+// error line (e.g. a failed goto) must never carry one.
+const redact = (s) => String(s).replace(/#[A-Za-z0-9_-]{16,}/g, "#…");
 const check = (name, ok, detail = "") => {
   results.push(ok);
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+  console.log(redact(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`));
 };
 
 const browser = await chromium.launch({ channel: "chrome", headless: false });

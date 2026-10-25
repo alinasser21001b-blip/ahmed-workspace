@@ -64,7 +64,7 @@ export function TodayPage() {
       {error && !data ? <ErrorBox error={error} retry={reload} /> : null}
       {data ? (
         <>
-          {role === "owner" || role === "exec" ? <Counters c={data.counts} /> : null}
+          {role === "owner" || role === "exec" ? <Counters c={data.counts} sections={new Set(data.sections.map((s) => s.key))} /> : null}
           {data.sections.map((s, i) => (
             <div key={s.key} className="stack-lg">
               <section aria-labelledby={`s-${s.key}`}>
@@ -88,7 +88,8 @@ export function TodayPage() {
   );
 }
 
-function Counters({ c }: { c: Today["counts"] }) {
+/** A counter jumps to its section only when that section is on this page (Ammar's board has fewer sections than Mohammed's). */
+function Counters({ c, sections }: { c: Today["counts"]; sections: Set<string> }) {
   const items: [keyof Today["counts"], string, string][] = [
     ["waiting_ack", "لم تُستلم", c.waiting_ack ? "warm" : ""],
     ["overdue", "متأخرة", c.overdue ? "hot" : ""],
@@ -98,12 +99,19 @@ function Counters({ c }: { c: Today["counts"] }) {
   ];
   return (
     <div className="counters">
-      {items.map(([k, label, cls]) => (
-        <a key={k} href={`#s-${k}`} className={`counter ${cls}`}>
-          <div className="n">{c[k]}</div>
-          <div className="l">{label}</div>
-        </a>
-      ))}
+      {items.map(([k, label, cls]) =>
+        sections.has(k) ? (
+          <a key={k} href={`#s-${k}`} className={`counter ${cls}`}>
+            <div className="n">{c[k]}</div>
+            <div className="l">{label}</div>
+          </a>
+        ) : (
+          <div key={k} className={`counter ${cls}`}>
+            <div className="n">{c[k]}</div>
+            <div className="l">{label}</div>
+          </div>
+        ),
+      )}
     </div>
   );
 }
@@ -116,7 +124,7 @@ function MyBookings({ bookings, title = "حجوزاتي" }: { bookings: Booking[
           {title}
           <span className="count">{bookings.length}</span>
         </h2>
-        <Link to="/calendar" className="small">
+        <Link to="/calendar" className="btn small ghost">
           التقويم
         </Link>
       </div>
@@ -134,7 +142,7 @@ function MyBookings({ bookings, title = "حجوزاتي" }: { bookings: Booking[
                 {fmtDue(b.starts_at).split(" ")[0]} {b.busy_only ? "" : `· ${b.client.name}`}
               </div>
               {!b.busy_only && b.task_id ? (
-                <Link to={`/tasks/${b.task_id}`} className="small">
+                <Link to={`/tasks/${b.task_id}`} className="btn small ghost inline-link">
                   فتح المهمة
                 </Link>
               ) : null}
@@ -159,11 +167,11 @@ function Conflicts({ items }: { items: Today["conflicts"] }) {
         {items.map((c, i) => (
           <div key={i} className="card card-tight row" style={{ alignItems: "flex-start", flexWrap: "nowrap" }}>
             {c.kind === "refused_booking" ? <ICamera width={20} /> : <IAlert width={20} />}
-            <div>
+            <div className="wrap">
               <div>{c.text}</div>
               <div className="small muted">{fmtDue(c.at)}</div>
               {c.task_id ? (
-                <Link to={`/tasks/${c.task_id}`} className="small">
+                <Link to={`/tasks/${c.task_id}`} className="btn small ghost inline-link">
                   فتح المهمة
                 </Link>
               ) : null}
