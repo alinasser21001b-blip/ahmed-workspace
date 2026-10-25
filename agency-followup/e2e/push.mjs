@@ -17,8 +17,12 @@ const check = (name, ok, detail = "") => {
   console.log(redact(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`));
 };
 
-const browser = await chromium.launch({ channel: "chrome", headless: false });
-const context = await browser.newContext({ locale: "ar-IQ", timezoneId: "Asia/Baghdad" });
+// Push is unavailable in Chrome incognito contexts (browser.newContext).
+// An empty userDataDir creates an isolated temporary regular profile, removed
+// when this context closes. Never use a real person\'s Chrome profile.
+const context = await chromium.launchPersistentContext("", {
+  channel: "chrome", headless: false, locale: "ar-IQ", timezoneId: "Asia/Baghdad",
+});
 await context.grantPermissions(["notifications"], { origin: BASE });
 const page = await context.newPage();
 
@@ -76,9 +80,11 @@ try {
   await page.getByText("غير موجودة أو لم تعد ضمن صلاحياتك").waitFor({ timeout: 20000 });
   check("a task link outside the member's scope opens nothing", true);
 } catch (e) {
-  check("push scenario ran to the end", false, String(e?.message ?? e).split("\n")[0]);
+  const state = await page.evaluate(() => ({ permission: Notification.permission, controlled: !!navigator.serviceWorker.controller })).catch(() => null);
+  const alerts = await page.locator('[role="alert"]').allInnerTexts().catch(() => []);
+  check("push scenario ran to the end", false, `${String(e?.message ?? e).split("\n")[0]}; state=${JSON.stringify(state)}; alerts=${JSON.stringify(alerts)}`);
 } finally {
-  await browser.close();
+  await context.close();
 }
 const failed = results.filter((x) => !x).length;
 console.log(`\n${results.length - failed}/${results.length} push checks passed`);
