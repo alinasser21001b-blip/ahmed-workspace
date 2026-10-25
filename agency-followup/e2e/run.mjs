@@ -272,7 +272,19 @@ try {
   await m.getByText("حالة التنبيهات").waitFor();
   await m.waitForTimeout(500);
   await shot(m, "admin-mohammed");
-  check("mohammed: admin shows the scheduler's last successful run", (await m.getByText("آخر تشغيل ناجح للمجدول").count()) > 0);
+  // Staging deliberately has no Cron Trigger. Match the displayed state to
+  // the real overview instead of requiring a successful run in every environment.
+  // Production still has its separate gate requiring two successful Cron runs.
+  const schedulerResponse = await m.request.get(`${BASE}/api/admin/overview`);
+  const schedulerOverview = schedulerResponse.ok() ? await schedulerResponse.json() : null;
+  const hasSchedulerState = !!schedulerOverview?.scheduler && Object.hasOwn(schedulerOverview.scheduler, "last_ok");
+  const lastSchedulerRun = schedulerOverview?.scheduler?.last_ok;
+  const schedulerLabel = lastSchedulerRun ? "آخر تشغيل ناجح للمجدول" : "لم يعمل المجدول بعد.";
+  check(
+    "mohammed: admin accurately shows the scheduler's actual state",
+    schedulerResponse.ok() && hasSchedulerState && (await m.getByText(schedulerLabel).count()) > 0,
+    lastSchedulerRun ? `last success ${lastSchedulerRun.started_at}` : "no successful run; the page reports this explicitly",
+  );
   await a.goto(`${BASE}/admin`);
   await a.waitForTimeout(800);
   check("ammar: no admin page", (await a.getByText("حالة التنبيهات").count()) === 0);
