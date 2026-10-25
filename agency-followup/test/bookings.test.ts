@@ -49,11 +49,15 @@ describe("§14.9 two people cannot book the same time", () => {
   });
 
   it("§14.9 a repeated request with the same key returns the same booking; bad slots are refused", async () => {
-    const k = key();
-    const s = slot(4 * 1440 + 60, 4 * 1440 + 90);
-    const [a, b] = await Promise.all([book(T.sama, "c_obesity", s, { create_key: k }), book(T.sama, "c_obesity", s, { create_key: k })]);
-    expect(a.body.id).toBe(b.body.id);
-    expect(await rows("select * from bookings where create_key = ?", k)).toHaveLength(1);
+    // Five double taps at once: the second request of each pair may land after
+    // the first took the slot, and must still get the same booking back.
+    const pairs = [slot(4 * 1440 + 60, 4 * 1440 + 90), ...[1, 2, 3, 4].map((i) => slot(4 * 1440 + 240 + i * 45, 4 * 1440 + 270 + i * 45))].map((s) => ({ k: key(), s }));
+    const results = await Promise.all(pairs.map(({ k, s }) => Promise.all([book(T.sama, "c_obesity", s, { create_key: k }), book(T.sama, "c_obesity", s, { create_key: k })])));
+    for (const [i, [a, b]] of results.entries()) {
+      expect(a.body.id).toBeTruthy();
+      expect(b.body.id).toBe(a.body.id);
+      expect(await rows("select * from bookings where create_key = ?", pairs[i].k)).toHaveLength(1);
+    }
     expect((await book(T.sama, "c_obesity", slot(4 * 1440 + 200, 4 * 1440 + 190))).status).toBe(400);
     expect((await book(T.sama, "c_obesity", slot(4 * 1440 + 200, 4 * 1440 + 200 + 13 * 60))).status).toBe(400);
     const past = { starts_at: new Date(Date.now() - 2 * 3_600_000).toISOString(), ends_at: new Date(Date.now() - 3_600_000).toISOString() };

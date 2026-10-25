@@ -185,14 +185,17 @@ bookings.post("/", async (c) => {
   try {
     await ctx.db.batch(stmts);
   } catch (e) {
+    // A repeat of the same request (a double tap) that lands just after the
+    // first one took the slot fails the slot check, not the key: it gets the
+    // same booking back, never a conflict with itself.
+    if (isGuardFailure(e) || isUniqueFailure(e)) {
+      const again = await ctx.db.prepare("select id from bookings where created_by = ? and create_key = ?").bind(actor.id, input.create_key).first<{ id: string }>();
+      if (again) return c.json({ id: again.id, duplicate: true });
+    }
     if (isGuardFailure(e)) {
       const info = await conflictsAndSuggestion(ctx, actor, resource.id, input.starts_at, input.ends_at);
       await ctx.db.batch([logEventStmt(ctx.db, input.task_id ?? null, actor.id, "booking_conflict", { starts_at: input.starts_at, ends_at: input.ends_at, client: input.client_id, suggestion: info.suggestion }, ctx.now)]);
       throw new ApiError(409, "booking_conflict", "الوقت محجوز لحسين. اختر الوقت المقترح أو وقتاً آخر.", info);
-    }
-    if (isUniqueFailure(e)) {
-      const again = await ctx.db.prepare("select id from bookings where created_by = ? and create_key = ?").bind(actor.id, input.create_key).first<{ id: string }>();
-      if (again) return c.json({ id: again.id, duplicate: true });
     }
     throw e;
   }
