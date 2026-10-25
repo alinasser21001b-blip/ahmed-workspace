@@ -62,6 +62,8 @@ jobs:
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - name: Cloudflare credentials present
+        # Checkout has not run yet, so the project working directory does not exist.
+        working-directory: ${{ runner.temp }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
             echo "::error title=Cloudflare token missing::Add the repository secret CLOUDFLARE_API_TOKEN (Workers Scripts: Edit, D1: Edit) and CLOUDFLARE_ACCOUNT_ID, then re-run this workflow."
