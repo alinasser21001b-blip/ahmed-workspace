@@ -77,8 +77,9 @@ function blockedText(f: TaskSummary["flags"]): string {
 export function FlagChips({ t }: { t: TaskSummary }) {
   const f = t.flags;
   const own = lateOwn(f);
-  // Past the deadline only because of time spent waiting on others.
-  const lateByWait = f.overdue && !own && !f.blocked;
+  // Past the date only because of time spent waiting on others: not his delay.
+  // Late on his own time stays «متأخرة», even if a blocker opened afterwards.
+  const lateByWait = f.overdue && !own;
   return (
     <div className="row chips" style={{ gap: 6 }}>
       {t.is_demo ? <span className="chip demo">تجريبي</span> : null}
@@ -88,19 +89,19 @@ export function FlagChips({ t }: { t: TaskSummary }) {
           لم تُستلم{f.unacked_business_minutes > 0 ? ` · ${fmtMinutes(f.unacked_business_minutes)} عمل` : ""}
         </span>
       ) : null}
-      {f.overdue && own && !f.blocked ? (
+      {f.overdue && own ? (
         <span className="chip danger">
           <IAlert />
           متأخرة{f.late_business_minutes > 0 ? ` · ${fmtMinutes(f.late_business_minutes)} عمل` : ""}
         </span>
       ) : null}
-      {f.overdue && f.blocked ? (
+      {lateByWait && f.blocked ? (
         <span className="chip warn">
           <IAlert />
           تجاوزت الموعد أثناء العائق
         </span>
       ) : null}
-      {lateByWait ? (
+      {lateByWait && !f.blocked ? (
         <span className="chip warn">
           <IAlert />
           تجاوزت الموعد بسبب الانتظار
@@ -118,7 +119,7 @@ export function FlagChips({ t }: { t: TaskSummary }) {
           {blockedText(f)}
         </span>
       ) : null}
-      {f.external_wait || lateByWait ? <span className="chip">لا يُحتسب على المنفذ</span> : null}
+      {(f.external_wait && !own) || lateByWait ? <span className="chip">لا يُحتسب على المنفذ</span> : null}
     </div>
   );
 }

@@ -74,18 +74,30 @@ function hm(s: string): [number, number] {
 }
 
 /** Work window [start, end) of the local calendar day that is `offsetDays` after the local day of `t`. */
-function windowFor(t: Date, offsetDays: number, wh: WorkHours): { start: Date; end: Date; workday: boolean } {
+// A day's working window depends only on the settings and the local date.
+// Lists and the cron ask for the same days over and over, and each fresh
+// computation costs several Intl calls, so they are kept per isolate.
+type Window = { readonly start: Date; readonly end: Date; readonly workday: boolean };
+const windows = new Map<string, Window>();
+
+function windowFor(t: Date, offsetDays: number, wh: WorkHours): Window {
   const p = localParts(t, wh.tz);
   const base = new Date(Date.UTC(p.y, p.m - 1, p.d + offsetDays));
   const y = base.getUTCFullYear();
   const m = base.getUTCMonth() + 1;
   const d = base.getUTCDate();
+  const key = `${wh.tz}|${wh.start}|${wh.end}|${wh.days.join(",")}|${y}-${m}-${d}`;
+  const hit = windows.get(key);
+  if (hit) return hit;
   const [sh, sm] = hm(wh.start);
   const [eh, em] = hm(wh.end);
   const start = zonedToUtc(y, m, d, sh, sm, wh.tz);
   const end = zonedToUtc(y, m, d, eh, em, wh.tz);
   const weekday = localParts(new Date(start.getTime() + 60000), wh.tz).weekday;
-  return { start, end, workday: wh.days.includes(weekday) && end > start };
+  const w = { start, end, workday: wh.days.includes(weekday) && end > start };
+  if (windows.size > 2000) windows.clear();
+  windows.set(key, w);
+  return w;
 }
 
 export function isBusinessTime(t: Date, wh: WorkHours): boolean {

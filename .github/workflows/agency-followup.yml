@@ -94,7 +94,9 @@ jobs:
       - name: Smoke checks
         run: sleep 15 && BASE_URL="${{ steps.deploy.outputs.url }}" node e2e/smoke.mjs
       - name: Trial walk-through in a real browser
+        # pipefail: without it the step takes tee's status and a failed check passes.
         run: |
+          set -o pipefail
           node scripts/setup-links.mjs --origin "${{ steps.deploy.outputs.url }}" --sql "$RUNNER_TEMP/s.sql" --links "$RUNNER_TEMP/links.txt" > /dev/null
           echo "delete from request_limits;" >> "$RUNNER_TEMP/s.sql"
           npx wrangler d1 execute agency-followup-staging-db --remote --file "$RUNNER_TEMP/s.sql" > /dev/null
@@ -102,6 +104,7 @@ jobs:
           rm -f "$RUNNER_TEMP/links.txt" "$RUNNER_TEMP/s.sql"
       - name: Real Web Push in Google Chrome
         run: |
+          set -o pipefail
           node scripts/setup-links.mjs --origin "${{ steps.deploy.outputs.url }}" --users hussein,sama --sql "$RUNNER_TEMP/p.sql" --links "$RUNNER_TEMP/plinks.txt" > /dev/null
           npx wrangler d1 execute agency-followup-staging-db --remote --file "$RUNNER_TEMP/p.sql" > /dev/null
           LINK=$(grep '^hussein' "$RUNNER_TEMP/plinks.txt" | cut -f2) SECOND_LINK=$(grep '^sama' "$RUNNER_TEMP/plinks.txt" | cut -f2) BASE_URL="${{ steps.deploy.outputs.url }}" xvfb-run -a node e2e/push.mjs | tee "$RUNNER_TEMP/push.txt"
@@ -142,8 +145,10 @@ jobs:
       - name: Deploy production
         id: deploy
         run: |
-          date -u +%Y-%m-%dT%H:%M:%SZ > "$RUNNER_TEMP/deployed_at"
           npx wrangler deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          # Cron runs are counted from just after the new version is live, so
+          # a run of the previous version during the upload does not count.
+          date -u -d '+20 seconds' +%Y-%m-%dT%H:%M:%SZ > "$RUNNER_TEMP/deployed_at"
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1)
           version=$(grep -oiE 'Version ID: *[0-9a-f-]+' "$RUNNER_TEMP/deploy.log" | head -1 | awk '{print $NF}')
           [ -n "$url" ] || { echo "::error::could not read the production URL from wrangler output"; exit 1; }
@@ -152,7 +157,7 @@ jobs:
       - name: Production secrets
         run: node scripts/ensure-secrets.mjs agency-followup
       - name: Smoke checks
-        run: sleep 15 && BASE_URL="${{ steps.deploy.outputs.url }}" node e2e/smoke.mjs | tee "$RUNNER_TEMP/smoke.txt"
+        run: set -o pipefail; sleep 15 && BASE_URL="${{ steps.deploy.outputs.url }}" node e2e/smoke.mjs | tee "$RUNNER_TEMP/smoke.txt"
       - name: The cron is actually running
         # Passes on two successful runs since the deploy and none that finished
         # with an error. A run killed mid-way (e.g. the CPU limit) never sets

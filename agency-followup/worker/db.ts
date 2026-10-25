@@ -45,6 +45,7 @@ export type TaskRow = {
   archived_at: string | null;
   cycle: number;
   cycle_started_at: string;
+  wait_clock_from: string | null;
   ack_epoch: number;
   ack_clock_from: string;
   due_version: number;
@@ -198,7 +199,7 @@ export async function cycleBlockers(db: D1Database, taskIds: string[]): Promise<
     const { results } = await db
       .prepare(
         `select b.* from blockers b join tasks t on t.id = b.task_id
-         where b.task_id in (${chunk.map(() => "?").join(",")}) and (b.resolved_at is null or b.resolved_at > t.cycle_started_at)
+         where b.task_id in (${chunk.map(() => "?").join(",")}) and (b.resolved_at is null or b.resolved_at > max(t.cycle_started_at, coalesce(t.wait_clock_from, '')))
          order by b.opened_at`,
       )
       .bind(...chunk)

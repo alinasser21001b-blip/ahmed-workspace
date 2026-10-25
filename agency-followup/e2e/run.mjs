@@ -134,9 +134,11 @@ try {
           try {
             await p.goto(`${BASE}${path}`);
             await p.getByText(head).first().waitFor({ timeout: 15000 });
+            // clientWidth, not innerWidth: under mobile emulation the layout
+            // viewport grows with overflowing content, so innerWidth would hide it.
             const [sw, iw] = await p.evaluate(async () => {
               await document.fonts.ready;
-              return [document.documentElement.scrollWidth, window.innerWidth];
+              return [document.documentElement.scrollWidth, document.documentElement.clientWidth];
             });
             seen.push(`${page} ${sw}/${iw}`);
             ok &&= sw <= iw + 1;

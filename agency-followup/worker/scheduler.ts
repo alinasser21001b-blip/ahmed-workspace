@@ -143,7 +143,7 @@ async function generateReminders(ctx: Ctx): Promise<{ tasks: number; created: nu
       // Working minutes left, counted only once the deadline is that close; a
       // night run (urgent work) also waits until it is close on the clock.
       if (ctx.now < own.due && own.due <= soonBound[speed] && (inHours || own.due.getTime() - ctx.now.getTime() <= soon * 60_000)) {
-        const left = businessMinutesBetween(ctx.now, own.due, ctx.workHours);
+        const left = inHours ? businessMinutesBetween(ctx.now, own.due, ctx.workHours) : Math.ceil((own.due.getTime() - ctx.now.getTime()) / 60_000);
         const body = own.waited ? `${client.name} · بقي ${fmtBusinessDuration(left)} عمل${given}` : `${client.name} · الموعد ${fmtTime(t.due_at, tz)}`;
         if (left > 0 && left <= soon) push({ userId: assignee.id, task: ref, kind: "due_soon", title: `يقترب موعد التسليم: ${t.title}`, body, url, dedupeKey: `due_soon:${t.id}:${t.cycle}:${t.due_version}` });
       }

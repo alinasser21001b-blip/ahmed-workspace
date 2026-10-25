@@ -15,7 +15,13 @@ export function NotificationsPage() {
     if (!n.read_at) {
       // Shown as read only once the server saved it; offline it stays unread.
       api("/api/notifications/read", { body: { ids: [n.id] } })
-        .then(() => setData((d) => (d ? { ...d, unread: Math.max(0, d.unread - 1), notifications: d.notifications.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)) } : d)))
+        .then(() =>
+          setData((d) => {
+            // A second tap or a poll may have marked it already: count it once.
+            if (!d || !d.notifications.some((x) => x.id === n.id && !x.read_at)) return d;
+            return { ...d, unread: Math.max(0, d.unread - 1), notifications: d.notifications.map((x) => (x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x)) };
+          }),
+        )
         .catch(() => toast("error", "تعذّر تعليم التنبيه كمقروء"));
     }
     // The notification opens regardless; the server re-checks access to the task.

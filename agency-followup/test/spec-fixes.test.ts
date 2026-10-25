@@ -50,7 +50,7 @@ describe("validation messages are Arabic", () => {
       [(s) => (s.work_hours.days = []), "work_hours.days", "اختر يوم عمل واحداً على الأقل"],
       [(s) => (s.rules.ack.normal = [60, 120, 240]), "rules.ack.normal", "عدم الاستلام — عادية: أدخل أربع قيم مفصولة بفواصل"],
       [(s) => (s.rules.ack.urgent = [15, 30, 60, 3]), "rules.ack.urgent.3", "عدم الاستلام — عاجلة: القيمة بين 5 و6000 دقيقة"],
-      [(s) => (s.rules.reviewMinutes.urgent = [30]), "rules.reviewMinutes.urgent", "انتظار المراجعة — عاجلة: أدخل قيمتين مفصولة بفواصل"],
+      [(s) => (s.rules.reviewMinutes.urgent = [30]), "rules.reviewMinutes.urgent", "انتظار المراجعة — عاجلة: أدخل قيمتين مفصولتين بفاصلة"],
       [(s) => (s.rules.reviewMinutes.normal = [240, 120]), "rules.reviewMinutes.normal", "انتظار المراجعة — عادية: المراحل تصاعدية"],
     ];
     for (const [change, field, message] of cases) {

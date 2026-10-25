@@ -276,6 +276,9 @@ tasks.get("/:id", async (c) => {
     parent: parent && parentVisible ? { id: parent.id, title: parent.title } : null,
     shared_with: [...grants].map((u) => ({ id: u, name: name(u) })),
     can: abilities(ctx, actor, t, blockers.results),
+    // The assignee is this client's account manager: a client wait lands on
+    // him and keeps counting against him (he is the one chasing the client).
+    client_wait_is_assignees: ctx.clientsById.get(t.client_id)?.account_manager_id === t.assignee_id && ctx.membersById.get(t.assignee_id)?.role !== "owner",
     comments: comments.results.map((r) => ({ ...r, author: name(r.author_id as string) })),
     deliverables: deliverables.results.map((r) => ({ ...r, submitted_by_name: name(r.submitted_by as string) })),
     blockers: blockers.results.map((b) => ({ ...b, resolver: name(b.resolver_id), opened_by_name: name(b.opened_by), resolved_by_name: name(b.resolved_by) })),
@@ -402,6 +405,7 @@ tasks.patch("/:id", async (c) => {
     if (input.due_at && Date.parse(input.due_at) < ctx.now.getTime() - 5 * 60_000) throw badRequest("الموعد الجديد في الماضي");
     set.due_at = input.due_at;
     set.due_version = t.due_version + 1;
+    set.wait_clock_from = ctx.now.toISOString();
     if (!t.original_due_at && t.due_at) set.original_due_at = t.due_at;
     note("due_at", t.due_at, input.due_at);
   }
@@ -743,7 +747,7 @@ tasks.post("/:id/actions/:action", async (c) => {
           .bind(accept ? "accepted" : "rejected", actor.id, nowIso, (input.note as string) ?? null, p.id),
       );
       if (accept) {
-        Object.assign(set, { due_at: p.proposed_due_at, due_version: t.due_version + 1 });
+        Object.assign(set, { due_at: p.proposed_due_at, due_version: t.due_version + 1, wait_clock_from: nowIso });
         if (!t.original_due_at && t.due_at) set.original_due_at = t.due_at;
         stmts.push(...cancelPendingStmts(ctx, t.id, { kinds: DUE_KINDS }));
       }

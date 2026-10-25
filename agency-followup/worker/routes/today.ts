@@ -53,7 +53,7 @@ today.get("/", async (c) => {
   if (actor.role === "owner") {
     sections.push(
       { key: "waiting_ack", title: "لم تُستلم بعد", empty: "كل المهام المسندة استُلمت.", tasks: all.filter((t) => t.flags.waiting_ack).sort(byAge) },
-      { key: "overdue", title: "متأخرة", hint: "ما تجاوز موعده بسبب الانتظار على العميل أو على زميل معلّم، ولا يُحتسب على المنفذ.", empty: "لا توجد مهام متأخرة.", tasks: all.filter((t) => t.flags.overdue).sort(byDue) },
+      { key: "overdue", title: "متأخرة", hint: "المهام التي تجاوزت موعدها بسبب انتظار العميل أو زميل آخر تظهر معلَّمة، ولا يُحتسب ذلك على المنفذ.", empty: "لا توجد مهام متأخرة.", tasks: all.filter((t) => t.flags.overdue).sort(byDue) },
       { key: "at_risk", title: "معرّضة للتأخر", empty: "لا توجد مهام قريبة من موعدها دون تقدم.", tasks: all.filter((t) => t.flags.at_risk).sort(byDue) },
       { key: "awaiting_me", title: "بانتظار قراري", empty: "لا شيء بانتظار قرارك.", tasks: awaitingMe.sort(byAge) },
       { key: "blocked", title: "متوقفة بعائق", empty: "لا توجد عوائق مفتوحة.", tasks: all.filter((t) => t.flags.blocked).sort(byAge) },

@@ -205,3 +205,68 @@ describe("§8 start-of-day summary", () => {
     expect((await summaries()).map((s) => s.dedupe_key)).toEqual([`daily_summary:u_ammar:${day(0)}`, `daily_summary:u_ammar:${day(1)}`]);
   });
 });
+
+describe("§6 a new due date already allows for earlier waiting", () => {
+  it("§6 a date agreed after a client wait is not pushed back by that wait again", async () => {
+    const id = await createTask(T.sama, { client_id: "c_obesity", assignee_id: "u_hussein", due_at: iso(plus(B, 120)) }); // Sunday 11:00
+    expect((await act(T.hussein, id, "ack")).status).toBe(200);
+    expect((await act(T.hussein, id, "block", { kind: "client_wait", reason: "العيادة لم تحدد الموعد" })).status).toBe(200);
+    const b = (await task(T.sama, id)).blockers[0];
+    expect((await act(T.sama, id, "resolve_blocker", { blocker_id: b.id, resolution: "حددت العيادة الموعد" })).status).toBe(200);
+    // Waited on the clinic 09:00–13:00; at 13:00 he proposes 15:00 and Sama accepts.
+    await sql("update blockers set opened_at = ?, resolved_at = ? where id = ?", iso(B), iso(plus(B, 240)), b.id);
+    expect((await act(T.hussein, id, "propose_due", { proposed_due_at: iso(plus(B, 360)), reason: "تأخر رد العيادة أربع ساعات" })).status).toBe(200);
+    const p = (await task(T.sama, id)).due_proposals[0];
+    expect((await act(T.sama, id, "decide_due", { proposal_id: p.id, accept: true })).status).toBe(200);
+    const [row] = await rows<{ wait_clock_from: string | null }>("select wait_clock_from from tasks where id = ?", id);
+    expect(row.wait_clock_from).not.toBeNull();
+    await sql("update tasks set wait_clock_from = ? where id = ?", iso(plus(B, 240)), id);
+
+    await run(299);
+    expect(only(await noteCounts(id), DUE)).toEqual({});
+    await run(300); // 14:00, one working hour before the agreed 15:00
+    expect(only(await noteCounts(id), DUE)).toEqual({ "hussein:due_soon": 1 });
+    await run(360);
+    expect(only(await noteCounts(id), DUE)).toEqual({ "hussein:due_soon": 1 });
+    await run(361);
+    await run(400);
+    expect(only(await noteCounts(id), DUE)).toEqual({ "hussein:due_soon": 1, "hussein:overdue": 1, "sama:overdue_escalation": 1 });
+    for (const n of await bodies(id)) expect(n.body).not.toContain("بعد احتساب وقت الانتظار");
+  });
+
+  it("§6 a direct due-date change restarts the wait clock too", async () => {
+    const id = await createTask(T.sama, { client_id: "c_obesity", assignee_id: "u_hussein", due_at: iso(plus(B, 120)) });
+    expect((await act(T.hussein, id, "ack")).status).toBe(200);
+    const t = await task(T.sama, id);
+    expect((await T.sama.patch(`/api/tasks/${id}`, { version: t.task.version, due_at: iso(plus(B, 360)), reason: "طلب العميل موعداً أبعد" })).status).toBe(200);
+    const [row] = await rows<{ wait_clock_from: string | null; due_version: number }>("select wait_clock_from, due_version from tasks where id = ?", id);
+    expect(row.wait_clock_from).not.toBeNull();
+    expect(row.due_version).toBe(2);
+  });
+});
+
+describe("§8 urgent work chased outside working hours", () => {
+  it("§8 an urgent task due at night gets its wait back on the clock and a due-soon reminder at night", async () => {
+    const [{ value }] = await rows<{ value: string }>("select value from settings where key = 'rules'");
+    await sql("update settings set value = ? where key = 'rules'", JSON.stringify({ ...JSON.parse(value), urgentOutsideHours: true }));
+    try {
+      const id = await createTask(T.sama, { client_id: "c_obesity", assignee_id: "u_hussein", priority: "urgent", due_at: iso(plus(B, 720)) }); // Sunday 21:00
+      expect((await act(T.hussein, id, "ack")).status).toBe(200);
+      expect((await act(T.hussein, id, "clarify", { question: "أي زاوية؟" })).status).toBe(200);
+      const b = (await task(T.sama, id)).blockers[0];
+      expect((await act(T.sama, id, "resolve_blocker", { blocker_id: b.id, resolution: "الزاوية الأمامية" })).status).toBe(200);
+      // A five-minute question in the morning: his own deadline is 21:05, not Monday morning.
+      await sql("update blockers set opened_at = ?, resolved_at = ? where id = ?", iso(plus(B, 60)), iso(plus(B, 65)), b.id);
+      await run(690); // 20:30, 35 minutes left
+      expect(only(await noteCounts(id), DUE)).toEqual({});
+      await run(695); // 20:35, 30 minutes left on the clock
+      expect(only(await noteCounts(id), DUE)).toEqual({ "hussein:due_soon": 1 });
+      await run(721);
+      expect(only(await noteCounts(id), DUE)).toEqual({ "hussein:due_soon": 1 });
+      await run(726);
+      expect(only(await noteCounts(id), DUE)).toEqual({ "hussein:due_soon": 1, "hussein:overdue": 1, "sama:overdue_escalation": 1 });
+    } finally {
+      await sql("update settings set value = ? where key = 'rules'", value);
+    }
+  });
+});

@@ -25,6 +25,7 @@ type Detail = {
   };
   parent: { id: string; title: string } | null;
   shared_with: { id: string; name: string }[];
+  client_wait_is_assignees?: boolean;
   can: Record<"ack" | "clarify" | "start" | "block" | "propose_due" | "submit" | "approve" | "request_changes" | "edit" | "cancel" | "decide_due" | "next_step" | "escalate" | "archive" | "comment", boolean> & { resolve_blocker: string[] };
   comments: { id: string; author: string; kind: string; body: string; created_at: string }[];
   deliverables: { id: string; url: string | null; evidence: string | null; version_label: string | null; review_round: number; submitted_by_name: string; created_at: string }[];
@@ -554,7 +555,13 @@ function ActionSheet({ sheet, data, busy, run, close, reload }: { sheet: Exclude
                 بانتظار العميل
               </button>
             </div>
-            {kind === "client_wait" ? <p className="small muted">يتابعه مسؤول الحساب مع العميل، ولا يُحتسب الانتظار عليك.</p> : null}
+            {kind === "client_wait" ? (
+              <p className="small muted">
+                {data.client_wait_is_assignees
+                  ? "أنت مسؤول حساب هذا العميل، فتتابع الرد بنفسك ويبقى وقت الانتظار محسوباً عليك."
+                  : "يتابعه مسؤول الحساب مع العميل، ولا يُحتسب الانتظار على المنفذ."}
+              </p>
+            ) : null}
             <Field label="ما العائق؟" htmlFor="r">
               <textarea id="r" className="input" value={text} onChange={(e) => setText(e.target.value)} />
             </Field>

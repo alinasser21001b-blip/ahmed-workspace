@@ -111,7 +111,7 @@ const increasing = (arr: number[]) => arr.every((x, i) => i === 0 || x > arr[i -
 const stages = (count: 2 | 4, min: number, max: number, what: string) =>
   z
     .array(minutes(min, max, what))
-    .length(count, `${what}: أدخل ${count === 4 ? "أربع قيم" : "قيمتين"} مفصولة بفواصل`)
+    .length(count, `${what}: أدخل ${count === 4 ? "أربع قيم مفصولة بفواصل" : "قيمتين مفصولتين بفاصلة"}`)
     .refine(increasing, `${what}: المراحل تصاعدية`);
 const settingsSchema = z.object({
   work_hours: z
