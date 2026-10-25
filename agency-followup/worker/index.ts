@@ -149,12 +149,18 @@ export default {
   async scheduled(_controller, env, ctx) {
     ctx.waitUntil(
       (async () => {
-        const flag = await env.DB.prepare("select value from settings where key = 'demo_seed'").first<{ value: string }>();
-        if (flag?.value === "pending") {
-          await seedDemo(await loadCtx(env));
-          await env.DB.prepare("update settings set value = 'done', updated_at = ? where key = 'demo_seed'").bind(new Date().toISOString()).run();
-        }
+        // Reminders first: the one-time demo seed below must never be able to
+        // stop them. A failed seed is logged and tried again next minute.
         await runScheduler(env, new Date());
+        try {
+          const flag = await env.DB.prepare("select value from settings where key = 'demo_seed'").first<{ value: string }>();
+          if (flag?.value === "pending") {
+            await seedDemo(await loadCtx(env));
+            await env.DB.prepare("update settings set value = 'done', updated_at = ? where key = 'demo_seed'").bind(new Date().toISOString()).run();
+          }
+        } catch (e) {
+          console.error("demo seed failed", e);
+        }
       })(),
     );
   },
