@@ -22,7 +22,7 @@
 | الخادم | Cloudflare Worker + Hono، على نفس النطاق مع الملفات الثابتة (`assets`، وسقوط SPA) |
 | البيانات | D1. قاعدة الإنتاج `agency-followup-db`، وقاعدة الاختبار `agency-followup-staging-db` |
 | الدخول | Better Auth مع إضافة اسم المستخدم، دون تسجيل عام. كلمات المرور PBKDF2-SHA256 بمئة ألف تكرار (Web Crypto) |
-| التنبيهات | Cron كل دقيقة (`worker/scheduler.ts`)، وجدول `notifications`، و`outbox` مع إعادة المحاولة. الإرسال عبر `@block65/webcrypto-web-push` (VAPID) |
+| التنبيهات | منبّه Durable Object كل دقيقة (`worker/clock.ts`) يشغّل `worker/scheduler.ts`، وجدول `notifications`، و`outbox` مع إعادة المحاولة. الإرسال عبر `@block65/webcrypto-web-push` (VAPID). المنبّه بدل Cron Trigger: انظر «حدود معروفة» |
 | PWA | `public/sw.js`: يخزّن الهيكل الثابت فقط ولا يخزّن ردود `/api` أبداً |
 
 الملفات الأهم:
@@ -70,12 +70,13 @@ BASE_URL=https://... node e2e/smoke.mjs                               # فحوص
 
 ## حالة الاختبارات
 
-**الأحد 25 أكتوبر 2026. تُحدَّث بعد النشر.**
+**الأحد 25 أكتوبر 2026، بعد النشر على Cloudflare.**
 
 مصادر الدليل:
-- **vitest**: `npx vitest run` داخل بيئة Workers، شُغّل اليوم محلياً وفي CI: 147 من 147 في 12 ملفاً. الأسماء أدناه أسماء الاختبارات كما هي.
+- **vitest**: `npx vitest run` داخل بيئة Workers، شُغّل اليوم محلياً وفي CI: 151 من 151 في 14 ملفاً. الأسماء أدناه أسماء الاختبارات كما هي.
 - **متصفح محلي**: `e2e/run.mjs` (32 من 32) و`e2e/smoke.mjs` (14 من 14) على نسخة إنتاج مبنية محلياً في Chromium، شُغّلا اليوم بعد إصلاحات اليوم.
-- لم يُشغَّل أي اختبار بعد على رابط Cloudflare المنشور، ولا على هاتف حقيقي. النشر ينتظر سرَّي GitHub (انظر «النشر»).
+- **على Cloudflare (CI)**: نسخة staging المنشورة: `e2e/smoke.mjs` 14 من 14، و`e2e/run.mjs` 32 من 32 في Chromium، و`e2e/push.mjs` 7 من 7 في Google Chrome حقيقي. الإنتاج: `e2e/smoke.mjs` 14 من 14.
+- لم يُختبر شيء بعد على هاتف حقيقي.
 
 | البند (§14) | الحالة | الدليل |
 |---|---|---|
@@ -89,7 +90,7 @@ BASE_URL=https://... node e2e/smoke.mjs                               # فحوص
 | 8. سما ترى «مشغول» فقط لحجز خارج نطاقها | نجح | vitest: `bookings.test.ts` «§14.8 Ward bookings reach Sama as «مشغول» with no title, client or task — in the calendar, the check and a refused booking». متصفح محلي: «sama: calendar shows other client's slot as «مشغول» only» |
 | 9. حجزان متزامنان متعارضان لا يُعتمدان معاً | نجح | vitest: `bookings.test.ts` «§14.9 five simultaneous overlapping requests → exactly one booking». متصفح محلي: «booking form warns about a conflict and offers the nearest free time» |
 | 10. الاستلام يسجّل الوقت ويوقف تذكيراته | نجح | vitest: `scheduler.test.ts` «§14.10 pending deliveries are cancelled and no later stage fires». متصفح محلي: «hussein: «استلمت» records acknowledgement» |
-| 11. التصعيد الصحيح مرة واحدة لكل مرحلة | نجح | vitest: `scheduler.test.ts` «§14.11 Hussein on the clinic: reminder at 60, then Sama 120, Ammar 240, Mohammed 480 — each once however often the cron runs». بساعة محقونة، لا بالـCron المنشور (انظر صف الـCron). |
+| 11. التصعيد الصحيح مرة واحدة لكل مرحلة | نجح | vitest: `scheduler.test.ts` «§14.11 Hussein on the clinic: reminder at 60, then Sama 120, Ammar 240, Mohammed 480 — each once however often the cron runs». بساعة محقونة، لا بالمجدول المنشور (انظر صف المجدول). |
 | 12. تغيير المسؤول أو الموعد يلغي التذكيرات القديمة ويحفظ الأثر | نجح | vitest: `scheduler.test.ts` «§14.12 reassignment starts a new cycle; the old assignee's pending reminders are cancelled» و`lifecycle.test.ts` «§14.12 a direct due-date or owner change needs a reason and is recorded» |
 | 13. العائق يُشعر صاحب الحل، والانتظار لا يُحتسب على حسين | نجح | vitest: `scheduler.test.ts` «§14.13 waiting on the client: the resolver hears at once and is followed up; the photographer is not chased» و`waiting.test.ts` «§14.13 a client wait across the deadline: nothing on resolve, then one overdue and one escalation when his own time runs out» (أُضيف اليوم) |
 | 14. التسليم يصل للمراجع، وطلب التعديل يرجع، والاعتماد يقفل | نجح | vitest: `lifecycle.test.ts` «§14.14 submission needs a link or written evidence; reviewer approves or asks for changes». متصفح محلي: «hussein: submits with evidence → بانتظار المراجعة» و«sama: approves → مكتملة» |
@@ -97,17 +98,17 @@ BASE_URL=https://... node e2e/smoke.mjs                               # فحوص
 | 16. فشل الشبكة لا يظهر نجاح حفظ | نجح | vitest: `lifecycle.test.ts` «§14.16 a stale version is refused with 409 and a message, nothing changes». متصفح محلي: «offline write shows a failure, never a success» |
 | 17. الجلسات والخروج وتغيير كلمة المرور؛ وتغيير الدور مرفوض | نجح | vitest: `auth.test.ts` «§14.17 sign-out ends the session; a copied cookie no longer works» و«§14.17 changing the password signs out every other device and the old password stops working»، والدور في صف 6. متصفح محلي: «wrong password shows a generic error» |
 | 18أ. اشتراك Push يتبع الحساب، والإرسال المشفّر | نجح | vitest، بخدمة Push محاكاة داخل الاختبار: `push.test.ts` «§14.18 the outbox sends an encrypted, VAPID-signed push with a terse lock-screen text and the task link» و«§14.18 signing out stops that device receiving the account's notifications» |
-| 18ب. Push يصل فعلياً إلى متصفح مدعوم (Google Chrome) | لم يُختبر بعد — ينتظر النشر | `e2e/push.mjs` يعمل في CI على staging. لم يُشغَّل بعد. |
+| 18ب. Push يصل فعلياً إلى متصفح مدعوم (Google Chrome) | نجح | `e2e/push.mjs` 7 من 7 على staging المنشور في Google Chrome: «server accepted by the push service (201)» و«notification arrives on the device and is shown by the service worker» و«sign-out removes the device subscription» و«the previous account has no device bound after another member used it». |
 | 18ج. Push على آيفون وأندرويد حقيقيين | فحص يدوي مطلوب | لم يُجرَّب على أي هاتف حقيقي. الخطوات في «فحص يدوي مطلوب اليوم» أدناه. |
 | 19. رابط إشعار أو مهمة محجوبة لا يتجاوز الصلاحيات | نجح | vitest: `push.test.ts` «§14.19 opening a pushed link re-checks permission: the old assignee cannot open a reassigned task» و`lifecycle.test.ts` «§14.19 after reassignment the old assignee's link is a 404 and the new assignee must acknowledge again» |
-| 20. التنقل المباشر على رابط Cloudflare المنشور، وAPI مجهول يرجع JSON | لم يُختبر بعد — ينتظر النشر | محلياً نجح: `auth.test.ts` «§14.20 unknown routes are JSON: 401 without a session, 404 with one»، و`e2e/smoke.mjs` «deep link returns the app (SPA fallback)» و«unknown /api route returns JSON, not HTML». على الرابط المنشور يعمل `e2e/smoke.mjs` في CI. |
+| 20. التنقل المباشر على رابط Cloudflare المنشور، وAPI مجهول يرجع JSON | نجح | على staging والإنتاج المنشورين: `e2e/smoke.mjs` 14 من 14، منها «deep link returns the app (SPA fallback)» و«unknown /api route returns JSON, not HTML». | محلياً نجح: `auth.test.ts` «§14.20 unknown routes are JSON: 401 without a session, 404 with one»، و`e2e/smoke.mjs` «deep link returns the app (SPA fallback)» و«unknown /api route returns JSON, not HTML». على الرابط المنشور يعمل `e2e/smoke.mjs` في CI. |
 | فحص الأنواع والبناء | نجح | `tsc` للمشاريع الثلاثة و`npx vite build`، شُغّلت اليوم محلياً. |
 | الهاتف والحاسوب مع نص عربي طويل | نجح محلياً | متصفح محلي على عرض الهاتف (iPhone 13 في Chromium) والحاسوب (1280px): «long Arabic text: no sideways scroll on the phone (Today and task page)» و«long Arabic text: no sideways scroll on the desktop (Today and task page)»، بعنوان من 140 حرفاً فيه كلمة عربية من 56 حرفاً دون مسافات، ووصف ومعيار قبول طويلان. لم يُفحص على هاتف حقيقي. |
-| تجربة المتصفح الكاملة على staging | لم يُختبر بعد — ينتظر النشر | `e2e/run.mjs` و`e2e/push.mjs` في CI. |
-| الـCron منشور ويعمل دون أخطاء | لم يُختبر بعد — ينتظر النشر | خطوة «The cron is actually running» في CI: تشغيلان ناجحان على الأقل، ولا تشغيل انتهى بخطأ منذ النشر. |
-| دخول الأعضاء الأربعة على رابط الإنتاج | لم يُختبر بعد — ينتظر النشر | روابط الإعداد جاهزة وتُسلَّم بشكل خاص (انظر «الحسابات وروابط الدخول»). |
+| تجربة المتصفح الكاملة على staging | نجح | `e2e/run.mjs` 32 من 32 على staging المنشور، داخل ساعات العمل. |
+| المجدول يعمل على الإنتاج دون أخطاء | فشل في النشر الأول، ويُعاد التحقق | أول نشر للإنتاج لم يسجّل Cron Trigger: الحساب بلغ حد الخطة المجانية (5 مهام Cron)، فلم يعمل المجدول. استُبدل بمنبّه Durable Object كل دقيقة (`test/clock.test.ts`)، وخطوة «The scheduler is actually running» في CI تتحقق منه على الإنتاج. |
+| دخول الأعضاء الأربعة على رابط الإنتاج | جارٍ | روابط الإعداد الأربعة طابقت قاعدة الإنتاج وسُلّمت بشكل خاص، واستُخدم أول رابط فعلاً على الإنتاج. |
 
-لا يوجد بند «فشل» في آخر تشغيل.
+بند «فشل» الوحيد هو المجدول في النشر الأول، وأسبابه ومعالجته في صفه.
 
 ### فحص يدوي مطلوب اليوم
 
@@ -127,7 +128,7 @@ BASE_URL=https://... node e2e/smoke.mjs                               # فحوص
 
 1. اختبارات النوع، ثم اختبارات Workers، ثم البناء.
 2. نشر نسخة **staging**، ثم تجربة كاملة عليها في متصفح حقيقي، بما فيها Web Push حقيقي في Google Chrome.
-3. نشر **الإنتاج**، ثم فحوص دون حسابات، ثم التحقق من أن الـCron يعمل فعلاً: تشغيلان ناجحان على الأقل منذ النشر، ولا تشغيل انتهى بخطأ. عند الفشل تُطبع آخر ثلاثة تشغيلات فاشلة مع بداية الخطأ.
+3. نشر **الإنتاج**، ثم فحوص دون حسابات، ثم التحقق من أن المجدول يعمل فعلاً: تشغيلان ناجحان على الأقل منذ النشر، ولا تشغيل انتهى بخطأ. عند الفشل تُطبع آخر ثلاثة تشغيلات فاشلة مع بداية الخطأ.
 
 المطلوب مرة واحدة:
 - في GitHub، من Settings ثم Secrets and variables ثم Actions:
@@ -208,7 +209,8 @@ npx wrangler rollback <version-id>
 
 - **حد المعالج على الخطة المجانية.** تجزئة كلمة المرور تستغرق نحو 16 ملّي ثانية من المعالج عند الدخول وتغيير كلمة المرور. خطة Workers المجانية تسمح بـ10 ملّي ثانية فقط لكل طلب. إذا ظهر الخطأ 1102 عند الدخول فالحل خطة Workers Paid، وليس تخفيض التكرارات دون قرار. عدد التكرارات محفوظ داخل كل هاش ويمكن تغييره من `PBKDF2_ITERATIONS`.
 - **إشعارات الأجهزة غير مضمونة التوقيت.** الوصول يعتمد على خدمة Push في المتصفح، ولا يمكن ضمان الصوت أو تجاوز وضع عدم الإزعاج. على الآيفون تعمل الإشعارات فقط بعد إضافة التطبيق للشاشة الرئيسية، على iOS 16.4 أو أحدث.
-- **Web Push لم يُختبر على آيفون أو أندرويد حقيقي.** الاختبار الآلي في Google Chrome على الحاسوب (`e2e/push.mjs`) ينتظر النشر ولم يُشغَّل بعد. فحص الهواتف يدوي ومطلوب في يوم التجربة: انظر «فحص يدوي مطلوب اليوم».
+- **المجدول منبّه Durable Object لا Cron Trigger.** حساب Cloudflare بلغ حد الخطة المجانية (5 مهام Cron لكل حساب، تستعملها مشاريع أخرى عليه)، فالتذكير والتصعيد وإرسال إشعارات الأجهزة تعمل من منبّه Durable Object يعيد ضبط نفسه كل دقيقة (`worker/clock.ts`). أول طلب بعد كل نشر يتأكد أنه يعمل، ثم يستمر سواء فتح أحد التطبيق أم لا. حالته في صفحة الإدارة: «آخر تشغيل ناجح للمجدول».
+- **Web Push لم يُختبر على آيفون أو أندرويد حقيقي.** الاختبار الآلي الحقيقي في Google Chrome على الحاسوب نجح 7 من 7 على staging. فحص الهواتف يدوي ومطلوب في يوم التجربة: انظر «فحص يدوي مطلوب اليوم».
 - **سلسلة تصعيد أقصر لمهمة مكلّفة استثنائياً غير موجودة في هذه النسخة.** صاحب الطلب يبقى متابعاً للمهمة، لكن التصعيد يمر دائماً بالسلسلة الافتراضية للعميل.
 - **المستودع عام، فسجلات GitHub Actions عامة.** يرى أي شخص سجلات التشغيل وملخصاتها، ومنها رابط `workers.dev` للإنتاج وstaging. روابط الإعداد وكلمات المرور لا تُطبع فيها أبداً، والتطبيق نفسه محمي بتسجيل الدخول. جعل المستودع خاصاً، أو نقل المشروع إلى مستودع خاص به، قرار لصاحب المشروع. إن نُقل فالأسرار تُضاف في المستودع الجديد.
 - **التذكير والتصعيد داخل ساعات العمل فقط.** الساعات الافتراضية من الأحد إلى الخميس، 09:00–18:00 بتوقيت بغداد، وهي افتراض قابل للتعديل من الإدارة. استثناء العاجل مطفأ افتراضياً.

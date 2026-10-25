@@ -10,7 +10,7 @@ export default defineConfig(async () => {
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
           // Test-only values. Production secrets are generated in the deploy workflow.
-          bindings: { TEST_MIGRATIONS: migrations, BETTER_AUTH_SECRET: "test-only-secret-0123456789abcdefghijklmnopqrstuvwxyz", PUSH_TEST_HOSTS: "push.test" },
+          bindings: { TEST_MIGRATIONS: migrations, BETTER_AUTH_SECRET: "test-only-secret-0123456789abcdefghijklmnopqrstuvwxyz", PUSH_TEST_HOSTS: "push.test", SCHEDULER_CLOCK: "off" },
         },
       }),
     ],

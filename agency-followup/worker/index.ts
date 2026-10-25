@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getAuth } from "./auth";
 import { actorFor, loadCtx } from "./db";
-import { seedDemo } from "./demo";
+import { cronWork } from "./cron";
 import { ApiError, clientIp, hit, limitAddress, type AppEnv } from "./http";
 import { account, setup } from "./routes/account";
 import { admin } from "./routes/admin";
@@ -9,7 +9,6 @@ import { bookings } from "./routes/bookings";
 import { notifications, push } from "./routes/notifications";
 import { tasks } from "./routes/tasks";
 import { today } from "./routes/today";
-import { runScheduler } from "./scheduler";
 
 const app = new Hono<AppEnv>();
 
@@ -143,25 +142,29 @@ authed.all("*", (c) => c.json({ error: "not_found", message: "المسار غي�
 app.route("/api", authed);
 
 export { app };
+export { SchedulerClock } from "./clock";
+
+// Once per isolate: after a deploy, the first request makes sure the minute
+// clock (worker/clock.ts) is running. Only where it is switched on.
+let clockChecked = false;
 
 export default {
-  fetch: app.fetch,
+  fetch(request, env, ctx) {
+    if (!clockChecked && env.SCHEDULER_CLOCK === "on" && env.CLOCK) {
+      clockChecked = true;
+      ctx.waitUntil(
+        env.CLOCK.get(env.CLOCK.idFromName("main"))
+          .ensure()
+          .catch((e) => {
+            clockChecked = false;
+            console.error("scheduler clock not armed", e);
+          }),
+      );
+    }
+    return app.fetch(request, env, ctx);
+  },
+  // Kept for accounts with a Cron Trigger to spare; the clock does the same work.
   async scheduled(_controller, env, ctx) {
-    ctx.waitUntil(
-      (async () => {
-        // Reminders first: the one-time demo seed below must never be able to
-        // stop them. A failed seed is logged and tried again next minute.
-        await runScheduler(env, new Date());
-        try {
-          const flag = await env.DB.prepare("select value from settings where key = 'demo_seed'").first<{ value: string }>();
-          if (flag?.value === "pending") {
-            await seedDemo(await loadCtx(env));
-            await env.DB.prepare("update settings set value = 'done', updated_at = ? where key = 'demo_seed'").bind(new Date().toISOString()).run();
-          }
-        } catch (e) {
-          console.error("demo seed failed", e);
-        }
-      })(),
-    );
+    ctx.waitUntil(cronWork(env, new Date()));
   },
 } satisfies ExportedHandler<Env>;

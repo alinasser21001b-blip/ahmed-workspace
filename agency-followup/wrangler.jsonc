@@ -17,13 +17,19 @@
       "migrations_dir": "migrations"
     }
   ],
-  "triggers": { "crons": ["* * * * *"] },
-  "vars": { "PBKDF2_ITERATIONS": "100000" },
+  // Reminders, escalation and push delivery run every minute from a Durable
+  // Object alarm (worker/clock.ts), not a Cron Trigger: this account has used
+  // the five Cron Triggers of the Workers Free plan.
+  "triggers": { "crons": [] },
+  "durable_objects": { "bindings": [{ "name": "CLOCK", "class_name": "SchedulerClock" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SchedulerClock"] }],
+  "vars": { "PBKDF2_ITERATIONS": "100000", "SCHEDULER_CLOCK": "on" },
   // Secrets (never in this file): BETTER_AUTH_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.
   // scripts/ensure-secrets.mjs creates them on first deploy.
   "env": {
     // A separate Worker and database where the deploy workflow runs the
-    // browser and push tests before production is touched. No cron.
+    // browser and push tests before production is touched. No scheduler:
+    // no Cron and no clock binding (Durable Object bindings are not inherited).
     "staging": {
       "name": "agency-followup-staging",
       "d1_databases": [
