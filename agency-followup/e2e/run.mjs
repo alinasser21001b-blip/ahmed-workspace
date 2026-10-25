@@ -161,10 +161,25 @@ try {
   const dayIdx = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(nowLocal.weekday);
   const hm = `${nowLocal.hour}:${nowLocal.minute}`;
   const inHours = hours.work_hours.days.includes(dayIdx) && hm >= hours.work_hours.start && hm < hours.work_hours.end;
-  await h.goto(`${BASE}/notifications`);
-  await h.waitForTimeout(1200);
-  const hasNote = (await h.getByText("تصوير لقطات غرفة الانتظار").count()) > 0;
-  check(inHours ? "hussein: in-app notification for the new task (working hours)" : "hussein: new-task notification held until the next working start (outside hours)", inHours ? hasNote : !hasNote);
+  // Wait for the notifications request, not a fixed delay: a cold deployed
+  // Worker can take longer than 1.2 seconds. Match this task's id so an old
+  // notification from an earlier CI run cannot satisfy the check.
+  const [notificationResponse] = await Promise.all([
+    h.waitForResponse((r) => new URL(r.url()).pathname.replace(/\/$/, "") === "/api/notifications" && r.request().method() === "GET", { timeout: 15000 }),
+    h.goto(`${BASE}/notifications`),
+  ]);
+  const notificationData = notificationResponse.ok() ? await notificationResponse.json() : null;
+  const newTaskId = new URL(taskUrl).pathname.split("/").pop();
+  const assignedNote = notificationData?.notifications?.find((n) => n.task_id === newTaskId && n.kind === "assigned");
+  if (inHours && assignedNote) {
+    await h.getByText(assignedNote.title, { exact: true }).first().waitFor({ state: "visible", timeout: 15000 });
+  }
+  const notesLoaded = notificationResponse.ok() && Array.isArray(notificationData?.notifications);
+  check(
+    inHours ? "hussein: in-app notification for the new task (working hours)" : "hussein: new-task notification held until the next working start (outside hours)",
+    notesLoaded && (inHours ? !!assignedNote : !assignedNote),
+    `API ${notificationResponse.status()}; matched the newly created task`,
+  );
   await shot(h, "notifications-hussein");
   await h.goto(`${BASE}/`);
   await h.getByText("تصوير لقطات غرفة الانتظار").first().waitFor({ timeout: 15000 });
